@@ -1,0 +1,216 @@
+"""
+Retail Sentiment Intelligence — Alert Engine
+Detects anomalies: volume spikes, sentiment crashes, emerging topics.
+"""
+
+import math
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from src.utils.logger import get_logger
+
+log = get_logger("alerts")
+
+
+class AlertEngine:
+    """Detects anomalies and generates alerts."""
+
+    def __init__(self, storage):
+        self.storage = storage
+
+    def detect_all(self) -> list[dict]:
+        """Run all alert detectors and return triggered alerts."""
+        alerts = []
+        alerts.extend(self.detect_volume_spike())
+        alerts.extend(self.detect_sentiment_crash())
+        alerts.extend(self.detect_emerging_topics())
+        return alerts
+
+    def detect_volume_spike(self, sigma_threshold: float = 2.0) -> list[dict]:
+        """
+        Detect volume spikes: aspect mentions > 2σ above 7-day mean.
+        """
+        alerts = []
+        now = datetime.now(timezone.utc)
+        today_key = now.strftime("%Y-%m-%d")
+
+        # Get today's aggregate
+        today_agg = self.storage.get_item("aggregates", f"agg_{today_key}_daily", today_key)
+        if not today_agg:
+            return []
+
+        # Get last 7 days for baseline
+        daily_counts = []
+        for i in range(1, 8):
+            past_date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            past_agg = self.storage.get_item("aggregates", f"agg_{past_date}_daily", past_date)
+            if past_agg:
+                daily_counts.append(past_agg.get("total_posts", 0))
+
+        if len(daily_counts) < 3:
+            return []  # Not enough history
+
+        mean = sum(daily_counts) / len(daily_counts)
+        std = math.sqrt(sum((x - mean) ** 2 for x in daily_counts) / len(daily_counts))
+
+        if std == 0:
+            return []
+
+        today_count = today_agg.get("total_posts", 0)
+        z_score = (today_count - mean) / std
+
+        if z_score > sigma_threshold:
+            alerts.append({
+                "id": f"alert_spike_{today_key}",
+                "type": "volume_spike",
+                "severity": "high" if z_score > 3.0 else "medium",
+                "title": f"Volume spike detected: {today_count} posts today ({z_score:.1f}σ above mean)",
+                "details": {
+                    "today_count": today_count,
+                    "mean_7d": round(mean, 1),
+                    "std_7d": round(std, 1),
+                    "z_score": round(z_score, 2),
+                },
+                "detected_at": now.isoformat(),
+                "time_window": today_key,
+            })
+
+        # Per-aspect spikes
+        today_aspects = today_agg.get("aspect_breakdown", {})
+        for aspect_name, stats in today_aspects.items():
+            # Legacy aggregates store int counts; current ones store dicts.
+            if isinstance(stats, dict):
+                today_count = stats.get("count", 0)
+            elif isinstance(stats, (int, float)):
+                today_count = int(stats)
+            else:
+                continue
+
+            aspect_history = self._get_aspect_history(aspect_name, 7)
+            if len(aspect_history) < 3:
+                continue
+
+            aspect_mean = sum(aspect_history) / len(aspect_history)
+            aspect_std = math.sqrt(sum((x - aspect_mean) ** 2 for x in aspect_history) / len(aspect_history))
+            if aspect_std == 0:
+                continue
+
+            aspect_z = (today_count - aspect_mean) / aspect_std
+            if aspect_z > sigma_threshold:
+                alerts.append({
+                    "id": f"alert_spike_{today_key}_{aspect_name}",
+                    "type": "volume_spike",
+                    "severity": "high" if aspect_z > 3.0 else "medium",
+                    "title": f"'{aspect_name}' mentions spike: {today_count} today ({aspect_z:.1f}σ above mean)",
+                    "details": {
+                        "aspect": aspect_name,
+                        "today_count": today_count,
+                        "mean_7d": round(aspect_mean, 1),
+                        "z_score": round(aspect_z, 2),
+                    },
+                    "detected_at": now.isoformat(),
+                    "time_window": today_key,
+                })
+
+        return alerts
+
+    def detect_sentiment_crash(self, drop_threshold: float = 0.3) -> list[dict]:
+        """
+        Detect sentiment crashes: drop > 0.3 in negative ratio vs yesterday.
+        """
+        alerts = []
+        now = datetime.now(timezone.utc)
+        today_key = now.strftime("%Y-%m-%d")
+        yesterday_key = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        today_agg = self.storage.get_item("aggregates", f"agg_{today_key}_daily", today_key)
+        yesterday_agg = self.storage.get_item("aggregates", f"agg_{yesterday_key}_daily", yesterday_key)
+
+        if not today_agg or not yesterday_agg:
+            return []
+
+        today_neg = today_agg.get("sentiment_distribution", {}).get("negative", 0)
+        yesterday_neg = yesterday_agg.get("sentiment_distribution", {}).get("negative", 0)
+
+        # If negative ratio increased by more than threshold
+        neg_increase = today_neg - yesterday_neg
+        if neg_increase > drop_threshold:
+            alerts.append({
+                "id": f"alert_crash_{today_key}",
+                "type": "sentiment_crash",
+                "severity": "critical" if neg_increase > 0.4 else "high",
+                "title": f"Sentiment crash: negative ratio jumped +{neg_increase:.0%} vs yesterday",
+                "details": {
+                    "today_negative_ratio": round(today_neg, 3),
+                    "yesterday_negative_ratio": round(yesterday_neg, 3),
+                    "delta": round(neg_increase, 3),
+                },
+                "detected_at": now.isoformat(),
+                "time_window": today_key,
+            })
+
+        return alerts
+
+    def detect_emerging_topics(self, min_count: int = 5) -> list[dict]:
+        """
+        Detect emerging topics: new key phrases appearing ≥5 times today
+        that weren't present yesterday.
+        """
+        alerts = []
+        now = datetime.now(timezone.utc)
+        today_key = now.strftime("%Y-%m-%d")
+
+        # Get today's analyses for key phrases
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+
+        query = "SELECT data FROM analyses WHERE json_extract(data, '$.analyzed_at') >= ? AND json_extract(data, '$.analyzed_at') < ?"
+        today_analyses = self.storage.query("analyses", query, [start.isoformat(), end.isoformat()])
+
+        if not today_analyses:
+            return []
+
+        # Count key phrases
+        phrase_counts = defaultdict(int)
+        for analysis in today_analyses:
+            for phrase in analysis.get("key_phrases", []):
+                phrase_counts[phrase.lower()] += 1
+
+        # Find phrases exceeding threshold
+        emerging = [(phrase, count) for phrase, count in phrase_counts.items() if count >= min_count]
+        emerging.sort(key=lambda x: x[1], reverse=True)
+
+        for phrase, count in emerging[:3]:  # Top 3 emerging topics
+            alerts.append({
+                "id": f"alert_topic_{today_key}_{phrase[:20]}",
+                "type": "emerging_topic",
+                "severity": "medium",
+                "title": f"Emerging topic: '{phrase}' ({count} mentions today)",
+                "details": {
+                    "phrase": phrase,
+                    "count": count,
+                },
+                "detected_at": now.isoformat(),
+                "time_window": today_key,
+            })
+
+        return alerts
+
+    def _get_aspect_history(self, aspect_name: str, days: int) -> list[int]:
+        """Get daily counts for an aspect over the last N days."""
+        now = datetime.now(timezone.utc)
+        counts = []
+        for i in range(1, days + 1):
+            past_date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            past_agg = self.storage.get_item("aggregates", f"agg_{past_date}_daily", past_date)
+            if past_agg:
+                aspects = past_agg.get("aspect_breakdown", {})
+                entry = aspects.get(aspect_name)
+                if isinstance(entry, dict):
+                    counts.append(entry.get("count", 0))
+                elif isinstance(entry, (int, float)):
+                    counts.append(int(entry))
+                else:
+                    counts.append(0)
+        return counts

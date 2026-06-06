@@ -1,0 +1,26 @@
+subreddit,group,subscribers,created_utc,subreddit_type
+Frugal,Personal finance / shopping,6764364,2008-03-03,public
+MaliciousCompliance,Retail / customer voice,4349691,2016-01-04,public
+TalesFromRetail,Retail / customer voice,1796611,2011-11-09,public
+Costco,Retail competitors,1548744,2010-05-25,public
+ecommerce,Deals / shopping,637795,2008-03-16,public
+doordash_drivers,Last-mile competitors,419892,2016-10-28,public
+walmart,Walmart core,369446,2011-03-31,public
+deals,Deals / shopping,258497,2008-06-12,public
+AmazonPrime,Retail competitors,230002,2012-06-01,public
+Target,Retail competitors,224006,2010-12-08,public
+AmazonFlexDrivers,Last-mile competitors,164908,2016-07-04,public
+Coupons,Deals / shopping,126189,2009-02-14,public
+Sparkdriver,Spark / last-mile,92878,2019-11-22,public
+instacart,Last-mile competitors,83072,2014-04-03,public
+WalmartEmployees,Walmart core,76586,2014-08-07,public
+samsclub,Walmart core,75200,2011-07-16,public
+CustomerService,Retail / customer voice,51818,2010-11-19,public
+OGPBackroom,Walmart core,33468,2019-12-09,public
+walmartogp,Spark / last-mile,17730,,public
+WalmartSparkDrivers,Spark / last-mile,16049,,public
+Flipkart,Walmart international,10259,2021-07-20,public
+walmart_RX,Walmart pharmacy,9511,2019-05-13,public
+WalmartCanada,Walmart international,8618,2018-02-04,public
+Sams_Club,Walmart core,314,,public
+WalmartPlus,Walmart core,298,,public

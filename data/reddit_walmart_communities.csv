@@ -1,0 +1,69 @@
+subreddit,group,subscribers,created_utc,subreddit_type,public_description,snapshot_utc,source,notesubreddit,group,subscribers,active_user_count,created_utc,over_18,public_description,url,snapshot_at_utc,error
+
+walmart,Walmart core,369446,2011-03-31,public,"A sub for current and former Walmart associates to discuss their stores and the company overall.",2026-05-05,reddit_about_json,Largest Walmart-associate communitywalmart,Walmart-specific,,,,,,https://www.reddit.com/r/walmart/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+WalmartEmployees,Walmart core,76586,2014-08-07,public,"A subreddit for Walmart Associates.",2026-05-05,reddit_about_json,WalmartEmployees,Walmart-specific,,,,,,https://www.reddit.com/r/WalmartEmployees/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+OGPBackroom,Walmart core,33468,2019-12-09,public,"Online Grocery Pickup associates.",2026-05-05,reddit_about_json,Walmart OGP/Spark backroom workflowOGPBackroom,Walmart-specific,,,,,,https://www.reddit.com/r/OGPBackroom/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+samsclub,Walmart core,75200,2011-07-16,public,"Sam's Club associates and members (unofficial).",2026-05-05,reddit_about_json,Active canonical sub (r/Sams_Club is a 314-member dead variant)walmart_RX,Walmart-specific,,,,,,https://www.reddit.com/r/walmart_RX/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Sams_Club,Walmart core,314,,public,"Inactive variant.",2026-05-05,reddit_about_json,Use r/samsclub insteadSams_Club,Walmart-specific,,,,,,https://www.reddit.com/r/Sams_Club/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+WalmartPlus,Walmart core,298,,public,"Small/quiet sub for Walmart+ subscription discussion.",2026-05-05,reddit_about_json,Customer-side sub; low volumeWalmartPlus,Walmart product/service,,,,,,https://www.reddit.com/r/WalmartPlus/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Sparkdriver,Spark / last-mile,92878,2019-11-22,public,"Walmart Spark delivery drivers (unofficial).",2026-05-05,reddit_about_json,Largest Spark-driver communitySpark_Driver,Walmart product/service,,,,,,https://www.reddit.com/r/Spark_Driver/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+WalmartSparkDrivers,Spark / last-mile,16049,,public,"Spark drivers community.",2026-05-05,reddit_about_json,Secondary Spark-driver subwalmartspark,Walmart product/service,,,,,,https://www.reddit.com/r/walmartspark/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+walmartogp,Spark / last-mile,17730,,public,"Walmart OGP / pickup-and-delivery.",2026-05-05,reddit_about_json,Sister sub to OGPBackroomWalmartCelebrations,Walmart product/service,,,,,,https://www.reddit.com/r/WalmartCelebrations/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+walmartspark,Spark / last-mile,,,banned,,2026-05-05,reddit_about_json,HTTP 404 bannedOnn_,Walmart product/service,,,,,,https://www.reddit.com/r/Onn_/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+walmart_RX,Walmart pharmacy,9511,2019-05-13,public,"Walmart Pharmacy associates.",2026-05-05,reddit_about_json,GreatValue,Walmart product/service,,,,,,https://www.reddit.com/r/GreatValue/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+WalmartCanada,Walmart international,8618,2018-02-04,public,"Walmart Canada associates.",2026-05-05,reddit_about_json,Equate,Walmart product/service,,,,,,https://www.reddit.com/r/Equate/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+walmartmexico,Walmart international,,,not_found,,2026-05-05,reddit_about_json,Empty listing / does not existMainstaysHome,Walmart product/service,,,,,,https://www.reddit.com/r/MainstaysHome/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Flipkart,Walmart international,10259,2021-07-20,public,"Unofficial Flipkart fans community.",2026-05-05,reddit_about_json,Walmart-owned (India)CustomerService,Cross-retail,,,,,,https://www.reddit.com/r/CustomerService/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+PhonePe,Walmart international,,,banned,,2026-05-05,reddit_about_json,HTTP 404 banned (Walmart-incubated India fintech)TalesFromRetail,Cross-retail,,,,,,https://www.reddit.com/r/TalesFromRetail/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+WalmartCelebrations,Walmart private brands,,,not_found,,2026-05-05,reddit_about_json,Search fallback returned unrelated subsMaliciousCompliance,Cross-retail,,,,,,https://www.reddit.com/r/MaliciousCompliance/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Onn_,Walmart private brands,,,not_found,,2026-05-05,reddit_about_json,Search fallback - use r/OnnStreamingTV 60303 / r/OnnTV 115 / r/OnnElectronics as proxypersonalfinance,Cross-retail,,,,,,https://www.reddit.com/r/personalfinance/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+GreatValue,Walmart private brands,84,2019-01-08,restricted,,2026-05-05,reddit_about_json,Tiny restricted subFrugal,Cross-retail,,,,,,https://www.reddit.com/r/Frugal/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Equate,Walmart private brands,,,banned,,2026-05-05,reddit_about_json,HTTP 404 bannedCoupons,Cross-retail,,,,,,https://www.reddit.com/r/Coupons/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+MainstaysHome,Walmart private brands,,,not_found,,2026-05-05,reddit_about_json,Search fallback returned unrelated subdeals,Cross-retail,,,,,,https://www.reddit.com/r/deals/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+CustomerService,Retail / customer voice,51818,2010-11-19,public,"For discussions on the topic of Customer Service.",2026-05-05,reddit_about_json,onlineshopping,Cross-retail,,,,,,https://www.reddit.com/r/onlineshopping/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+TalesFromRetail,Retail / customer voice,1796611,2011-11-09,public,"A place to exchange stories about your daily experiences in brick & mortar retail.",2026-05-05,reddit_about_json,Cross-retailer ventingecommerce,Cross-retail,,,,,,https://www.reddit.com/r/ecommerce/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+MaliciousCompliance,Retail / customer voice,4349691,2016-01-04,public,"People conforming to the letter, but not the spirit, of a request.",2026-05-05,reddit_about_json,Often retail/customer-policy storiesinstacart,Competitor / comparative,,,,,,https://www.reddit.com/r/instacart/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+personalfinance,Personal finance / shopping,21674613,2009-02-08,public,"Learn about budgeting, saving, getting out of debt, credit, investing, and retirement planning.",2026-05-05,reddit_about_json,Lurker base for retail spend topicsdoordash_drivers,Competitor / comparative,,,,,,https://www.reddit.com/r/doordash_drivers/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Frugal,Personal finance / shopping,6764364,2008-03-03,public,"Frugality is the mental approach we each take when considering our resource allocations.",2026-05-05,reddit_about_json,AmazonFlexDrivers,Competitor / comparative,,,,,,https://www.reddit.com/r/AmazonFlexDrivers/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+Coupons,Deals / shopping,126189,2009-02-14,public,"We love links to coupons and deals.",2026-05-05,reddit_about_json,AmazonPrime,Competitor / comparative,,,,,,https://www.reddit.com/r/AmazonPrime/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+deals,Deals / shopping,258497,2008-06-12,public,"r/deals - Making your wallet happy since 2008.",2026-05-05,reddit_about_json,Costco,Competitor / comparative,,,,,,https://www.reddit.com/r/Costco/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+OnlineShopping,Deals / shopping,8989,2008-10-09,restricted,,2026-05-05,reddit_about_json,Target,Competitor / comparative,,,,,,https://www.reddit.com/r/Target/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+ecommerce,Deals / shopping,637795,2008-03-16,public,"A community dedicated to the design and implementation of eCommerce sites.",2026-05-05,reddit_about_json,Seller-side perspectiveWalmartCanada,International / Walmart-owned,,,,,,https://www.reddit.com/r/WalmartCanada/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+instacart,Last-mile competitors,83072,2014-04-03,public,"Instacart Couriers and Customers.",2026-05-05,reddit_about_json,Spark competitor benchmarkwalmartmexico,International / Walmart-owned,,,,,,https://www.reddit.com/r/walmartmexico/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+doordash_drivers,Last-mile competitors,419892,2016-10-28,public,"Largest unofficial sub for DoorDash drivers.",2026-05-05,reddit_about_json,Spark competitor benchmarkFlipkart,International / Walmart-owned,,,,,,https://www.reddit.com/r/Flipkart/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+AmazonFlexDrivers,Last-mile competitors,164908,2016-07-04,public,"Amazon Flex Delivery Partners.",2026-05-05,reddit_about_json,Spark competitor benchmarkPhonePe,International / Walmart-owned,,,,,,https://www.reddit.com/r/PhonePe/,2026-05-05T11:05:04Z,URL error: _ssl.c:1011: The handshake operation timed out
+
+AmazonPrime,Retail competitors,230002,2012-06-01,public,"All about Amazon Prime.",2026-05-05,reddit_about_json,Customer-side competitor benchmark
+Costco,Retail competitors,1548744,2010-05-25,public,"Fulfilling Your Bulk Needs Since 1983 (unofficial).",2026-05-05,reddit_about_json,Member-club benchmark
+Target,Retail competitors,224006,2010-12-08,public,"r/Target: A place for Team Members.",2026-05-05,reddit_about_json,Direct US competitor benchmark

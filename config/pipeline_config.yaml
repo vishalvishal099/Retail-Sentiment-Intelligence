@@ -1,0 +1,73 @@
+# Pipeline Configuration — Retail Sentiment Intelligence
+
+pipeline:
+  name: "retail_sentiment_intelligence"
+  version: "0.1.0"
+
+ingestion:
+  # Source provider:
+  #   arctic_shift -> free public API, no Reddit credentials needed (default)
+  #   praw         -> official Reddit API, requires REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET
+  fetcher_provider: "arctic_shift"
+  interval_minutes: 60  # configurable, no hard dependency
+  backfill_days: 90
+  subreddits_file: "data/subreddits_clean.csv"
+  max_comments_per_post: 10
+  comment_min_score: 3
+  comment_max_depth: 2
+  english_only: true
+
+storage:
+  provider: "cosmos"  # "cosmos" | "sqlite" (local dev)
+  cosmos:
+    database: "retail_sentiment"
+    containers:
+      raw_posts: "raw_posts"
+      analyses: "analyses"
+      aggregates: "aggregates"
+      feedback: "feedback"
+  sqlite:
+    path: "data/local.db"
+
+llm:
+  # Start with free/OSS. Code is modular to swap providers.
+  provider: "huggingface"  # "huggingface" | "openai" | "azure_openai" | "local"
+  model: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+  batch_size: 200
+  max_retries: 3
+  timeout_seconds: 30
+  # Cost tracking (required per R3.3)
+  cost_tracking:
+    enabled: true
+    log_file: "data/llm_costs.jsonl"
+    daily_limit_usd: 0.0  # 0 = no limit (free model)
+
+trust:
+  threshold: 0.5
+  weights:
+    metadata: 0.4
+    dedup: 0.3
+    llm: 0.3
+  low_trust_action: "flag"  # "flag" (not "drop") per R5
+
+analysis:
+  sentiment_classes: ["positive", "negative", "neutral"]
+  aspects:
+    - delivery
+    - product_quality
+    - returns
+    - customer_support
+    - pricing
+    - app_website
+  confidence_threshold: 0.7
+  multi_aspect: true
+
+privacy:
+  hash_usernames: true
+  retention_days: 365
+
+dashboard:
+  host: "0.0.0.0"
+  port: 8000
+  websocket_enabled: true
+  auth: "none"  # "none" | "bearer" | "azure_ad"
