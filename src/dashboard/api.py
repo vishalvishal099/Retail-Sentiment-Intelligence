@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.utils.config import load_config
 from src.utils.logger import setup_logging, get_logger
+from src.utils.segments import segment_for, all_segments, segment_label, UNKNOWN_SEGMENT
 from src.storage.store import create_storage
 from src.aggregation.aggregator import Aggregator
 from src.alerts.engine import AlertEngine
@@ -134,6 +135,7 @@ async def lifespan(app: FastAPI):
     _storage = create_storage(_config.storage)
     _aggregator = Aggregator(_storage)
     _alert_engine = AlertEngine(_storage)
+    _backfill_segments_if_needed()
     log.info("dashboard_api_started", port=_config.dashboard.port)
     if os.environ.get("PIPELINE_SCHEDULER", "on").lower() != "off":
         _scheduler_started_at = datetime.now(timezone.utc)
@@ -157,6 +159,7 @@ def _ensure_initialized():
         _storage = create_storage(_config.storage)
         _aggregator = Aggregator(_storage)
         _alert_engine = AlertEngine(_storage)
+        _backfill_segments_if_needed()
 
 
 app = FastAPI(
@@ -283,25 +286,132 @@ def _fetch_window_rows(start: datetime, end: datetime, extra_where: str = "", ex
     return _storage._conn.execute(sql, params).fetchall()
 
 
-def _compute_window_aggregate(start: datetime, end: datetime) -> dict:
-    """Totals + sentiment + aspects + subreddits for posts CREATED in [start, end)."""
+# ─── Trust gating (single source of truth) ────────────────────────────────────
+#
+# Phase 1: every "trusted" count on the dashboard goes through this helper so
+# all pages agree on the same universe. Default formula:
+#
+#     is_trusted := trust_score * sentiment_confidence >= tau
+#
+# `tau` defaults to 0.35 (see config/pipeline_config.yaml `trust.gate_tau`).
+# Set `trust.gate_formula: "legacy"` to fall back to the old `trust_score >= 0.5`.
+
+def _is_trusted_analysis(analysis: dict) -> bool:
+    """Whether an analysis row counts as 'trusted' for dashboard display."""
+    ts = analysis.get("trust_score")
+    if ts is None:
+        return False
+    cfg = _config.trust if _config else None
+    formula = (cfg.gate_formula if cfg else "score_x_confidence")
+    if formula == "legacy":
+        return ts >= (cfg.threshold if cfg else 0.5)
+    # score_x_confidence (default)
+    sc = analysis.get("sentiment_confidence")
+    if sc is None:
+        # No sentiment confidence yet — fall back to a friendlier cutoff so we
+        # don't punish older analyses that pre-date Phase 1.
+        return ts >= (cfg.threshold if cfg else 0.5)
+    tau = cfg.gate_tau if cfg else 0.35
+    return (ts * sc) >= tau
+
+
+def _trust_gate_info() -> dict:
+    """Small descriptor of the active trust gate — surfaced in the API for the UI."""
+    cfg = _config.trust if _config else None
+    formula = cfg.gate_formula if cfg else "score_x_confidence"
+    return {
+        "formula": formula,
+        "tau": cfg.gate_tau if cfg and formula == "score_x_confidence" else None,
+        "threshold": cfg.threshold if cfg else 0.5,
+    }
+
+
+# ─── Segments ─────────────────────────────────────────────────────────────────
+
+def _segment_of_post_row(rdata_json: str) -> str:
+    """Pull `segment` from a stored raw_post row, falling back to a CSV lookup."""
+    import json as _json
+    try:
+        r = _json.loads(rdata_json) if rdata_json else {}
+    except Exception:  # noqa: BLE001
+        r = {}
+    seg = (r.get("segment") or "").strip()
+    if seg:
+        return seg
+    return segment_for(r.get("subreddit", ""))
+
+
+def _backfill_segments_if_needed() -> None:
+    """One-time pass: stamp `segment` on every raw_post that doesn't already have one.
+
+    Runs on API startup. Cheap on repeat — the WHERE clause finds zero rows once
+    the field is populated.
+    """
+    if _storage is None:
+        return
+    try:
+        rows = _storage._conn.execute(
+            "SELECT id, data FROM raw_posts "
+            "WHERE json_extract(data, '$.segment') IS NULL OR json_extract(data, '$.segment') = ''"
+        ).fetchall()
+    except Exception as e:  # noqa: BLE001
+        log.warning("segment_backfill_skipped", error=str(e))
+        return
+    if not rows:
+        log.info("segment_backfill_noop", rows=0)
+        return
+    import json as _json
+    updated = 0
+    for row in rows:
+        try:
+            data = _json.loads(row["data"])
+            seg = segment_for(data.get("subreddit", ""))
+            if not seg or seg == UNKNOWN_SEGMENT:
+                # still write so we don't re-scan it next boot
+                seg = UNKNOWN_SEGMENT
+            data["segment"] = seg
+            _storage._conn.execute(
+                "UPDATE raw_posts SET data = ? WHERE id = ?",
+                [_json.dumps(data), row["id"]],
+            )
+            updated += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("segment_backfill_row_failed", id=row["id"], error=str(e))
+    _storage._conn.commit()
+    log.info("segment_backfill_complete", updated=updated)
+
+
+def _compute_window_aggregate(start: datetime, end: datetime, segment: str | None = None) -> dict:
+    """Totals + sentiment + aspects + subreddits for posts CREATED in [start, end).
+
+    `segment` (optional) restricts to a single segment slug. Counting of
+    `trusted_posts` goes through `_is_trusted_analysis` so every page agrees on
+    the same gate.
+    """
     import json as _json
     rows = _fetch_window_rows(start, end)
     sentiment_dist: Counter = Counter()
     aspect_counts: Counter = Counter()
     aspect_sentiment: dict[str, Counter] = {}
     subreddit_dist: Counter = Counter()
+    segment_dist: Counter = Counter()
     trusted = 0
+    kept = 0
     for row in rows:
         a = _json.loads(row["adata"])
+        r = _json.loads(row["rdata"]) if row["rdata"] else {}
+        row_segment = (r.get("segment") or segment_for(r.get("subreddit", a.get("subreddit", "")))) or UNKNOWN_SEGMENT
+        if segment and row_segment != segment:
+            continue
+        kept += 1
         sentiment = a.get("sentiment", "neutral")
         sentiment_dist[sentiment] += 1
-        ts = a.get("trust_score")
-        if ts is not None and ts >= 0.5:
+        if _is_trusted_analysis(a):
             trusted += 1
         sub = a.get("subreddit", "")
         if sub:
             subreddit_dist[sub] += 1
+        segment_dist[row_segment] += 1
         for asp in a.get("aspects", []) or []:
             name = asp if isinstance(asp, str) else (asp.get("aspect") if isinstance(asp, dict) else None)
             if not name:
@@ -309,7 +419,7 @@ def _compute_window_aggregate(start: datetime, end: datetime) -> dict:
             aspect_counts[name] += 1
             aspect_sentiment.setdefault(name, Counter())[sentiment] += 1
     return {
-        "total_posts": len(rows),
+        "total_posts": kept,
         "trusted_posts": trusted,
         "sentiment_distribution": {
             "positive": sentiment_dist.get("positive", 0),
@@ -319,6 +429,7 @@ def _compute_window_aggregate(start: datetime, end: datetime) -> dict:
         "aspect_breakdown": dict(aspect_counts),
         "aspect_sentiment": {k: dict(v) for k, v in aspect_sentiment.items()},
         "subreddit_distribution": dict(subreddit_dist),
+        "segment_distribution": dict(segment_dist),
     }
 
 
@@ -417,17 +528,22 @@ def _compute_top_issues_from_window(window_stats: dict) -> list[dict]:
 
 
 @app.get("/api/brand-health")
-def get_brand_health(range: str = Query("today")):
+def get_brand_health(
+    range: str = Query("today"),
+    segment: str | None = Query(None, description="Optional segment slug to filter by (see /api/segments)."),
+):
     """Overall brand health: sentiment gauge, volume, aspect heatmap data.
 
     Window semantics: posts whose *creation* time falls in the selected window.
+    Segment semantics: when `segment` is set, only posts whose subreddit maps
+    to that segment are counted (see config/segments).
     """
     _ensure_initialized()
     if range not in _VALID_RANGES:
         return {"message": f"Invalid range. Valid: {_VALID_RANGES}", "data": None}
 
     window_start, window_end, days_requested, date_label = _resolve_window(range)
-    stats = _compute_window_aggregate(window_start, window_end)
+    stats = _compute_window_aggregate(window_start, window_end, segment=segment)
     if stats["total_posts"] == 0:
         return {"message": f"No data for selected range ({date_label})", "data": None}
 
@@ -451,14 +567,17 @@ def get_brand_health(range: str = Query("today")):
     response = {
         "date": date_label,
         "range": range,
+        "segment": segment,
         "days_requested": days_requested,
         "days_with_data": days_with_data,
         "total_posts": stats["total_posts"],
         "trend_granularity": trend_granularity,
         "trusted_posts": stats["trusted_posts"],
+        "trust_gate": _trust_gate_info(),
         "sentiment_distribution": stats["sentiment_distribution"],
         "aspect_breakdown": stats["aspect_breakdown"],
         "subreddit_distribution": stats["subreddit_distribution"],
+        "segment_distribution": stats["segment_distribution"],
         "trend_7d": trend,
         "top_issues": top_issues,
     }
@@ -468,6 +587,16 @@ def get_brand_health(range: str = Query("today")):
             f"longer ranges will look similar until older history is ingested."
         )
     return response
+
+
+@app.get("/api/segments")
+def list_segments():
+    """All segment slugs known to the project, with human labels for the UI."""
+    return {
+        "segments": [
+            {"slug": s, "label": segment_label(s)} for s in all_segments()
+        ]
+    }
 
 
 # ─── P0: Aspect Drilldown ─────────────────────────────────────────────────────
@@ -890,6 +1019,7 @@ def search_posts(
     subreddit: str = Query(None),
     sentiment: str = Query(None),
     aspect: str = Query(None),
+    segment: str = Query(None, description="Optional segment slug to filter by (see /api/segments)."),
     trust_min: float = Query(None, ge=0, le=1),
     range: str = Query(None),
     tz_offset: int = Query(None, description="Browser timezone offset in minutes west of UTC (Date.getTimezoneOffset())"),
@@ -936,6 +1066,12 @@ def search_posts(
     if aspect:
         where.append("json_extract(a.data, '$.aspects') LIKE ?")
         params.append(f"%{aspect}%")
+    if segment:
+        # Push segment into SQL so LIMIT is applied AFTER segment filtering.
+        # Older rows that pre-date Phase 2 may have segment NULL; in that case
+        # we fall back to a Python-side check below (rare after backfill).
+        where.append("json_extract(p.data, '$.segment') = ?")
+        params.append(segment)
     if since_ts is not None:
         # Use post creation time, not pipeline-analyzed time. Coalesce in case
         # an older row is missing created_timestamp.
@@ -966,6 +1102,12 @@ def search_posts(
         a = _json.loads(row["adata"]) if row["adata"] else {}
         p = _json.loads(row["pdata"]) if row["pdata"] else {}
         post_id = a.get("post_id", "")
+        # Defensive fallback for rows whose JSON had no `segment` at SQL time
+        # (would only happen for legacy data pre-Phase 2 backfill).
+        if segment:
+            row_segment = (p.get("segment") or segment_for(p.get("subreddit", a.get("subreddit", "")))) or UNKNOWN_SEGMENT
+            if row_segment != segment:
+                continue
         reddit_url = ""
         if p.get("url"):
             reddit_url = p["url"]
@@ -981,7 +1123,9 @@ def search_posts(
             "sentiment": a.get("sentiment", "neutral"),
             "sentiment_confidence": a.get("sentiment_confidence", 0),
             "subreddit": a.get("subreddit", ""),
+            "segment": p.get("segment") or segment_for(p.get("subreddit", a.get("subreddit", ""))),
             "trust_score": ts,
+            "is_trusted": _is_trusted_analysis(a),
             "human_validated": a.get("human_validated", False),
             "title": p.get("title", ""),
             "text": p.get("body", p.get("title", "")),
@@ -992,7 +1136,7 @@ def search_posts(
             "aspects": a.get("aspects", []),
             "reddit_url": reddit_url,
         })
-    return {"posts": out, "count": len(out)}
+    return {"posts": out, "count": len(out), "trust_gate": _trust_gate_info()}
 
 
 # ─── P2: Trust Analytics ───────────────────────────────────────────────────────

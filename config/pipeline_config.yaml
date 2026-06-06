@@ -43,11 +43,19 @@ llm:
     daily_limit_usd: 0.0  # 0 = no limit (free model)
 
 trust:
-  threshold: 0.5
+  threshold: 0.5            # legacy hard cutoff on raw trust_score (still used by /api/trust-stats)
+  gate_formula: "score_x_confidence"  # "legacy" (trust_score >= threshold) | "score_x_confidence"
+  gate_tau: 0.30            # used when gate_formula = score_x_confidence: trust_score * sentiment_confidence >= tau
   weights:
     metadata: 0.4
     dedup: 0.3
     llm: 0.3
+  metadata_weights:
+    age: 0.20
+    karma: 0.20
+    length: 0.30
+    engagement: 0.15
+    base: 0.15            # floor so brand-new accounts with short posts can still cross gate
   low_trust_action: "flag"  # "flag" (not "drop") per R5
 
 analysis:

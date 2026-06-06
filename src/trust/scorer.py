@@ -31,7 +31,7 @@ class TrustScorer:
         Returns the unit dict with trust_score and trust_flags added.
         """
         # Component scores
-        meta_score = score_metadata(unit)
+        meta_score = score_metadata(unit, self.config)
         dedup_score = score_originality(unit)
 
         # LLM credibility (skip if no LLM client or if metadata already gives high/low signal)

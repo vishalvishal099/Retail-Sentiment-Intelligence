@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { api, BrandHealthData, DateRange, PipelineStatus } from '../api';
+import { api, BrandHealthData, DateRange, PipelineStatus, SegmentInfo } from '../api';
 
 const COLORS = { positive: '#10b981', negative: '#ef4444', neutral: '#6b7280' };
 
@@ -24,22 +24,25 @@ export default function BrandHealth() {
   const [data, setData] = useState<BrandHealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<DateRange>('today');
+  const [segment, setSegment] = useState<string>(''); // '' = all segments
+  const [segments, setSegments] = useState<SegmentInfo[]>([]);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const loadData = () => {
     setLoading(true);
-    api.getBrandHealth(range).then(setData).catch(console.error).finally(() => setLoading(false));
+    api.getBrandHealth(range, segment || null).then(setData).catch(console.error).finally(() => setLoading(false));
   };
 
   const loadStatus = () => {
     api.getPipelineStatus().then(setPipelineStatus).catch(console.error);
   };
 
-  useEffect(() => { loadData(); }, [range]);
+  useEffect(() => { loadData(); }, [range, segment]);
   useEffect(() => {
     loadStatus();
+    api.getSegments().then(r => setSegments(r.segments)).catch(console.error);
     const t = setInterval(loadStatus, 5000);
     return () => clearInterval(t);
   }, []);
@@ -115,6 +118,17 @@ export default function BrandHealth() {
         <div className="flex items-center gap-3 flex-wrap">
           {data && <span className="text-sm text-gray-500">{data.date}</span>}
           <select
+            value={segment}
+            onChange={(e) => setSegment(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            title="Filter by subreddit segment"
+          >
+            <option value="">All segments</option>
+            {segments.map(s => (
+              <option key={s.slug} value={s.slug}>{s.label}</option>
+            ))}
+          </select>
+          <select
             value={range}
             onChange={(e) => setRange(e.target.value as DateRange)}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -141,7 +155,16 @@ export default function BrandHealth() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard label="Total Posts" value={data.total_posts} onClick={() => goToPosts()} hint="View all posts" />
-        <KPICard label="Trusted" value={data.trusted_posts} hint="Posts that passed trust filter" />
+        <KPICard
+          label="Trusted"
+          value={data.trusted_posts}
+          sub={
+            data.trust_gate?.formula === 'score_x_confidence' && data.trust_gate?.tau != null
+              ? `trust × confidence ≥ ${data.trust_gate.tau}`
+              : `trust_score ≥ ${data.trust_gate?.threshold ?? 0.5}`
+          }
+          hint="Posts that passed the trust gate"
+        />
         <KPICard
           label="Positive"
           value={`${pctPositive}%`}
@@ -265,6 +288,39 @@ export default function BrandHealth() {
             ))}
         </div>
       </div>
+
+      {/* Segment Distribution */}
+      {data.segment_distribution && Object.keys(data.segment_distribution).length > 0 && (
+        <div className="bg-white rounded-lg p-4 border">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Segment Distribution{' '}
+            <span className="text-xs text-gray-400 font-normal">(click to filter)</span>
+          </h3>
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(data.segment_distribution)
+              .sort(([, a], [, b]) => b - a)
+              .map(([slug, count]) => {
+                const label = segments.find(s => s.slug === slug)?.label
+                  ?? slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const active = segment === slug;
+                return (
+                  <button
+                    key={slug}
+                    onClick={() => setSegment(active ? '' : slug)}
+                    className={`px-3 py-1.5 border rounded-full text-xs transition-colors ${
+                      active
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-gray-50 hover:bg-blue-50 hover:border-blue-300 border-gray-200 text-gray-700'
+                    }`}
+                    title={active ? 'Click to clear segment filter' : `Filter to ${label}`}
+                  >
+                    {label} <span className={active ? 'text-blue-100' : 'text-gray-500'}>{count}</span>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Top Issues */}
       {data.top_issues.length > 0 && (

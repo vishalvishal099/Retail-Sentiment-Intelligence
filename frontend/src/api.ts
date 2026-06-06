@@ -8,20 +8,34 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return response.json();
 }
 
+export interface TrustGateInfo {
+  formula: 'score_x_confidence' | 'legacy';
+  tau: number | null;
+  threshold: number;
+}
+
 export interface BrandHealthData {
   date: string;
   range: string;
+  segment?: string | null;
   days_requested?: number;
   days_with_data?: number;
   total_posts: number;
   trusted_posts: number;
+  trust_gate?: TrustGateInfo;
   sentiment_distribution: { positive: number; negative: number; neutral: number };
   aspect_breakdown: Record<string, number>;
   subreddit_distribution: Record<string, number>;
+  segment_distribution?: Record<string, number>;
   trend_7d: Array<{ date: string; total_posts: number; sentiment_distribution: Record<string, number> }>;
   trend_granularity?: 'hour' | 'day';
   top_issues: Array<{ aspect: string; count: number; negative_ratio: number; severity_score: number }>;
   fallback_note?: string;
+}
+
+export interface SegmentInfo {
+  slug: string;
+  label: string;
 }
 
 export interface Alert {
@@ -118,7 +132,12 @@ export interface PipelineStatus {
 }
 
 export const api = {
-  getBrandHealth: (range: DateRange = 'today') => fetchJSON<BrandHealthData>(`/brand-health?range=${range}`),
+  getBrandHealth: (range: DateRange = 'today', segment?: string | null) => {
+    const qs = new URLSearchParams({ range });
+    if (segment) qs.set('segment', segment);
+    return fetchJSON<BrandHealthData>(`/brand-health?${qs.toString()}`);
+  },
+  getSegments: () => fetchJSON<{ segments: SegmentInfo[] }>(`/segments`),
   getAspects: () => fetchJSON<{ aspects: string[]; breakdown: Record<string, unknown> }>('/aspects'),
   getAspectDetail: (aspect: string, days = 14, limit = 25, range?: DateRange) => {
     const qs = new URLSearchParams({ days: String(days), limit: String(limit) });

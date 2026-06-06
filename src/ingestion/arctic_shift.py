@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 
 from src.ingestion.preprocess import preprocess_units
 from src.utils.privacy import hash_username
+from src.utils.segments import segment_for
 from src.utils.logger import get_logger
 
 log = get_logger("arctic_shift")
@@ -177,6 +178,7 @@ def fetch_comments_arctic(
             "id": f"reddit_c_{comment_id}",
             "source": "reddit",
             "subreddit": subreddit,
+            "segment": segment_for(subreddit),
             "unit_type": "comment",
             "parent_post_id": post_id,
             "parent_comment_id": None,
@@ -245,6 +247,7 @@ def _normalize_post(post: dict, subreddit: str) -> dict | None:
         "id": f"reddit_{post_id}",
         "source": "reddit",
         "subreddit": subreddit,
+        "segment": segment_for(subreddit),
         "unit_type": "post",
         "parent_post_id": None,
         "author_hash": hash_username(author_name),

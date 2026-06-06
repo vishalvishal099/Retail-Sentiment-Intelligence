@@ -75,6 +75,17 @@ class TrustConfig:
     weight_dedup: float = 0.3
     weight_llm: float = 0.3
     low_trust_action: str = "flag"  # "flag" not "drop"
+    # New (Phase 1): combined gate. When formula == "score_x_confidence" the
+    # dashboard counts a post as trusted iff trust_score * sentiment_confidence >= tau.
+    gate_formula: str = "score_x_confidence"
+    gate_tau: float = 0.35
+    # New (Phase 1): per-signal metadata weights with a `base` floor so a
+    # post with no author metadata still has a chance to clear the gate.
+    metadata_weight_age: float = 0.20
+    metadata_weight_karma: float = 0.20
+    metadata_weight_length: float = 0.30
+    metadata_weight_engagement: float = 0.15
+    metadata_weight_base: float = 0.15
 
 
 @dataclass
@@ -168,6 +179,13 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
             weight_dedup=yaml_data.get("trust", {}).get("weights", {}).get("dedup", 0.3),
             weight_llm=yaml_data.get("trust", {}).get("weights", {}).get("llm", 0.3),
             low_trust_action=yaml_data.get("trust", {}).get("low_trust_action", "flag"),
+            gate_formula=os.getenv("TRUST_GATE_FORMULA", yaml_data.get("trust", {}).get("gate_formula", "score_x_confidence")),
+            gate_tau=float(os.getenv("TRUST_GATE_TAU", yaml_data.get("trust", {}).get("gate_tau", 0.35))),
+            metadata_weight_age=yaml_data.get("trust", {}).get("metadata_weights", {}).get("age", 0.20),
+            metadata_weight_karma=yaml_data.get("trust", {}).get("metadata_weights", {}).get("karma", 0.20),
+            metadata_weight_length=yaml_data.get("trust", {}).get("metadata_weights", {}).get("length", 0.30),
+            metadata_weight_engagement=yaml_data.get("trust", {}).get("metadata_weights", {}).get("engagement", 0.15),
+            metadata_weight_base=yaml_data.get("trust", {}).get("metadata_weights", {}).get("base", 0.15),
         ),
         analysis=AnalysisConfig(
             sentiment_classes=yaml_data.get("analysis", {}).get("sentiment_classes", ["positive", "negative", "neutral"]),
