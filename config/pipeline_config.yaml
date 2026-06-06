@@ -30,9 +30,15 @@ storage:
     path: "data/local.db"
 
 llm:
-  # Start with free/OSS. Code is modular to swap providers.
-  provider: "huggingface"  # "huggingface" | "openai" | "azure_openai" | "local"
+  # Sentiment + reply drafting. Local-first; cloud requires keys.
+  provider: "huggingface"  # "huggingface" | "ollama" | "openai" | "azure_openai"
   model: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+  # Ollama settings — used when provider: "ollama" (mater spec calls for llama3.1:8b;
+  # mistral:7b-instruct works out of the box if you only have that pulled).
+  ollama_url: "http://localhost:11434"
+  ollama_model: "mistral:7b-instruct"
+  ollama_keep_alive: "10m"
+  ollama_request_timeout: 60
   batch_size: 200
   max_retries: 3
   timeout_seconds: 30

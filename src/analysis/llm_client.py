@@ -907,10 +907,167 @@ class AzureOpenAIClient(BaseLLMClient):
             return fb
 
 
+class OllamaClient(BaseLLMClient):
+    """Local LLM via Ollama (`llama3.1:8b`, `mistral:7b-instruct`, …).
+
+    Only used for reply drafting today; sentiment + aspect extraction stay on
+    the HuggingFace pipeline because it's faster and free. If Ollama is
+    unreachable, every reply falls back to the smart template — the dashboard
+    keeps working.
+    """
+
+    def __init__(self, config: LLMConfig, cost_tracker: Optional[CostTracker] = None):
+        self.config = config
+        self.cost_tracker = cost_tracker
+        # Reuse the HF pipeline for sentiment + aspects so we don't lose
+        # accuracy — Ollama is purely the reply drafter here.
+        self._hf = HuggingFaceSentimentClient(config, cost_tracker)
+
+    @property
+    def model_name(self) -> str:
+        return self.config.ollama_model
+
+    @property
+    def model_version(self) -> str:
+        return "ollama"
+
+    # Delegate the analysis methods to HF — keeps the rest of the pipeline
+    # behaviour identical when you switch provider to ollama.
+    def analyze_sentiment(self, text: str) -> dict:
+        return self._hf.analyze_sentiment(text)
+
+    def analyze_batch(self, texts: list[str]) -> list[dict]:
+        return self._hf.analyze_batch(texts)
+
+    def check_credibility(self, text: str, metadata: dict) -> dict:
+        return self._hf.check_credibility(text, metadata)
+
+    # ---- reply drafting --------------------------------------------------
+
+    def _build_prompt(
+        self,
+        post_title: str,
+        post_text: str,
+        subreddit: str,
+        author: str,
+        aspects: list[str],
+        examples: Optional[list[dict]],
+    ) -> str:
+        aspect_str = ", ".join(aspects) if aspects else "general feedback"
+        few_shot = ""
+        for ex in (examples or [])[:3]:
+            p = (ex.get("post_text") or "").strip().replace("\n", " ")[:240]
+            r = (ex.get("reply_text") or "").strip().replace("\n", " ")[:240]
+            if p and r:
+                few_shot += f"\nExample customer post: {p}\nExample analyst reply: {r}\n"
+        post_blob = (post_title + "\n\n" + post_text).strip()[:1200]
+        return (
+            "You are a senior Walmart customer-care analyst replying on Reddit.\n"
+            "Write ONE reply to the customer below. Keep it 2-4 sentences,\n"
+            "empathetic, specific to their complaint, no corporate jargon,\n"
+            "no hashtags, no emojis. Do NOT promise refunds you can't verify;\n"
+            "invite them to DM order details if action is needed. Sign off as\n"
+            "a real person, not a brand.\n"
+            f"{few_shot}\n"
+            f"Subreddit: r/{subreddit}\n"
+            f"Customer ({author}) complaint about: {aspect_str}\n"
+            f"Customer post:\n{post_blob}\n\n"
+            "Reply:"
+        )
+
+    def _ollama_generate(self, prompt: str, temperature: float) -> str:
+        """Single Ollama call. Returns reply text or '' on any failure."""
+        import requests
+        url = self.config.ollama_url.rstrip("/") + "/api/generate"
+        payload = {
+            "model": self.config.ollama_model,
+            "prompt": prompt,
+            "stream": False,
+            "keep_alive": self.config.ollama_keep_alive,
+            "options": {
+                "temperature": temperature,
+                "num_predict": 220,
+                "top_p": 0.9,
+            },
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=self.config.ollama_request_timeout)
+            r.raise_for_status()
+            data = r.json()
+            text = (data.get("response") or "").strip()
+            # Some models echo "Reply:" — strip it.
+            for prefix in ("Reply:", "reply:", "REPLY:"):
+                if text.startswith(prefix):
+                    text = text[len(prefix):].strip()
+            return text
+        except Exception as e:
+            log.warning("ollama_generate_failed", error=str(e), model=self.config.ollama_model)
+            return ""
+
+    def generate_reply(
+        self,
+        post_title: str,
+        post_text: str,
+        subreddit: str,
+        author: str,
+        aspects: list[str],
+        examples: Optional[list[dict]] = None,
+    ) -> dict:
+        prompt = self._build_prompt(post_title, post_text, subreddit, author, aspects, examples)
+        text = self._ollama_generate(prompt, temperature=0.5)
+        if not text:
+            fb = _template_reply(post_title, post_text, subreddit, author, aspects)
+            fb["source"] = "template_fallback"
+            return fb
+        return {"reply": text, "model_used": self.model_name, "source": "llm"}
+
+    def generate_reply_pair(
+        self,
+        post_title: str,
+        post_text: str,
+        subreddit: str,
+        author: str,
+        aspects: list[str],
+        examples: Optional[list[dict]] = None,
+    ) -> dict:
+        """Two side-by-side drafts: one LLM (warm), one smart composer.
+
+        Giving analysts an LLM draft AND a deterministic-template draft lets
+        them compare tones and pick the better one. If Ollama is down, both
+        slots fall back to differently-seeded smart-composer drafts so the UI
+        always renders two options.
+        """
+        import random as _random
+        import time as _time
+        prompt = self._build_prompt(post_title, post_text, subreddit, author, aspects, examples)
+        llm_text = self._ollama_generate(prompt, temperature=0.55)
+        seed = int(_time.time() * 1000) ^ _random.randint(0, 1_000_000)
+        composer_text = _smart_compose_reply(
+            post_title, post_text, subreddit, author, aspects, examples, seed=seed
+        )
+        if llm_text:
+            drafts = [
+                {"reply": llm_text, "model_used": self.model_name, "source": "llm"},
+                {"reply": composer_text, "model_used": "smart-composer", "source": "smart-template"},
+            ]
+        else:
+            # Ollama unreachable — keep the analyst-facing contract (always 2)
+            seed_b = seed ^ _random.randint(1, 999_999)
+            composer_b = _smart_compose_reply(
+                post_title, post_text, subreddit, author, aspects, examples, seed=seed_b
+            )
+            drafts = [
+                {"reply": composer_text, "model_used": "smart-composer", "source": "smart-template"},
+                {"reply": composer_b, "model_used": "smart-composer", "source": "smart-template"},
+            ]
+        return {"drafts": drafts}
+
+
 def create_llm_client(config: LLMConfig, cost_tracker: Optional[CostTracker] = None) -> BaseLLMClient:
     """Factory: create the appropriate LLM client based on config."""
     if config.provider == "azure_openai" and config.azure_endpoint and config.azure_key:
         return AzureOpenAIClient(config, cost_tracker)
-    else:
-        # Default to free HuggingFace model
-        return HuggingFaceSentimentClient(config, cost_tracker)
+    if config.provider == "ollama":
+        return OllamaClient(config, cost_tracker)
+    # Default to free HuggingFace model
+    return HuggingFaceSentimentClient(config, cost_tracker)

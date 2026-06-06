@@ -39,6 +39,12 @@ class LLMConfig:
     # HuggingFace
     hf_token: str = ""
 
+    # Ollama (local llama / mistral via http://host:11434)
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "mistral:7b-instruct"
+    ollama_keep_alive: str = "10m"
+    ollama_request_timeout: int = 60
+
 
 @dataclass
 class IngestionConfig:
@@ -139,6 +145,10 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
 
     config = AppConfig(
         llm=LLMConfig(
+            ollama_url=os.getenv("OLLAMA_URL", llm_yaml.get("ollama_url", "http://localhost:11434")),
+            ollama_model=os.getenv("OLLAMA_MODEL", llm_yaml.get("ollama_model", "mistral:7b-instruct")),
+            ollama_keep_alive=os.getenv("OLLAMA_KEEP_ALIVE", llm_yaml.get("ollama_keep_alive", "10m")),
+            ollama_request_timeout=int(os.getenv("OLLAMA_REQUEST_TIMEOUT", str(llm_yaml.get("ollama_request_timeout", 60)))),
             provider=os.getenv("LLM_PROVIDER", llm_yaml.get("provider", "huggingface")),
             model=os.getenv("LLM_MODEL", llm_yaml.get("model", "cardiffnlp/twitter-roberta-base-sentiment-latest")),
             batch_size=int(os.getenv("BATCH_SIZE", llm_yaml.get("batch_size", 50))),
