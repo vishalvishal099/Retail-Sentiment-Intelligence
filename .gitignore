@@ -13,3 +13,5 @@ data/local.db
 data/local.db-shm
 data/local.db-wal
 data/llm_costs.jsonl
+.pids/
+logs/
