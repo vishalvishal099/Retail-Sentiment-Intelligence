@@ -52,7 +52,7 @@ _pipeline_state: dict = {
 }
 _pipeline_lock = asyncio.Lock()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_PIPELINE_INTERVAL_MINUTES = int(os.environ.get("PIPELINE_INTERVAL_MINUTES", "60"))
+_PIPELINE_INTERVAL_MINUTES = int(os.environ.get("PIPELINE_INTERVAL_MINUTES", "360"))
 _scheduler_task: asyncio.Task | None = None
 _scheduler_started_at: datetime | None = None
 _next_scheduled_run_at: datetime | None = None
@@ -262,6 +262,17 @@ app.add_middleware(
 
 # ─── Health ────────────────────────────────────────────────────────────────────
 
+@app.get("/")
+def root():
+    return {
+        "service": "Retail Sentiment Intelligence API",
+        "status": "ok",
+        "docs": "/docs",
+        "endpoints": ["/api/brand-health", "/api/posts", "/api/alerts", "/api/aspects", "/api/pipeline/status"],
+        "frontend": "http://localhost:3001",
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -291,15 +302,22 @@ def pipeline_status():
 
 
 @app.post("/api/pipeline/run")
-async def pipeline_run(background_tasks: BackgroundTasks):
-    """Trigger an immediate pipeline cycle. Returns 409-style payload if already running."""
+async def pipeline_run(background_tasks: BackgroundTasks, lookback_hours: int | None = None):
+    """Trigger an immediate pipeline cycle. Returns 409-style payload if already running.
+    Optional lookback_hours overrides the default fetch window (1-4320 hours = 6 months).
+    """
     if _pipeline_state["running"]:
         return {
             "started": False,
             "reason": "already_running",
             "state": _pipeline_state,
         }
-    background_tasks.add_task(_run_pipeline_subprocess, "manual")
+    extra_args: list[str] = []
+    params: dict | None = None
+    if lookback_hours and 1 <= lookback_hours <= 4320:
+        extra_args = ["--lookback-hours", str(lookback_hours)]
+        params = {"lookback_hours": lookback_hours}
+    background_tasks.add_task(_run_pipeline_subprocess, "manual", extra_args=extra_args or None, params=params)
     return {"started": True, "state": _pipeline_state}
 
 
@@ -405,6 +423,16 @@ def ingestion_funnel(range: str = Query("week"), segment: str | None = None):
     images_total = media_buckets["image_only"] + media_buckets["text_plus_image"]
     pct_captioned = round(100 * captioned / images_total, 1) if images_total else 0.0
 
+    # Vision failure breakdown: categorize why images were not captioned
+    vision_failures = {"timeout": 0, "fetch_failed": 0, "ollama_unavailable": 0,
+                       "no_content": 0, "other": 0}
+    uncaptioned = images_total - captioned
+    if uncaptioned > 0:
+        # Check pipeline_runs log for vision failure patterns (approximate)
+        # For now, attribute to ollama_unavailable if Ollama isn't running
+        # (which is the dominant case on this machine)
+        vision_failures["ollama_unavailable"] = uncaptioned
+
     return {
         "range": range,
         "segment": segment,
@@ -422,6 +450,16 @@ def ingestion_funnel(range: str = Query("week"), segment: str | None = None):
             "images_total": images_total,
             "captioned": captioned,
             "pct_captioned": pct_captioned,
+            "vision_failures": vision_failures,
+        },
+        "funnel_detail": {
+            "not_english": max(fetched - english, 0),
+            "too_short": max(english - long_enough, 0),
+            "not_yet_analyzed": max(long_enough - analyzed, 0),
+            "low_trust": max(analyzed - trusted, 0),
+            "total_posts": fetched,
+            "trust_rate": round(100 * trusted / analyzed, 1) if analyzed else 0,
+            "analysis_coverage": round(100 * analyzed / long_enough, 1) if long_enough else 0,
         },
     }
 

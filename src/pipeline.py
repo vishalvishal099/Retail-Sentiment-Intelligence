@@ -397,6 +397,7 @@ def main():
                            through trust + analyzer. No network calls. Useful for
                            backfilling analysis after a large ingest.
       --max-batches N      Cap how many batches --analyze-pending will process.
+      --lookback-hours N   Override the default lookback window (hours).
     """
     import sys
 

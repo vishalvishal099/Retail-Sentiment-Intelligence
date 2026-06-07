@@ -154,6 +154,22 @@ export interface FunnelData {
     images_total: number;
     captioned: number;
     pct_captioned: number;
+    vision_failures?: {
+      timeout: number;
+      fetch_failed: number;
+      ollama_unavailable: number;
+      no_content: number;
+      other: number;
+    };
+  };
+  funnel_detail?: {
+    not_english: number;
+    too_short: number;
+    not_yet_analyzed: number;
+    low_trust: number;
+    total_posts: number;
+    trust_rate: number;
+    analysis_coverage: number;
   };
 }
 
@@ -212,7 +228,7 @@ export const api = {
       posts: AspectPost[];
       limit: number;
       returned: number;
-    }>(`/aspects/${aspect}?${qs.toString()}`);
+    }>(`/aspects/${encodeURIComponent(aspect)}?${qs.toString()}`);
   },
   getAlerts: () => fetchJSON<{ alerts: Alert[]; count: number }>('/alerts'),
   getReviewQueue: (limit = 20) => fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review?limit=${limit}`),
@@ -259,12 +275,14 @@ export const api = {
   },
   getTrustStats: () => fetchJSON<Record<string, unknown>>('/trust-stats'),
   getPipelineStatus: () => fetchJSON<PipelineStatus>('/pipeline/status'),
-  runPipeline: () =>
-    fetch(`${API_BASE}/pipeline/run`, { method: 'POST' }).then(r => r.json()) as Promise<{
+  runPipeline: (lookbackHours?: number) => {
+    const qs = lookbackHours ? `?lookback_hours=${lookbackHours}` : '';
+    return fetch(`${API_BASE}/pipeline/run${qs}`, { method: 'POST' }).then(r => r.json()) as Promise<{
       started: boolean;
       reason?: string;
       state: PipelineStatus;
-    }>,
+    }>;
+  },
 
   // ─── Pipeline page ────────────────────────────────────────────────────
   getIngestionFunnel: (range: DateRange = 'week', segment?: string | null) => {

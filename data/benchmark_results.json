@@ -1,0 +1,110 @@
+{
+  "evaluation_date": "2026-06-07T20:23:46.001232",
+  "mode": "self_eval",
+  "n_samples": 150,
+  "model": "cardiffnlp/twitter-roberta-base-sentiment-latest + MoritzLaurer/deberta-v3-base-zeroshot-v2.0",
+  "device": "Apple Silicon MPS",
+  "latency": {
+    "total_s": 28.05,
+    "ms_per_sample": 187.0,
+    "throughput_per_s": 5.3
+  },
+  "sentiment": {
+    "positive": {
+      "precision": 0.9615,
+      "recall": 1.0,
+      "f1": 0.9804,
+      "support": 50
+    },
+    "negative": {
+      "precision": 0.8333,
+      "recall": 0.8,
+      "f1": 0.8163,
+      "support": 50
+    },
+    "neutral": {
+      "precision": 0.84,
+      "recall": 0.84,
+      "f1": 0.84,
+      "support": 50
+    },
+    "macro_avg": {
+      "precision": 0.8783,
+      "recall": 0.88,
+      "f1": 0.8789
+    },
+    "weighted_avg": {
+      "f1": 0.8789
+    },
+    "accuracy": 0.88,
+    "confusion_matrix": {
+      "positive": {
+        "positive": 50,
+        "negative": 0,
+        "neutral": 0
+      },
+      "negative": {
+        "positive": 2,
+        "negative": 40,
+        "neutral": 8
+      },
+      "neutral": {
+        "positive": 0,
+        "negative": 8,
+        "neutral": 42
+      }
+    },
+    "n_samples": 150
+  },
+  "aspects": {
+    "micro_precision": 0.3249,
+    "micro_recall": 0.3893,
+    "micro_f1": 0.3542,
+    "total_true_labels": 298,
+    "total_predicted_labels": 357,
+    "per_aspect": {
+      "pricing": {
+        "precision": 0.2258,
+        "recall": 0.1429,
+        "f1": 0.175,
+        "support": 49
+      },
+      "product quality": {
+        "precision": 0.2941,
+        "recall": 0.1136,
+        "f1": 0.1639,
+        "support": 44
+      },
+      "store experience": {
+        "precision": 0.2444,
+        "recall": 0.5641,
+        "f1": 0.3411,
+        "support": 39
+      },
+      "customer service": {
+        "precision": 0.459,
+        "recall": 0.4179,
+        "f1": 0.4375,
+        "support": 67
+      },
+      "online/app": {
+        "precision": 0.3636,
+        "recall": 0.8302,
+        "f1": 0.5057,
+        "support": 53
+      },
+      "delivery/pickup": {
+        "precision": 0.2703,
+        "recall": 0.2174,
+        "f1": 0.241,
+        "support": 46
+      }
+    }
+  },
+  "confidence_calibration": {
+    "mean_confidence_correct": 0.9036,
+    "mean_confidence_incorrect": 0.6648,
+    "confidence_gap": 0.2388
+  },
+  "cost": "$0.00 (local inference)"
+}

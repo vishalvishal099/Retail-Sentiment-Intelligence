@@ -6,12 +6,11 @@
  * registry (incl. one-off backfills).
  *
  * Sections:
- *   A) Live status strip      — scheduler on/off, next run, last run, Run Now
- *   B) Funnel + media         — fetched → english → long → analyzed → trusted
- *                               and a text/image/video breakdown with caption %
- *   C) Per-subreddit sources  — last 7d volume + last fetch lag
- *   D) Registry editor        — toggle enabled, add, remove, backfill
- *   E) Recent jobs            — last 25 runs with counters + expandable log
+ *   A) Live status strip      — scheduler on/off (6h), next run, last run, Run Now with timeframe
+ *   B) Funnel + media         — clickable stages with detail panel + vision failure breakdown
+ *   C) Per-subreddit sources  — collapsible, shows summary when closed
+ *   D) Registry editor        — collapsible, shows summary when closed
+ *   E) Recent jobs            — shows last 5, expandable to 20
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -21,7 +20,7 @@ import {
 } from 'recharts';
 import {
   Activity, AlertCircle, CheckCircle2, Clock, Loader2, Play, Plus, RefreshCw,
-  Trash2, X, ChevronDown, ChevronRight,
+  Trash2, X, ChevronDown, ChevronRight, Eye, EyeOff, Info,
 } from 'lucide-react';
 import {
   api, DateRange, FunnelData, IngestionSource, PipelineJob, PipelineStatus,
@@ -35,6 +34,20 @@ const RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: '60d',    label: 'Last 60 days' },
   { value: '90d',    label: 'Last 90 days' },
 ];
+
+/** Lookback options for manual pipeline trigger (hours) */
+const LOOKBACK_OPTIONS = [
+  { value: 1,    label: '1 hour' },
+  { value: 6,    label: '6 hours' },
+  { value: 24,   label: '24 hours' },
+  { value: 168,  label: '7 days' },
+  { value: 720,  label: '30 days' },
+  { value: 2160, label: '90 days' },
+  { value: 4320, label: '6 months' },
+];
+
+/** Pipeline stages for progress visualization */
+const PIPELINE_STAGES = ['Ingest', 'Deduplicate', 'Analyze', 'Trust Score', 'Aggregate'];
 
 const STAGE_COLORS: Record<string, string> = {
   fetched: '#3b82f6',     // blue
@@ -63,6 +76,11 @@ export default function Pipeline() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionInfo, setActionInfo] = useState<string | null>(null);
   const [showBackfill, setShowBackfill] = useState(false);
+  // Req 6: collapsible sections
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
+  // Req 3: jobs show 5 by default
+  const [showAllJobs, setShowAllJobs] = useState(false);
 
   const loadAll = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -72,7 +90,7 @@ export default function Pipeline() {
         api.getIngestionFunnel(range),
         api.getIngestionSources(range),
         api.getSubredditRegistry(),
-        api.getRecentJobs(25),
+        api.getRecentJobs(20),
       ]);
       setStatus(s);
       setFunnel(f);
@@ -93,21 +111,25 @@ export default function Pipeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
-  const runNow = async () => {
+  const runNow = async (lookbackHours?: number) => {
     setActionError(null);
     setActionInfo(null);
     try {
-      const r = await api.runPipeline();
+      const r = await api.runPipeline(lookbackHours);
       if (!r.started) {
         setActionError(`Could not start: ${r.reason ?? 'unknown'}`);
       } else {
-        setActionInfo('Pipeline run started — refreshing every 15s.');
+        const label = lookbackHours ? LOOKBACK_OPTIONS.find(o => o.value === lookbackHours)?.label : 'default';
+        setActionInfo(`Pipeline run started (${label} lookback) — refreshing every 15s.`);
         loadAll(false);
       }
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : 'Run failed');
     }
   };
+
+  // Req 3: visible jobs (5 default, expandable to 20)
+  const visibleJobs = showAllJobs ? jobs : jobs.slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -153,10 +175,10 @@ export default function Pipeline() {
         </div>
       )}
 
-      {/* A) Live status strip */}
+      {/* A) Live status strip — Req 1: shows 6h interval; Req 2: timeframe dropdown + progress */}
       <StatusStrip status={status} onRun={runNow} loading={loading} />
 
-      {/* B) Funnel + media breakdown */}
+      {/* B) Funnel + media breakdown — Req 4: clickable; Req 5: vision failure categories */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white border rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
@@ -170,41 +192,86 @@ export default function Pipeline() {
         </div>
       </div>
 
-      {/* C) Sources table */}
-      <div className="bg-white border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700">Sources ({sources.length})</h3>
-          <span className="text-xs text-gray-400">Window: {RANGE_OPTIONS.find(o => o.value === range)?.label}</span>
-        </div>
-        <SourcesTable sources={sources} />
+      {/* C) Sources table — Req 6: collapsible */}
+      <div className="bg-white border rounded-lg">
+        <button
+          onClick={() => setSourcesOpen(!sourcesOpen)}
+          className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-lg"
+        >
+          <div className="flex items-center gap-2">
+            {sourcesOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <h3 className="text-sm font-semibold text-gray-700">Sources ({sources.length})</h3>
+            {!sourcesOpen && (
+              <span className="text-xs text-gray-400 ml-2">
+                {sources.filter(s => s.enabled).length} enabled · {sources.reduce((a, s) => a + s.fetched, 0).toLocaleString()} fetched · {sources.reduce((a, s) => a + s.pending, 0)} pending
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-gray-400">{RANGE_OPTIONS.find(o => o.value === range)?.label}</span>
+        </button>
+        {sourcesOpen && (
+          <div className="px-4 pb-4">
+            <SourcesTable sources={sources} />
+          </div>
+        )}
       </div>
 
-      {/* D) Registry editor */}
-      <div className="bg-white border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="text-sm font-semibold text-gray-700">
-            Subreddit registry ({registry.filter(r => r.enabled).length} / {registry.length} enabled)
-          </h3>
+      {/* D) Registry editor — Req 6: collapsible */}
+      <div className="bg-white border rounded-lg">
+        <button
+          onClick={() => setRegistryOpen(!registryOpen)}
+          className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-lg"
+        >
+          <div className="flex items-center gap-2">
+            {registryOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <h3 className="text-sm font-semibold text-gray-700">
+              Subreddit registry ({registry.filter(r => r.enabled).length} / {registry.length} enabled)
+            </h3>
+          </div>
           <button
-            onClick={() => setShowBackfill(true)}
+            onClick={(e) => { e.stopPropagation(); setShowBackfill(true); }}
             className="px-3 py-1.5 text-sm rounded-md bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-1 shadow-sm"
             title="Run a one-off historical backfill for selected subreddits"
           >
             <Clock size={14} /> Backfill…
           </button>
-        </div>
-        <RegistryEditor
-          registry={registry}
-          onMutated={() => loadAll(false)}
-          onError={setActionError}
-          onInfo={setActionInfo}
-        />
+        </button>
+        {registryOpen && (
+          <div className="px-4 pb-4">
+            <RegistryEditor
+              registry={registry}
+              onMutated={() => loadAll(false)}
+              onError={setActionError}
+              onInfo={setActionInfo}
+            />
+          </div>
+        )}
       </div>
 
-      {/* E) Recent jobs */}
+      {/* E) Recent jobs — Req 3: show 5 default, expand to 20 */}
       <div className="bg-white border rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent jobs ({jobs.length})</h3>
-        <JobsList jobs={jobs} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Recent jobs ({jobs.length})</h3>
+          {jobs.length > 5 && (
+            <button
+              onClick={() => setShowAllJobs(!showAllJobs)}
+              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              {showAllJobs ? <><EyeOff size={12} /> Show less</> : <><Eye size={12} /> Show all {jobs.length}</>}
+            </button>
+          )}
+        </div>
+        <JobsList jobs={visibleJobs} />
+        {!showAllJobs && jobs.length > 5 && (
+          <div className="text-center mt-3">
+            <button
+              onClick={() => setShowAllJobs(true)}
+              className="text-xs text-gray-500 hover:text-blue-600"
+            >
+              + {jobs.length - 5} more runs hidden
+            </button>
+          </div>
+        )}
       </div>
 
       {showBackfill && (
@@ -220,16 +287,26 @@ export default function Pipeline() {
 }
 
 // ─── Section A: Live status strip ───────────────────────────────────────────
+// Req 1: Displays interval in human-readable form (6h instead of 360m)
+// Req 2: Includes a timeframe dropdown for manual trigger + pipeline progress viz
 
 function StatusStrip({ status, onRun, loading }: {
-  status: PipelineStatus | null; onRun: () => void; loading: boolean;
+  status: PipelineStatus | null; onRun: (lookbackHours?: number) => void; loading: boolean;
 }) {
+  const [lookback, setLookback] = useState<number>(24);
   const running = status?.running ?? false;
   const last = status?.last_status;
   const lastFinished = status?.last_finished_at;
-  const interval = status?.interval_minutes ?? 60;
+  const interval = status?.interval_minutes ?? 360;
   const nextRun = status?.next_scheduled_run_at;
-  const fmt = (iso?: string | null) => iso ? new Date(iso).toLocaleString() : '—';
+
+  const fmtInterval = (m: number) => {
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    return rem ? `${h}h ${rem}m` : `${h}h`;
+  };
+
   const ago = (iso?: string | null) => {
     if (!iso) return '';
     const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -246,72 +323,141 @@ function StatusStrip({ status, onRun, loading }: {
     return `in ${Math.floor(m / 60)}h ${m % 60}m`;
   };
 
+  // Req 2: Estimate which pipeline stage is active based on elapsed time
+  const runningStageIdx = useMemo(() => {
+    if (!running || !status?.last_started_at) return 0;
+    const elapsed = Date.now() - new Date(status.last_started_at).getTime();
+    // Rough: Ingest ~40%, Dedup ~5%, Analyze ~40%, Trust ~10%, Aggregate ~5%
+    if (elapsed < 5000) return 0;   // Ingest
+    if (elapsed < 10000) return 1;  // Dedup
+    if (elapsed < 30000) return 2;  // Analyze
+    if (elapsed < 45000) return 3;  // Trust
+    return 4;                        // Aggregate
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, status?.last_started_at]);
+
   return (
-    <div className="bg-white border rounded-lg p-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-          running ? 'bg-blue-100 text-blue-700' :
-          last === 'failed' ? 'bg-red-100 text-red-700' :
-          last === 'success' ? 'bg-green-100 text-green-700' :
-          'bg-gray-100 text-gray-500'
-        }`}>
-          {running ? <Loader2 className="animate-spin" size={20} /> :
-           last === 'failed' ? <AlertCircle size={20} /> :
-           last === 'success' ? <CheckCircle2 size={20} /> :
-           <Activity size={20} />}
-        </div>
-        <div>
-          <div className="text-xs text-gray-500">Last run</div>
-          <div className="text-sm font-semibold">
-            {running ? 'Running now' : (last ?? 'never')}
-            {!running && lastFinished && (
-              <span className="text-gray-400 font-normal"> · {ago(lastFinished)}</span>
-            )}
+    <div className="bg-white border rounded-lg p-4 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            running ? 'bg-blue-100 text-blue-700' :
+            last === 'failed' ? 'bg-red-100 text-red-700' :
+            last === 'success' ? 'bg-green-100 text-green-700' :
+            'bg-gray-100 text-gray-500'
+          }`}>
+            {running ? <Loader2 className="animate-spin" size={20} /> :
+             last === 'failed' ? <AlertCircle size={20} /> :
+             last === 'success' ? <CheckCircle2 size={20} /> :
+             <Activity size={20} />}
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">Last run</div>
+            <div className="text-sm font-semibold">
+              {running ? 'Running now' : (last ?? 'never')}
+              {!running && lastFinished && (
+                <span className="text-gray-400 font-normal"> · {ago(lastFinished)}</span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div>
-        <div className="text-xs text-gray-500">Scheduler</div>
-        <div className="text-sm">
-          {status?.scheduler_enabled
-            ? <span className="text-green-600 font-medium">on</span>
-            : <span className="text-gray-400">off</span>}
-          <span className="text-gray-500"> · every {interval}m</span>
+        <div>
+          <div className="text-xs text-gray-500">Scheduler</div>
+          <div className="text-sm">
+            {status?.scheduler_enabled
+              ? <span className="text-green-600 font-medium">on</span>
+              : <span className="text-gray-400">off</span>}
+            <span className="text-gray-500"> · every {fmtInterval(interval)}</span>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-xs text-gray-500">Next scheduled</div>
+          <div className="text-sm font-medium">
+            {ttl(nextRun) || '—'}
+          </div>
+        </div>
+
+        {/* Req 2: Timeframe selector + Run Now */}
+        <div className="flex items-center gap-2 justify-end">
+          <select
+            value={lookback}
+            onChange={(e) => setLookback(Number(e.target.value))}
+            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white shadow-sm"
+            title="Lookback window for manual run"
+          >
+            {LOOKBACK_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => onRun(lookback)}
+            disabled={running || loading}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
+          >
+            <Play size={16} />
+            {running ? 'Running…' : 'Run Now'}
+          </button>
         </div>
       </div>
 
-      <div>
-        <div className="text-xs text-gray-500">Next scheduled</div>
-        <div className="text-sm font-medium" title={fmt(nextRun)}>
-          {ttl(nextRun) || '—'}
+      {/* Req 2: Pipeline progress visualization */}
+      {running && (
+        <div className="border-t pt-3">
+          <div className="flex items-center gap-1">
+            {PIPELINE_STAGES.map((stage, i) => (
+              <div key={stage} className="flex items-center">
+                <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                  i < runningStageIdx ? 'bg-green-100 text-green-700' :
+                  i === runningStageIdx ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' :
+                  'bg-gray-100 text-gray-400'
+                }`}>
+                  {i < runningStageIdx && <CheckCircle2 size={12} />}
+                  {i === runningStageIdx && <Loader2 size={12} className="animate-spin" />}
+                  {stage}
+                </div>
+                {i < PIPELINE_STAGES.length - 1 && (
+                  <div className={`w-4 h-0.5 mx-0.5 ${
+                    i < runningStageIdx ? 'bg-green-400' : 'bg-gray-200'
+                  }`} />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={onRun}
-          disabled={running || loading}
-          className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
-        >
-          <Play size={16} />
-          {running ? 'Running…' : 'Run Now'}
-        </button>
-      </div>
+      )}
     </div>
   );
 }
 
 // ─── Section B: Funnel + media ──────────────────────────────────────────────
+// Req 4: Funnel bars are clickable to show detail breakdown
+// Req 5: Vision captions show failure categorization
 
 function FunnelChart({ data }: { data: FunnelData }) {
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+
   const chartData = data.funnel.map(f => ({
     name: STAGE_LABEL[f.stage] ?? f.stage,
+    stage: f.stage,
     count: f.count,
     drop: f.drop_from_prev,
     color: STAGE_COLORS[f.stage] ?? '#94a3b8',
   }));
   const maxCount = Math.max(...chartData.map(d => d.count), 1);
+
+  const detail = data.funnel_detail;
+  const selected = data.funnel.find(f => f.stage === selectedStage);
+
+  const stageExplanation: Record<string, string> = {
+    fetched: 'Total posts retrieved from Reddit in this window.',
+    english: 'Posts kept after language detection (non-English dropped).',
+    long_enough: 'Posts with enough content for meaningful analysis (≥10 chars or has image).',
+    analyzed: 'Posts successfully processed by the LLM sentiment analyzer.',
+    trusted: 'Posts passing trust scoring thresholds (not spam, not astroturf).',
+  };
+
   return (
     <div>
       <ResponsiveContainer width="100%" height={260}>
@@ -320,14 +466,68 @@ function FunnelChart({ data }: { data: FunnelData }) {
           <XAxis type="number" domain={[0, maxCount * 1.1]} hide />
           <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(v: number, _n, p) => [`${v} posts`, p.payload.name]} />
-          <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="count"
+            radius={[0, 4, 4, 0]}
+            onClick={(_data, idx) => {
+              const stage = chartData[idx]?.stage;
+              setSelectedStage(stage === selectedStage ? null : stage);
+            }}
+            className="cursor-pointer"
+          >
             <LabelList dataKey="count" position="right" fill="#374151" fontSize={12} />
-            {chartData.map((c, i) => <Cell key={i} fill={c.color} />)}
+            {chartData.map((c, i) => (
+              <Cell
+                key={i}
+                fill={c.color}
+                opacity={selectedStage && c.stage !== selectedStage ? 0.4 : 1}
+              />
+            ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+
+      {/* Req 4: Detail panel when a stage is clicked */}
+      {selectedStage && selected && (
+        <div className="mt-3 p-3 bg-gray-50 border rounded-lg text-sm animate-in fade-in">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-gray-700 flex items-center gap-1">
+              <Info size={14} />
+              {STAGE_LABEL[selectedStage]} — Detail
+            </div>
+            <button onClick={() => setSelectedStage(null)} className="text-gray-400 hover:text-gray-600">
+              <X size={14} />
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">{stageExplanation[selectedStage]}</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-white p-2 rounded border">
+              <div className="text-gray-500">Count</div>
+              <div className="font-bold text-lg">{selected.count.toLocaleString()}</div>
+            </div>
+            <div className="bg-white p-2 rounded border">
+              <div className="text-gray-500">Dropped from prev</div>
+              <div className="font-bold text-lg text-amber-600">{selected.drop_from_prev.toLocaleString()}</div>
+            </div>
+            {detail && selectedStage === 'analyzed' && (
+              <div className="bg-white p-2 rounded border col-span-2">
+                <div className="text-gray-500">Analysis coverage</div>
+                <div className="font-bold text-lg">{detail.analysis_coverage}%</div>
+              </div>
+            )}
+            {detail && selectedStage === 'trusted' && (
+              <div className="bg-white p-2 rounded border col-span-2">
+                <div className="text-gray-500">Trust rate (of analyzed)</div>
+                <div className="font-bold text-lg">{detail.trust_rate}%</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="text-xs text-gray-500 mt-2">
         Window: {new Date(data.window_start).toLocaleString()} → {new Date(data.window_end).toLocaleString()}
+        <span className="ml-2 text-gray-400">(click bars for details)</span>
       </div>
     </div>
   );
@@ -335,6 +535,7 @@ function FunnelChart({ data }: { data: FunnelData }) {
 
 function MediaBreakdown({ data }: { data: FunnelData }) {
   const m = data.media_breakdown;
+  const [showVisionDetail, setShowVisionDetail] = useState(false);
   const items = [
     { label: 'Text only',    value: m.text_only,        color: 'bg-blue-100 text-blue-700' },
     { label: 'Image only',   value: m.image_only,       color: 'bg-purple-100 text-purple-700' },
@@ -342,6 +543,12 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
     { label: 'Video',        value: m.video,            color: 'bg-rose-100 text-rose-700' },
     { label: 'Link only',    value: m.link_only,        color: 'bg-gray-100 text-gray-600' },
   ];
+
+  const failures = m.vision_failures;
+  const totalFailures = failures
+    ? failures.timeout + failures.fetch_failed + failures.ollama_unavailable + failures.no_content + failures.other
+    : m.images_total - m.captioned;
+
   return (
     <div className="space-y-2">
       {items.map(it => (
@@ -351,7 +558,17 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
         </div>
       ))}
       <div className="border-t pt-3 mt-3">
-        <div className="text-xs text-gray-500 mb-1">Vision captions</div>
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-gray-500 mb-1">Vision captions</div>
+          {totalFailures > 0 && (
+            <button
+              onClick={() => setShowVisionDetail(!showVisionDetail)}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >
+              {showVisionDetail ? 'Hide' : 'Failures'}
+            </button>
+          )}
+        </div>
         <div className="flex items-center justify-between text-sm">
           <span>{m.captioned} / {m.images_total} images</span>
           <span className={`font-semibold ${
@@ -366,6 +583,37 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
             style={{ width: `${Math.min(100, m.pct_captioned)}%` }}
           />
         </div>
+
+        {/* Req 5: Vision failure categorization */}
+        {showVisionDetail && failures && totalFailures > 0 && (
+          <div className="mt-3 space-y-1.5 text-xs">
+            <div className="text-gray-600 font-medium">
+              Caption failures ({totalFailures.toLocaleString()} images)
+            </div>
+            {[
+              { key: 'ollama_unavailable', label: 'Ollama unavailable', value: failures.ollama_unavailable, color: 'bg-red-200' },
+              { key: 'timeout', label: 'Timeout', value: failures.timeout, color: 'bg-amber-200' },
+              { key: 'fetch_failed', label: 'Image fetch failed', value: failures.fetch_failed, color: 'bg-orange-200' },
+              { key: 'no_content', label: 'No content detected', value: failures.no_content, color: 'bg-gray-200' },
+              { key: 'other', label: 'Other', value: failures.other, color: 'bg-gray-200' },
+            ].filter(f => f.value > 0).map(f => (
+              <div key={f.key} className="flex items-center gap-2">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-gray-600">{f.label}</span>
+                    <span className="tabular-nums">{f.value.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded h-1.5">
+                    <div
+                      className={`${f.color} h-1.5 rounded`}
+                      style={{ width: `${Math.min(100, (f.value / totalFailures) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
