@@ -123,12 +123,73 @@ export interface PipelineStatus {
   last_finished_at: string | null;
   last_status: 'success' | 'failed' | null;
   last_exit_code: number | null;
-  last_trigger: 'manual' | 'scheduled' | null;
+  last_trigger: 'manual' | 'scheduled' | 'backfill' | null;
   last_log_tail: string[];
   interval_minutes: number;
   scheduler_enabled: boolean;
   scheduler_started_at?: string | null;
   next_scheduled_run_at?: string | null;
+}
+
+// ─── Pipeline page types ──────────────────────────────────────────────────
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  drop_from_prev: number;
+}
+
+export interface FunnelData {
+  range: string;
+  segment: string | null;
+  window_start: string;
+  window_end: string;
+  funnel: FunnelStage[];
+  media_breakdown: {
+    text_only: number;
+    image_only: number;
+    text_plus_image: number;
+    video: number;
+    link_only: number;
+    images_total: number;
+    captioned: number;
+    pct_captioned: number;
+  };
+}
+
+export interface IngestionSource {
+  subreddit: string;
+  segment: string;
+  enabled: boolean;
+  fetched: number;
+  analyzed: number;
+  pending: number;
+  last_created_ts: number | null;
+  last_fetched_utc: number | null;
+  last_fetched_at: string | null;
+  subscribers: number;
+}
+
+export interface SubredditRegistryEntry {
+  subreddit: string;
+  group: string;
+  segment: string;
+  subscribers: number;
+  enabled: boolean;
+  subreddit_type: string;
+}
+
+export interface PipelineJob {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: 'running' | 'success' | 'failed' | string;
+  trigger: 'manual' | 'scheduled' | 'backfill' | string;
+  duration_ms: number | null;
+  counters: Record<string, number | string | string[]>;
+  params: Record<string, unknown>;
+  error: string | null;
+  log_tail: string[];
 }
 
 export const api = {
@@ -204,4 +265,55 @@ export const api = {
       reason?: string;
       state: PipelineStatus;
     }>,
+
+  // ─── Pipeline page ────────────────────────────────────────────────────
+  getIngestionFunnel: (range: DateRange = 'week', segment?: string | null) => {
+    const qs = new URLSearchParams({ range });
+    if (segment) qs.set('segment', segment);
+    return fetchJSON<FunnelData>(`/ingestion/funnel?${qs}`);
+  },
+  getIngestionSources: (range: DateRange = 'week') =>
+    fetchJSON<{ range: string; sources: IngestionSource[]; total: number }>(
+      `/ingestion/sources?range=${range}`,
+    ),
+  getSubredditRegistry: () =>
+    fetchJSON<{ subreddits: SubredditRegistryEntry[]; total: number; enabled_count: number }>(
+      '/ingestion/subreddits',
+    ),
+  toggleSubreddits: (changes: Record<string, boolean>) =>
+    fetch(`${API_BASE}/ingestion/subreddits/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes }),
+    }).then(r => r.json()) as Promise<{ updated: number; changes: [string, boolean][] }>,
+  addSubreddit: (subreddit: string, group: string, enabled = true) =>
+    fetch(`${API_BASE}/ingestion/subreddits/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit, group, enabled }),
+    }).then(r => r.json()) as Promise<{ added?: string; segment?: string; enabled?: boolean; error?: string }>,
+  removeSubreddit: (subreddit: string) =>
+    fetch(`${API_BASE}/ingestion/subreddits/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit }),
+    }).then(r => r.json()) as Promise<{ removed: boolean; subreddit: string }>,
+  triggerBackfill: (params: { from: string; to: string; subreddits?: string[] }) =>
+    fetch(`${API_BASE}/ingestion/backfill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    }).then(r => r.json()) as Promise<{
+      started: boolean;
+      reason?: string;
+      window?: { from: string; to: string; days: number };
+      subreddits?: string[] | string;
+    }>,
+  getRecentJobs: (limit = 25, status?: string) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (status) qs.set('status', status);
+    return fetchJSON<{ jobs: PipelineJob[]; total: number }>(`/jobs/recent?${qs}`);
+  },
+  getJobDetail: (jobId: string) =>
+    fetchJSON<PipelineJob | { error: string; job_id?: string; detail?: string }>(`/jobs/${jobId}`),
 };

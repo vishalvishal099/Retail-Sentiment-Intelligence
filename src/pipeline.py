@@ -368,25 +368,22 @@ class RetailSentimentPipeline:
         )
 
     def _load_subreddits(self) -> list[str]:
-        """Load subreddit list from clean CSV."""
+        """Load the *enabled* subreddit list from the registry CSV.
+
+        Honors the `enabled` flag managed by the dashboard's Pipeline page
+        (see src/ingestion/subreddit_registry.py). Rows without that column
+        are treated as enabled for backward compatibility.
+        """
+        from src.ingestion.subreddit_registry import load_all
         csv_path = Path(self.config.ingestion.subreddits_file)
         if not csv_path.exists():
-            # Try relative to project root
             csv_path = Path(__file__).parent.parent / self.config.ingestion.subreddits_file
-
         if not csv_path.exists():
             log.warning("subreddits_file_not_found", path=str(csv_path))
-            # Fallback to core Walmart subs
             return ["walmart", "samsclub", "Sparkdriver", "OGPBackroom", "WalmartEmployees"]
-
-        subreddits = []
-        with open(csv_path, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row.get("subreddit"):
-                    subreddits.append(row["subreddit"])
-
-        return subreddits
+        enabled = [e.subreddit for e in load_all(csv_path) if e.enabled]
+        log.info("subreddits_loaded", total=len(enabled), source=str(csv_path))
+        return enabled
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────

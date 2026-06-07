@@ -99,6 +99,21 @@ class SQLiteBackend(StorageBackend):
                 last_fetched_id TEXT,
                 updated_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                id TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT,           -- running | success | failed
+                trigger TEXT,          -- manual | scheduled | backfill
+                duration_ms INTEGER,
+                counters_json TEXT,    -- JSON: {ingested, processed, trusted, flagged, analyzed, ...}
+                params_json TEXT,      -- JSON: {from, to, subreddits} for backfills
+                error TEXT,
+                log_tail TEXT          -- last ~25 lines of subprocess output
+            );
+            CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
         """)
         self._conn.commit()
 

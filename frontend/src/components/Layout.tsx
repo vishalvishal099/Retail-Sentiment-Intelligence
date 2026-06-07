@@ -1,11 +1,12 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { BarChart3, Shield, Bell, Search, CheckSquare } from 'lucide-react';
+import { BarChart3, Bell, Search, CheckSquare, Activity } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Brand Health', icon: BarChart3 },
   { path: '/review', label: 'Review', icon: CheckSquare },
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/posts', label: 'Posts', icon: Search },
+  { path: '/pipeline', label: 'Pipeline', icon: Activity },
 ];
 
 export default function Layout() {

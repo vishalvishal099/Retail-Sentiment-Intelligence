@@ -5,6 +5,7 @@ import AspectDrilldown from './pages/AspectDrilldown';
 import ReviewQueue from './pages/ReviewQueue';
 import AlertFeed from './pages/AlertFeed';
 import PostExplorer from './pages/PostExplorer';
+import Pipeline from './pages/Pipeline';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/review" element={<ReviewQueue />} />
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/posts" element={<PostExplorer />} />
+        <Route path="/pipeline" element={<Pipeline />} />
       </Route>
     </Routes>
   );

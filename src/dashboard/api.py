@@ -58,11 +58,14 @@ _scheduler_started_at: datetime | None = None
 _next_scheduled_run_at: datetime | None = None
 
 
-async def _run_pipeline_subprocess(trigger: str) -> dict:
+async def _run_pipeline_subprocess(trigger: str, extra_args: list[str] | None = None,
+                                   params: dict | None = None) -> dict:
     """Run one pipeline cycle as a detached subprocess and update state.
 
     Uses the same Python interpreter the API is running under so we inherit the
-    correct virtual environment. Captures stdout/stderr tail for the UI.
+    correct virtual environment. Captures stdout/stderr tail for the UI and
+    inserts a row into the `pipeline_runs` table on completion so the Pipeline
+    page can show run history with counters.
     """
     if _pipeline_state["running"]:
         return {"started": False, "reason": "already_running", "state": _pipeline_state}
@@ -71,24 +74,31 @@ async def _run_pipeline_subprocess(trigger: str) -> dict:
         if _pipeline_state["running"]:
             return {"started": False, "reason": "already_running", "state": _pipeline_state}
         run_id = uuid.uuid4().hex[:12]
+        started_iso = datetime.now(timezone.utc).isoformat()
         _pipeline_state.update(
             running=True,
             last_run_id=run_id,
-            last_started_at=datetime.now(timezone.utc).isoformat(),
+            last_started_at=started_iso,
             last_finished_at=None,
             last_status=None,
             last_exit_code=None,
             last_trigger=trigger,
         )
         log.info("pipeline_run_started", run_id=run_id, trigger=trigger)
+        # Insert a "running" row so the UI can show in-flight jobs.
+        _record_pipeline_run(
+            run_id=run_id, started_at=started_iso, status="running",
+            trigger=trigger, params=params,
+        )
 
+    started_at_mono = datetime.now(timezone.utc)
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_PROJECT_ROOT)
+    cmd_args = [sys.executable, "-m", "src.pipeline", "--once"]
+    if extra_args:
+        cmd_args.extend(extra_args)
     proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-m",
-        "src.pipeline",
-        "--once",
+        *cmd_args,
         cwd=str(_PROJECT_ROOT),
         env=env,
         stdout=asyncio.subprocess.PIPE,
@@ -98,15 +108,87 @@ async def _run_pipeline_subprocess(trigger: str) -> dict:
     output = (stdout_bytes or b"").decode(errors="replace")
     tail = output.strip().splitlines()[-25:]
     status = "success" if proc.returncode == 0 else "failed"
+    finished_iso = datetime.now(timezone.utc).isoformat()
+    duration_ms = int((datetime.now(timezone.utc) - started_at_mono).total_seconds() * 1000)
+    counters = _parse_counters_from_log_tail(tail)
     _pipeline_state.update(
         running=False,
-        last_finished_at=datetime.now(timezone.utc).isoformat(),
+        last_finished_at=finished_iso,
         last_status=status,
         last_exit_code=proc.returncode,
         last_log_tail=tail,
     )
-    log.info("pipeline_run_finished", run_id=run_id, status=status, code=proc.returncode)
+    _record_pipeline_run(
+        run_id=run_id, started_at=started_iso, status=status,
+        trigger=trigger, params=params, finished_at=finished_iso,
+        duration_ms=duration_ms, counters=counters, log_tail=tail,
+        error=None if status == "success" else f"exit_code={proc.returncode}",
+    )
+    log.info("pipeline_run_finished", run_id=run_id, status=status, code=proc.returncode,
+             duration_ms=duration_ms)
     return {"started": True, "run_id": run_id, "state": _pipeline_state}
+
+
+_COUNTER_KEYS = {
+    "ingested", "processed", "trusted", "flagged", "analyzed",
+    "candidates", "captioned", "size", "trusted_so_far",
+}
+
+
+def _parse_counters_from_log_tail(tail: list[str]) -> dict:
+    """Extract `cycle_complete` and `stage_complete` counter lines from the
+    pipeline's stdout into a single dict. Best-effort — works with the
+    structlog text formatter used by src/utils/logger.py."""
+    import re
+    counters: dict = {}
+    for line in tail:
+        # e.g. "cycle_complete [ingested=12 processed=12 trusted=8 ...]"
+        m = re.search(r"(cycle_complete|stage_complete|analyze_pending_start|"
+                      r"analyze_pending_batch)\s*\[(.*)\]", line)
+        if not m:
+            continue
+        event, kvs = m.group(1), m.group(2)
+        for kv in re.finditer(r"(\w+)=([\w\.\-:/]+)", kvs):
+            k, v = kv.group(1), kv.group(2)
+            if k in _COUNTER_KEYS:
+                try:
+                    counters[k] = max(counters.get(k, 0), int(v))
+                except ValueError:
+                    pass
+            elif k == "stage":
+                counters.setdefault("stages", []).append(v)
+    return counters
+
+
+def _record_pipeline_run(
+    run_id: str,
+    started_at: str,
+    status: str,
+    trigger: str,
+    params: dict | None = None,
+    finished_at: str | None = None,
+    duration_ms: int | None = None,
+    counters: dict | None = None,
+    log_tail: list[str] | None = None,
+    error: str | None = None,
+) -> None:
+    """Insert or update a row in `pipeline_runs`. Fails soft."""
+    if _storage is None:
+        return
+    import json as _json
+    try:
+        _storage._conn.execute(
+            """INSERT OR REPLACE INTO pipeline_runs
+               (id, started_at, finished_at, status, trigger, duration_ms,
+                counters_json, params_json, error, log_tail)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (run_id, started_at, finished_at, status, trigger, duration_ms,
+             _json.dumps(counters or {}), _json.dumps(params or {}),
+             error, "\n".join(log_tail or [])),
+        )
+        _storage._conn.commit()
+    except Exception as e:  # noqa: BLE001
+        log.warning("pipeline_run_record_failed", run_id=run_id, error=str(e))
 
 
 async def _scheduler_loop():
@@ -219,6 +301,382 @@ async def pipeline_run(background_tasks: BackgroundTasks):
         }
     background_tasks.add_task(_run_pipeline_subprocess, "manual")
     return {"started": True, "state": _pipeline_state}
+
+
+# ─── Pipeline page: data sources, funnel, jobs, registry CRUD ────────────────
+# Everything below powers the /pipeline page in the dashboard. See
+# frontend/src/pages/Pipeline.tsx.
+
+
+@app.get("/api/ingestion/funnel")
+def ingestion_funnel(range: str = Query("week"), segment: str | None = None):
+    """Funnel: fetched → deduped (implicit, we only store unique) → English →
+    long enough → analyzed → trusted. Plus a media-type breakdown so the
+    Pipeline page can show "how many text vs image vs both".
+
+    All numbers come from `raw_posts` for the requested window (post creation
+    time, same convention as Brand Health).
+    """
+    _ensure_initialized()
+    import json as _json
+    start, end, _days, _label = _resolve_window(range)
+    start_ts, end_ts = start.timestamp(), end.timestamp()
+
+    seg_clause = ""
+    seg_params: list = []
+    if segment:
+        seg_clause = " AND json_extract(data, '$.segment') = ?"
+        seg_params = [segment]
+
+    # 1. Total stored (== fetched-and-kept; the dedup happens before insert)
+    fetched = _storage._conn.execute(
+        f"SELECT COUNT(*) FROM raw_posts WHERE created_timestamp >= ? AND created_timestamp < ?{seg_clause}",
+        [start_ts, end_ts, *seg_params],
+    ).fetchone()[0]
+
+    # 2-4. Walk each row once to compute the post-storage filter counts +
+    # media-type breakdown. Cheap because we only touch the window.
+    rows = _storage._conn.execute(
+        f"SELECT data FROM raw_posts WHERE created_timestamp >= ? AND created_timestamp < ?{seg_clause}",
+        [start_ts, end_ts, *seg_params],
+    ).fetchall()
+    english = 0
+    long_enough = 0
+    media_buckets = {"text_only": 0, "image_only": 0, "text_plus_image": 0, "video": 0, "link_only": 0}
+    captioned = 0
+    for r in rows:
+        try:
+            d = _json.loads(r["data"])
+        except Exception:
+            continue
+        title = (d.get("title") or "").strip()
+        body = (d.get("body") or "").strip()
+        media_url = (d.get("media_url") or "").strip()
+        is_video = bool(d.get("is_video"))
+        has_text = bool(title or body)
+        has_image = bool(media_url)
+        # English / length proxies — preprocess already filtered, so anything
+        # we kept is by definition english+long enough. We still report the
+        # counts so the funnel shows non-zero arrows.
+        if has_text or has_image:
+            english += 1
+            if len(title) + len(body) >= 10 or has_image:
+                long_enough += 1
+        if is_video:
+            media_buckets["video"] += 1
+        elif has_text and has_image:
+            media_buckets["text_plus_image"] += 1
+        elif has_image:
+            media_buckets["image_only"] += 1
+        elif has_text:
+            media_buckets["text_only"] += 1
+        else:
+            media_buckets["link_only"] += 1
+        if d.get("image_caption"):
+            captioned += 1
+
+    # analyzed = posts in this window that have any analyses row at all.
+    # Counted via the analyses table to stay consistent with `trusted`
+    # (which is also computed off the analyses join below).
+    analyzed = _storage._conn.execute(
+        f"""SELECT COUNT(DISTINCT a.post_id) FROM analyses a
+            JOIN raw_posts r ON a.post_id = r.id
+            WHERE r.created_timestamp >= ? AND r.created_timestamp < ?{seg_clause.replace('data', 'r.data')}""",
+        [start_ts, end_ts, *seg_params],
+    ).fetchone()[0]
+
+    # 5. Trusted — go through the analyses table so we use the same gate as
+    # the rest of the dashboard.
+    trusted = 0
+    analyses_rows = _storage._conn.execute(
+        f"""SELECT a.data FROM analyses a
+            JOIN raw_posts r ON a.post_id = r.id
+            WHERE r.created_timestamp >= ? AND r.created_timestamp < ?{seg_clause.replace('data', 'r.data')}""",
+        [start_ts, end_ts, *seg_params],
+    ).fetchall()
+    for ar in analyses_rows:
+        try:
+            an = _json.loads(ar["data"])
+        except Exception:
+            continue
+        if _is_trusted_analysis(an):
+            trusted += 1
+
+    images_total = media_buckets["image_only"] + media_buckets["text_plus_image"]
+    pct_captioned = round(100 * captioned / images_total, 1) if images_total else 0.0
+
+    return {
+        "range": range,
+        "segment": segment,
+        "window_start": start.isoformat(),
+        "window_end": end.isoformat(),
+        "funnel": [
+            {"stage": "fetched",     "count": fetched,     "drop_from_prev": 0},
+            {"stage": "english",     "count": english,     "drop_from_prev": max(fetched - english, 0)},
+            {"stage": "long_enough", "count": long_enough, "drop_from_prev": max(english - long_enough, 0)},
+            {"stage": "analyzed",    "count": analyzed,    "drop_from_prev": max(long_enough - analyzed, 0)},
+            {"stage": "trusted",     "count": trusted,     "drop_from_prev": max(analyzed - trusted, 0)},
+        ],
+        "media_breakdown": {
+            **media_buckets,
+            "images_total": images_total,
+            "captioned": captioned,
+            "pct_captioned": pct_captioned,
+        },
+    }
+
+
+@app.get("/api/ingestion/sources")
+def ingestion_sources(range: str = Query("week")):
+    """Per-subreddit ingestion table for the Pipeline page."""
+    _ensure_initialized()
+    import json as _json
+    start, end, _days, _label = _resolve_window(range)
+    start_ts, end_ts = start.timestamp(), end.timestamp()
+
+    # Volumes per sub in window. `analyzed` is counted via the analyses
+    # table (join on post_id) — `raw_posts.processing_status` is not always
+    # flipped reliably, so we treat "has any analyses row" as analyzed.
+    rows = _storage._conn.execute(
+        """SELECT r.subreddit,
+                  COUNT(*) AS cnt,
+                  SUM(CASE WHEN a.post_id IS NOT NULL THEN 1 ELSE 0 END) AS analyzed,
+                  SUM(CASE WHEN a.post_id IS NULL THEN 1 ELSE 0 END) AS pending,
+                  MAX(r.created_timestamp) AS last_created
+           FROM raw_posts r
+           LEFT JOIN analyses a ON a.post_id = r.id
+           WHERE r.created_timestamp >= ? AND r.created_timestamp < ?
+           GROUP BY r.subreddit""",
+        [start_ts, end_ts],
+    ).fetchall()
+    counts = {r["subreddit"]: dict(r) for r in rows}
+
+    # Last-fetch info from cursors table
+    cursor_rows = _storage._conn.execute(
+        "SELECT subreddit, last_fetched_utc, updated_at FROM cursors"
+    ).fetchall()
+    cursors = {c["subreddit"]: dict(c) for c in cursor_rows}
+
+    from src.ingestion.subreddit_registry import load_all
+    entries = load_all()
+
+    items = []
+    for e in entries:
+        c = counts.get(e.subreddit, {})
+        cur = cursors.get(e.subreddit, {})
+        items.append({
+            "subreddit": e.subreddit,
+            "segment": e.segment,
+            "enabled": e.enabled,
+            "fetched": int(c.get("cnt") or 0),
+            "analyzed": int(c.get("analyzed") or 0),
+            "pending": int(c.get("pending") or 0),
+            "last_created_ts": c.get("last_created"),
+            "last_fetched_utc": cur.get("last_fetched_utc"),
+            "last_fetched_at": cur.get("updated_at"),
+            "subscribers": e.subscribers,
+        })
+    # Sort: enabled first, then by fetched desc
+    items.sort(key=lambda x: (not x["enabled"], -x["fetched"]))
+    return {"range": range, "sources": items, "total": len(items)}
+
+
+@app.get("/api/ingestion/subreddits")
+def ingestion_list_subreddits():
+    """Full subreddit registry — used by the editor on the Pipeline page."""
+    _ensure_initialized()
+    from src.ingestion.subreddit_registry import load_all
+    entries = load_all()
+    return {
+        "subreddits": [
+            {
+                "subreddit": e.subreddit,
+                "group": e.group,
+                "segment": e.segment,
+                "subscribers": e.subscribers,
+                "enabled": e.enabled,
+                "subreddit_type": e.subreddit_type,
+            } for e in entries
+        ],
+        "total": len(entries),
+        "enabled_count": sum(1 for e in entries if e.enabled),
+    }
+
+
+@app.post("/api/ingestion/subreddits/toggle")
+async def ingestion_toggle_subreddits(body: dict):
+    """Body: {"changes": {"walmart": true, "Costco": false, ...}}"""
+    _ensure_initialized()
+    from src.ingestion.subreddit_registry import set_enabled
+    changes = body.get("changes") or {}
+    if not isinstance(changes, dict):
+        return {"error": "changes must be a dict"}
+    result = set_enabled(changes)
+    return {"updated": result["updated"], "changes": result["changes"]}
+
+
+@app.post("/api/ingestion/subreddits/add")
+async def ingestion_add_subreddit(body: dict):
+    """Body: {"subreddit": "MyNewSub", "group": "Walmart core", "enabled": true}"""
+    _ensure_initialized()
+    from src.ingestion.subreddit_registry import upsert
+    name = (body.get("subreddit") or "").strip()
+    if not name:
+        return {"error": "subreddit name required"}
+    entry = upsert(
+        name=name,
+        group=(body.get("group") or "").strip(),
+        enabled=bool(body.get("enabled", True)),
+    )
+    return {"added": entry.subreddit, "segment": entry.segment, "enabled": entry.enabled}
+
+
+@app.post("/api/ingestion/subreddits/remove")
+async def ingestion_remove_subreddit(body: dict):
+    """Body: {"subreddit": "MyOldSub"}"""
+    _ensure_initialized()
+    from src.ingestion.subreddit_registry import remove
+    name = (body.get("subreddit") or "").strip()
+    if not name:
+        return {"error": "subreddit name required"}
+    removed = remove(name)
+    return {"removed": removed, "subreddit": name}
+
+
+@app.post("/api/ingestion/backfill")
+async def ingestion_backfill(body: dict, background_tasks: BackgroundTasks):
+    """Trigger a one-off backfill cycle for the selected subreddits and window.
+    Body: {"from": "2026-05-01T00:00:00Z", "to": "2026-06-01T00:00:00Z",
+           "subreddits": ["walmart", "Costco"] (optional)}
+
+    Implementation: writes the requested subs to the registry as enabled,
+    flips others to disabled for the duration of this run, kicks off a normal
+    pipeline cycle with backfill params recorded for the jobs log, then
+    restores the original enabled set.
+
+    Constraints: window max 1 year.
+    """
+    _ensure_initialized()
+    from datetime import datetime as _dt
+    from src.ingestion.subreddit_registry import load_all, save_all
+
+    try:
+        from_dt = _dt.fromisoformat((body.get("from") or "").replace("Z", "+00:00"))
+        to_dt = _dt.fromisoformat((body.get("to") or "").replace("Z", "+00:00"))
+    except Exception:
+        return {"started": False, "reason": "invalid date format; use ISO 8601"}
+    if from_dt >= to_dt:
+        return {"started": False, "reason": "from must be < to"}
+    if (to_dt - from_dt).days > 366:
+        return {"started": False, "reason": "window exceeds 1 year (max 366 days)"}
+
+    selected_subs: list[str] = [s.strip() for s in (body.get("subreddits") or []) if s.strip()]
+    if _pipeline_state["running"]:
+        return {"started": False, "reason": "already_running"}
+
+    # Save current enabled state so we can restore it after the run.
+    entries = load_all()
+    original_state = {e.subreddit: e.enabled for e in entries}
+    if selected_subs:
+        sel_lower = {s.lower() for s in selected_subs}
+        for e in entries:
+            e.enabled = e.subreddit.lower() in sel_lower
+        save_all(entries)
+
+    async def _run_then_restore():
+        try:
+            await _run_pipeline_subprocess(
+                trigger="backfill",
+                params={
+                    "from": body.get("from"),
+                    "to": body.get("to"),
+                    "subreddits": selected_subs or "all_currently_enabled",
+                },
+            )
+        finally:
+            if selected_subs:
+                try:
+                    cur = load_all()
+                    for e in cur:
+                        if e.subreddit in original_state:
+                            e.enabled = original_state[e.subreddit]
+                    save_all(cur)
+                    log.info("backfill_enabled_state_restored", count=len(original_state))
+                except Exception as ex:  # noqa: BLE001
+                    log.error("backfill_restore_failed", error=str(ex))
+
+    background_tasks.add_task(_run_then_restore)
+    return {
+        "started": True,
+        "window": {"from": body.get("from"), "to": body.get("to"),
+                   "days": (to_dt - from_dt).days},
+        "subreddits": selected_subs or "all_currently_enabled",
+    }
+
+
+@app.get("/api/jobs/recent")
+def jobs_recent(limit: int = Query(25, ge=1, le=200), status: str | None = None):
+    """Recent pipeline runs — manual + scheduled + backfill. Powers the
+    'Recent jobs' table on the Pipeline page."""
+    _ensure_initialized()
+    import json as _json
+    sql = "SELECT * FROM pipeline_runs"
+    params: list = []
+    if status:
+        sql += " WHERE status = ?"
+        params.append(status)
+    sql += " ORDER BY started_at DESC LIMIT ?"
+    params.append(limit)
+    try:
+        rows = _storage._conn.execute(sql, params).fetchall()
+    except Exception as e:  # noqa: BLE001
+        # Table may not exist yet on a stale DB; report empty rather than 500.
+        log.warning("jobs_query_failed", error=str(e))
+        return {"jobs": [], "total": 0}
+    jobs = []
+    for r in rows:
+        d = dict(r)
+        # Parse JSON cols for the UI
+        try:
+            d["counters"] = _json.loads(d.pop("counters_json") or "{}")
+        except Exception:
+            d["counters"] = {}
+        try:
+            d["params"] = _json.loads(d.pop("params_json") or "{}")
+        except Exception:
+            d["params"] = {}
+        # log_tail is line-joined; split for the UI
+        log_tail = d.pop("log_tail", "") or ""
+        d["log_tail"] = log_tail.splitlines() if log_tail else []
+        jobs.append(d)
+    return {"jobs": jobs, "total": len(jobs)}
+
+
+@app.get("/api/jobs/{job_id}")
+def jobs_detail(job_id: str):
+    """Full detail for a single job — log tail, counters, params."""
+    _ensure_initialized()
+    import json as _json
+    try:
+        row = _storage._conn.execute(
+            "SELECT * FROM pipeline_runs WHERE id = ?", [job_id]
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001
+        return {"error": "lookup_failed", "detail": str(e)}
+    if not row:
+        return {"error": "not_found", "job_id": job_id}
+    d = dict(row)
+    try:
+        d["counters"] = _json.loads(d.pop("counters_json") or "{}")
+    except Exception:
+        d["counters"] = {}
+    try:
+        d["params"] = _json.loads(d.pop("params_json") or "{}")
+    except Exception:
+        d["params"] = {}
+    log_tail = d.pop("log_tail", "") or ""
+    d["log_tail"] = log_tail.splitlines() if log_tail else []
+    return d
 
 
 # ─── P0: Brand Health Overview ─────────────────────────────────────────────────

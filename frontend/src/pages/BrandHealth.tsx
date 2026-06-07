@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { api, BrandHealthData, DateRange, PipelineStatus, SegmentInfo } from '../api';
+import { api, BrandHealthData, DateRange, SegmentInfo } from '../api';
 
 const COLORS = { positive: '#10b981', negative: '#ef4444', neutral: '#6b7280' };
 
@@ -26,8 +26,6 @@ export default function BrandHealth() {
   const [range, setRange] = useState<DateRange>('today');
   const [segment, setSegment] = useState<string>(''); // '' = all segments
   const [segments, setSegments] = useState<SegmentInfo[]>([]);
-  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
-  const [runError, setRunError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const loadData = () => {
@@ -35,35 +33,10 @@ export default function BrandHealth() {
     api.getBrandHealth(range, segment || null).then(setData).catch(console.error).finally(() => setLoading(false));
   };
 
-  const loadStatus = () => {
-    api.getPipelineStatus().then(setPipelineStatus).catch(console.error);
-  };
-
   useEffect(() => { loadData(); }, [range, segment]);
   useEffect(() => {
-    loadStatus();
     api.getSegments().then(r => setSegments(r.segments)).catch(console.error);
-    const t = setInterval(loadStatus, 5000);
-    return () => clearInterval(t);
   }, []);
-
-  // When a pipeline run finishes, refresh the data automatically.
-  const prevRunning = pipelineStatus?.running;
-  useEffect(() => {
-    if (prevRunning === true && pipelineStatus?.running === false) {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineStatus?.running]);
-
-  const runNow = async () => {
-    setRunError(null);
-    const res = await api.runPipeline();
-    if (!res.started) {
-      setRunError(res.reason || 'Could not start pipeline');
-    }
-    loadStatus();
-  };
 
   const sd = data?.sentiment_distribution;
   const sPos = sd?.positive ?? 0;
@@ -106,13 +79,8 @@ export default function BrandHealth() {
           Only {data.days_with_data} of the last {data.days_requested} days have data — longer ranges will look similar until older history is ingested.
         </div>
       )}
-      {runError && (
-        <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-md px-3 py-2">
-          Run failed: {runError}
-        </div>
-      )}
 
-      {/* Header with Date Range Selector + Run Now */}
+      {/* Header with Date Range Selector */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold">Brand Health Overview</h2>
         <div className="flex items-center gap-3 flex-wrap">
@@ -137,7 +105,13 @@ export default function BrandHealth() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <PipelineButton status={pipelineStatus} onRun={runNow} />
+          <Link
+            to="/pipeline"
+            className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+            title="Open the Pipeline / Data Operations page"
+          >
+            Pipeline →
+          </Link>
         </div>
       </div>
 
@@ -342,72 +316,6 @@ export default function BrandHealth() {
       )}
       </>
       )}
-    </div>
-  );
-}
-
-function PipelineButton({ status, onRun }: { status: PipelineStatus | null; onRun: () => void }) {
-  const running = status?.running ?? false;
-  const lastFinished = status?.last_finished_at;
-  const lastStatus = status?.last_status;
-  const interval = status?.interval_minutes ?? 60;
-  const nextRun = status?.next_scheduled_run_at;
-
-  const fmtAgo = (iso?: string | null) => {
-    if (!iso) return '';
-    const ageMs = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(ageMs / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    return `${Math.floor(mins / 60)}h ago`;
-  };
-  const fmtIn = (iso?: string | null) => {
-    if (!iso) return '';
-    const ms = new Date(iso).getTime() - Date.now();
-    if (ms <= 0) return 'due now';
-    const mins = Math.ceil(ms / 60000);
-    if (mins < 60) return `in ${mins}m`;
-    return `in ${Math.floor(mins / 60)}h ${mins % 60}m`;
-  };
-  const agoText = fmtAgo(lastFinished);
-  const nextText = fmtIn(nextRun);
-  const fmtLocal = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleString() : '—';
-
-  const statusColor =
-    running ? 'bg-blue-100 text-blue-700 border-blue-200' :
-    lastStatus === 'failed' ? 'bg-red-100 text-red-700 border-red-200' :
-    lastStatus === 'success' ? 'bg-green-100 text-green-700 border-green-200' :
-    'bg-gray-100 text-gray-600 border-gray-200';
-
-  const tooltip =
-    `Last run: ${fmtLocal(lastFinished)} (${lastStatus ?? 'never'})\n` +
-    `Next scheduled: ${fmtLocal(nextRun)}\n` +
-    `Auto-runs every ${interval}m`;
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className={`px-2 py-1 rounded border text-xs leading-tight ${statusColor}`} title={tooltip}>
-        {running ? (
-          <span>Pipeline running…</span>
-        ) : (
-          <span>
-            <span className="font-semibold">Last:</span> {lastStatus ?? 'never'}
-            {agoText && <span className="text-gray-500"> · {agoText}</span>}
-            {nextText && (
-              <span className="ml-2"><span className="font-semibold">Next:</span> {nextText}</span>
-            )}
-          </span>
-        )}
-      </div>
-      <button
-        onClick={onRun}
-        disabled={running}
-        className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-sm"
-        title={`Trigger a fresh fetch + analysis cycle. Auto-runs every ${interval}m.`}
-      >
-        {running ? 'Running…' : 'Run Now'}
-      </button>
     </div>
   );
 }
