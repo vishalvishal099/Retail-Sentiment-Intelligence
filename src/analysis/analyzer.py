@@ -42,21 +42,33 @@ class SentimentAnalyzer:
         return analyses
 
     def _get_text(self, unit: dict) -> str:
-        """Extract text from a post or comment for analysis."""
+        """Extract text from a post or comment for analysis.
+
+        Vision branch: if upstream pipeline stages have populated
+        `unit["image_caption"]` (Gemma 3 4B output), we append it as
+        `[image: ...]` so the downstream sentiment + aspect models see it
+        as part of the post body. This is what makes image-only posts
+        analyzable end-to-end without changing those models.
+        """
         title = unit.get("title", "") or ""
         body = unit.get("body", "") or ""
         subreddit = unit.get("subreddit", "unknown")
         unit_type = unit.get("unit_type", "post")
+        caption = (unit.get("image_caption") or "").strip()
+        cap_suffix = f" [image: {caption}]" if caption else ""
 
         if unit_type == "comment":
             return f"Comment from r/{subreddit}: \"{body}\""
         else:
             if title and body:
-                return f"Post from r/{subreddit}: \"{title}\" — {body}"
+                return f"Post from r/{subreddit}: \"{title}\" — {body}{cap_suffix}"
             elif title:
-                return f"Post from r/{subreddit}: \"{title}\""
+                return f"Post from r/{subreddit}: \"{title}\"{cap_suffix}"
+            elif body:
+                return f"Post from r/{subreddit}: \"{body}\"{cap_suffix}"
             else:
-                return f"Post from r/{subreddit}: \"{body}\""
+                # Image-only post: caption IS the content.
+                return f"Post from r/{subreddit}: \"{caption}\"" if caption else f"Post from r/{subreddit}: \"\""
 
     def _build_analysis_record(self, unit: dict, result: dict) -> dict:
         """Build the analysis record for storage."""

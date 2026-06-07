@@ -237,8 +237,16 @@ def _normalize_post(post: dict, subreddit: str) -> dict | None:
     selftext = post.get("selftext", "") or ""
     title = post.get("title", "") or ""
 
-    # Skip image-only posts with no text
-    if not selftext and not title:
+    # NOTE: previously we dropped image-only posts (no title AND no body). With
+    # the vision branch enabled, an image-only post can still be analysed via
+    # its caption, so we keep posts as long as there's *some* text (title is
+    # enough — Reddit always has one) OR there's an image URL we can caption.
+    media_url = ""
+    raw_url = post.get("url", "") or ""
+    post_hint = post.get("post_hint")
+    if post_hint == "image" or any(d in raw_url.lower() for d in ("i.redd.it", "imgur.com", "preview.redd.it")):
+        media_url = raw_url
+    if not selftext and not title and not media_url:
         return None
 
     permalink = post.get("permalink", f"/r/{subreddit}/comments/{post_id}/")
@@ -259,6 +267,13 @@ def _normalize_post(post: dict, subreddit: str) -> dict | None:
         "created_timestamp": created_utc,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
         "url": f"https://www.reddit.com{permalink}",
+        # Image / media metadata for the vision branch. media_url is the actual
+        # asset (i.redd.it/imgur). thumbnail_url is Reddit's cached preview.
+        "media_url": media_url,
+        "thumbnail_url": post.get("thumbnail") if (post.get("thumbnail") or "").startswith("http") else "",
+        "post_hint": post_hint,
+        "is_video": bool(post.get("is_video")),
+        "is_gallery": bool(post.get("is_gallery")),
         "author_metadata": {
             "account_age_days": 0,
             "total_karma": 0,

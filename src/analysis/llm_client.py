@@ -320,15 +320,39 @@ class HuggingFaceSentimentClient(BaseLLMClient):
         return self._pipeline
 
     def _get_zero_shot(self):
-        """Lazy-load zero-shot classification pipeline for aspects."""
+        """Lazy-load zero-shot classification pipeline for aspects.
+
+        Model is config-driven: `models.aspects.model` in config/models.yaml.
+        Default is MoritzLaurer/deberta-v3-base-zeroshot-v2.0, which beats the
+        old facebook/bart-large-mnli on every zero-shot benchmark and is ~3x
+        smaller. Falls back to BART if DeBERTa fails to load.
+        """
         if self._zero_shot is None:
             from transformers import pipeline
-            self._zero_shot = pipeline(
-                "zero-shot-classification",
-                model="facebook/bart-large-mnli",
-                max_length=512,
-                truncation=True,
-            )
+            try:
+                from src.utils.config import load_config
+                _cfg = load_config()
+                aspect_model = _cfg.models.aspects.model or "MoritzLaurer/deberta-v3-base-zeroshot-v2.0"
+                fallback = _cfg.models.aspects.fallback_model or "facebook/bart-large-mnli"
+            except Exception:
+                aspect_model = "MoritzLaurer/deberta-v3-base-zeroshot-v2.0"
+                fallback = "facebook/bart-large-mnli"
+            try:
+                self._zero_shot = pipeline(
+                    "zero-shot-classification",
+                    model=aspect_model,
+                    max_length=512,
+                    truncation=True,
+                )
+                log.info("aspect_model_loaded", model=aspect_model)
+            except Exception as e:
+                log.warning("aspect_model_load_failed", model=aspect_model, error=str(e), fallback=fallback)
+                self._zero_shot = pipeline(
+                    "zero-shot-classification",
+                    model=fallback,
+                    max_length=512,
+                    truncation=True,
+                )
         return self._zero_shot
 
     def _get_reply_generator(self):

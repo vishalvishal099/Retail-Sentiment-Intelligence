@@ -119,6 +119,75 @@ class DashboardConfig:
     auth: str = "none"
 
 
+# =============================================================================
+# Model registry — flexible per-stage model configuration loaded from
+# config/models.yaml. Each stage (sentiment, aspects, vision, reply,
+# embeddings) is independently swappable: change one YAML line, restart,
+# done. See config/models.yaml for documentation of each field.
+# =============================================================================
+
+
+@dataclass
+class ModelStageConfig:
+    """Generic per-stage config. Knobs that don't apply to a given stage are
+    just ignored (e.g. `temperature` on the sentiment stage)."""
+    enabled: bool = True
+    provider: str = "huggingface"
+    model: str = ""
+    fallback_model: str = ""
+    device: str = "auto"
+    max_length: int = 512
+    # Sentiment / aspect knobs
+    confidence_threshold: float = 0.7
+    min_score: float = 0.30
+    max_per_post: int = 3
+    multi_label: bool = True
+    candidate_labels: list = field(default_factory=list)
+    # Vision knobs
+    max_image_bytes: int = 5_242_880
+    max_image_dimension: int = 768
+    fetch_timeout: int = 10
+    cache_dir: str = "data/image_cache"
+    prompt: str = ""
+    # Reply / generation knobs
+    temperature: float = 0.55
+    max_tokens: int = 220
+    num_drafts: int = 2
+    # Ollama-specific
+    keep_alive: str = "10m"
+    request_timeout: int = 60
+
+
+@dataclass
+class ModelsConfig:
+    sentiment: ModelStageConfig = field(default_factory=ModelStageConfig)
+    aspects: ModelStageConfig = field(default_factory=ModelStageConfig)
+    vision: ModelStageConfig = field(default_factory=lambda: ModelStageConfig(enabled=False))
+    reply: ModelStageConfig = field(default_factory=ModelStageConfig)
+    embeddings: ModelStageConfig = field(default_factory=lambda: ModelStageConfig(enabled=False))
+
+
+@dataclass
+class ToolsConfig:
+    """Non-AI infrastructure choices. Kept here so 'what does the project use?'
+    has a single answer (the models.yaml file)."""
+    ingestion_source: str = "arctic_shift"
+    ingestion_interval_minutes: int = 60
+    ingestion_backfill_days: int = 90
+    ingestion_english_only: bool = True
+    ingestion_min_text_chars: int = 10
+    preprocess_dedup: str = "md5_content_hash"
+    preprocess_language_detect: str = "langdetect"
+    storage_provider: str = "sqlite"
+    storage_sqlite_path: str = "data/local.db"
+    privacy_hash_usernames: bool = True
+    privacy_retention_days: int = 365
+    trust_formula: str = "score_x_confidence"
+    trust_tau: float = 0.30
+    trust_threshold_legacy: float = 0.5
+    trust_low_trust_action: str = "flag"
+
+
 @dataclass
 class AppConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -128,6 +197,9 @@ class AppConfig:
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
+    # New (Phase 3): per-stage model registry loaded from config/models.yaml
+    models: ModelsConfig = field(default_factory=ModelsConfig)
+    tools: ToolsConfig = field(default_factory=ToolsConfig)
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
@@ -217,5 +289,81 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
             auth=yaml_data.get("dashboard", {}).get("auth", "none"),
         ),
     )
+
+    # ── Load the model registry (config/models.yaml) ─────────────────────────
+    # This is the flexible per-stage config. Each stage can be enabled/disabled
+    # and the model can be swapped via YAML. Env vars override:
+    #   MODEL_<STAGE>_PROVIDER, MODEL_<STAGE>_MODEL, MODEL_<STAGE>_ENABLED
+    models_path = (path.parent if config_path else CONFIG_PATH.parent) / "models.yaml"
+    if models_path.exists():
+        with open(models_path) as f:
+            models_yaml = yaml.safe_load(f) or {}
+
+        def _stage(stage_name: str, defaults: dict) -> ModelStageConfig:
+            data = (models_yaml.get("models", {}) or {}).get(stage_name, {}) or {}
+            merged = {**defaults, **data}
+            # Env overrides for the two most-likely-to-change knobs.
+            env_provider = os.getenv(f"MODEL_{stage_name.upper()}_PROVIDER")
+            env_model = os.getenv(f"MODEL_{stage_name.upper()}_MODEL")
+            env_enabled = os.getenv(f"MODEL_{stage_name.upper()}_ENABLED")
+            if env_provider:
+                merged["provider"] = env_provider
+            if env_model:
+                merged["model"] = env_model
+            if env_enabled:
+                merged["enabled"] = env_enabled.lower() in ("1", "true", "yes", "on")
+            # Keep only fields the dataclass actually has, to be forgiving of
+            # forward-compat YAML keys we haven't wired up yet.
+            allowed = {f.name for f in ModelStageConfig.__dataclass_fields__.values()}
+            merged = {k: v for k, v in merged.items() if k in allowed}
+            return ModelStageConfig(**merged)
+
+        config.models = ModelsConfig(
+            sentiment=_stage("sentiment", {
+                "enabled": True, "provider": "huggingface",
+                "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            }),
+            aspects=_stage("aspects", {
+                "enabled": True, "provider": "huggingface",
+                "model": "MoritzLaurer/deberta-v3-base-zeroshot-v2.0",
+                "fallback_model": "facebook/bart-large-mnli",
+            }),
+            vision=_stage("vision", {
+                "enabled": True, "provider": "ollama",
+                "model": "gemma3:4b", "fallback_model": "llava:7b",
+            }),
+            reply=_stage("reply", {
+                "enabled": True, "provider": "ollama",
+                "model": "mistral:7b-instruct",
+            }),
+            embeddings=_stage("embeddings", {
+                "enabled": False, "provider": "huggingface",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+            }),
+        )
+
+        tools_yaml = (models_yaml.get("tools", {}) or {})
+        ing = tools_yaml.get("ingestion", {}) or {}
+        prep = tools_yaml.get("preprocessing", {}) or {}
+        stor = tools_yaml.get("storage", {}) or {}
+        priv = tools_yaml.get("privacy", {}) or {}
+        trst = tools_yaml.get("trust", {}) or {}
+        config.tools = ToolsConfig(
+            ingestion_source=ing.get("source", "arctic_shift"),
+            ingestion_interval_minutes=int(ing.get("interval_minutes", 60)),
+            ingestion_backfill_days=int(ing.get("backfill_days", 90)),
+            ingestion_english_only=bool(ing.get("english_only", True)),
+            ingestion_min_text_chars=int(ing.get("min_text_chars", 10)),
+            preprocess_dedup=prep.get("dedup", "md5_content_hash"),
+            preprocess_language_detect=prep.get("language_detect", "langdetect"),
+            storage_provider=stor.get("provider", "sqlite"),
+            storage_sqlite_path=stor.get("sqlite_path", "data/local.db"),
+            privacy_hash_usernames=bool(priv.get("hash_usernames", True)),
+            privacy_retention_days=int(priv.get("retention_days", 365)),
+            trust_formula=trst.get("formula", "score_x_confidence"),
+            trust_tau=float(trst.get("tau", 0.30)),
+            trust_threshold_legacy=float(trst.get("threshold_legacy", 0.5)),
+            trust_low_trust_action=trst.get("low_trust_action", "flag"),
+        )
 
     return config

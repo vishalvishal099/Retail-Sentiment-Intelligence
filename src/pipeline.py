@@ -12,11 +12,13 @@ from src.utils.config import load_config, AppConfig
 from src.utils.logger import setup_logging, get_logger
 from src.utils.cost_tracker import CostTracker
 from src.ingestion.preprocess import preprocess_units, reset_dedup_cache
+from src.ingestion import image_preprocess
 from src.storage.store import create_storage, StorageBackend
 from src.storage.cursor import CursorTracker
 from src.trust.scorer import TrustScorer
 from src.analysis.llm_client import create_llm_client
 from src.analysis.analyzer import SentimentAnalyzer
+from src.analysis.vision import get_vision_client
 from src.aggregation.aggregator import Aggregator
 from src.alerts.engine import AlertEngine
 
@@ -116,6 +118,12 @@ class RetailSentimentPipeline:
         clean_units = preprocess_units(raw_units, english_only=self.config.ingestion.english_only)
         log.info("stage_complete", stage="preprocess", count=len(clean_units))
 
+        # Stage 2b: Vision enrichment (image-bearing posts get a caption).
+        # Pure plumbing on the pipeline side; the model call lives in
+        # src/analysis/vision.py. Failure is non-fatal — posts without
+        # captions just fall through to text-only analysis.
+        self._enrich_with_vision(clean_units)
+
         # Stage 3: Store raw (before trust/analysis so we don't lose data on crash)
         self.storage.upsert_batch("raw_posts", clean_units)
 
@@ -188,6 +196,10 @@ class RetailSentimentPipeline:
             flagged = [u for u in scored if not u.get("is_trusted")]
             total_trusted += len(trusted)
             total_flagged += len(flagged)
+
+            # Vision enrichment: caption image-bearing posts so the
+            # downstream sentiment + aspect models see image content too.
+            self._enrich_with_vision(scored)
 
             # Analyse everything (trusted + flagged); flagged stays out of trend metrics via trust_score
             analyses = self.analyzer.analyze_batch(scored)
@@ -317,6 +329,43 @@ class RetailSentimentPipeline:
                 break
 
         return analyses
+
+    def _enrich_with_vision(self, units: list[dict]) -> None:
+        """Caption image-bearing posts in place via the vision model.
+
+        Mutates units: adds `image_caption` and `image_cached_path` when
+        successful. Skipped entirely if vision is disabled in the model
+        registry (config/models.yaml `models.vision.enabled: false`).
+        """
+        vcfg = self.config.models.vision
+        if not vcfg.enabled:
+            return
+        targets = [u for u in units if image_preprocess.has_image(u) and not u.get("image_caption")]
+        if not targets:
+            return
+
+        vision = get_vision_client(vcfg, ollama_url=self.config.llm.ollama_url)
+        captioned = 0
+        for unit in targets:
+            url = image_preprocess.pick_image_url(unit)
+            if not url:
+                continue
+            post_id = unit.get("id", "").replace("reddit_", "")
+            cached = image_preprocess.fetch_and_normalize(post_id, url, vcfg)
+            if not cached:
+                continue
+            caption = vision.caption(cached)
+            if caption:
+                unit["image_caption"] = caption
+                unit["image_cached_path"] = str(cached)
+                captioned += 1
+        log.info(
+            "stage_complete",
+            stage="vision",
+            candidates=len(targets),
+            captioned=captioned,
+            model=vision.model_name,
+        )
 
     def _load_subreddits(self) -> list[str]:
         """Load subreddit list from clean CSV."""
