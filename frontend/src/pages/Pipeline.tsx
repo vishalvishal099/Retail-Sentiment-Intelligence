@@ -508,17 +508,53 @@ function FunnelChart({ data }: { data: FunnelData }) {
             <div className="bg-white p-2 rounded border">
               <div className="text-gray-500">Dropped from prev</div>
               <div className="font-bold text-lg text-amber-600">{selected.drop_from_prev.toLocaleString()}</div>
+              {selected.drop_from_prev > 0 && (
+                <div className="text-gray-500 mt-1">
+                  {selectedStage === 'english' && 'Non-English posts filtered out'}
+                  {selectedStage === 'long_enough' && 'Posts too short for meaningful analysis (<10 chars and no image)'}
+                  {selectedStage === 'analyzed' && 'Posts not yet processed by sentiment analyzer (pending in queue)'}
+                  {selectedStage === 'trusted' && 'Posts failed trust scoring (spam, astroturf, or low-quality)'}
+                </div>
+              )}
             </div>
             {detail && selectedStage === 'analyzed' && (
               <div className="bg-white p-2 rounded border col-span-2">
-                <div className="text-gray-500">Analysis coverage</div>
-                <div className="font-bold text-lg">{detail.analysis_coverage}%</div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-gray-500">Analysis coverage</div>
+                    <div className="font-bold text-lg">{detail.analysis_coverage}%</div>
+                  </div>
+                  <div className="text-right text-gray-500">
+                    {detail.not_yet_analyzed > 0 && <div>{detail.not_yet_analyzed.toLocaleString()} posts awaiting analysis</div>}
+                  </div>
+                </div>
               </div>
             )}
             {detail && selectedStage === 'trusted' && (
               <div className="bg-white p-2 rounded border col-span-2">
-                <div className="text-gray-500">Trust rate (of analyzed)</div>
-                <div className="font-bold text-lg">{detail.trust_rate}%</div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-gray-500">Trust rate (of analyzed)</div>
+                    <div className="font-bold text-lg">{detail.trust_rate}%</div>
+                  </div>
+                  <div className="text-right text-gray-500">
+                    {detail.low_trust > 0 && <div>{detail.low_trust.toLocaleString()} posts flagged as low-trust</div>}
+                  </div>
+                </div>
+              </div>
+            )}
+            {detail && selectedStage === 'english' && detail.not_english > 0 && (
+              <div className="bg-white p-2 rounded border col-span-2">
+                <div className="text-gray-500">Non-English removed</div>
+                <div className="font-bold text-lg">{detail.not_english.toLocaleString()}</div>
+                <div className="text-gray-400 mt-0.5">Posts in other languages excluded by language detection filter</div>
+              </div>
+            )}
+            {detail && selectedStage === 'long_enough' && detail.too_short > 0 && (
+              <div className="bg-white p-2 rounded border col-span-2">
+                <div className="text-gray-500">Too short</div>
+                <div className="font-bold text-lg">{detail.too_short.toLocaleString()}</div>
+                <div className="text-gray-400 mt-0.5">Posts with &lt;10 characters and no image — insufficient content for sentiment analysis</div>
               </div>
             )}
           </div>
@@ -591,11 +627,16 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
               Caption failures ({totalFailures.toLocaleString()} images)
             </div>
             {[
-              { key: 'ollama_unavailable', label: 'Ollama unavailable', value: failures.ollama_unavailable, color: 'bg-red-200' },
-              { key: 'timeout', label: 'Timeout', value: failures.timeout, color: 'bg-amber-200' },
-              { key: 'fetch_failed', label: 'Image fetch failed', value: failures.fetch_failed, color: 'bg-orange-200' },
-              { key: 'no_content', label: 'No content detected', value: failures.no_content, color: 'bg-gray-200' },
-              { key: 'other', label: 'Other', value: failures.other, color: 'bg-gray-200' },
+              { key: 'ollama_unavailable', label: 'Ollama unavailable', value: failures.ollama_unavailable, color: 'bg-red-200',
+                reason: 'Vision model server (Ollama) was not running or unreachable when caption was attempted' },
+              { key: 'timeout', label: 'Timeout', value: failures.timeout, color: 'bg-amber-200',
+                reason: 'Vision model took too long to respond — image may be too large or model overloaded' },
+              { key: 'fetch_failed', label: 'Image fetch failed', value: failures.fetch_failed, color: 'bg-orange-200',
+                reason: 'Could not download image from Reddit — URL expired, deleted, or blocked' },
+              { key: 'no_content', label: 'No content detected', value: failures.no_content, color: 'bg-gray-200',
+                reason: 'Vision model returned empty caption — image may be blank, blurry, or unrecognizable' },
+              { key: 'other', label: 'Other', value: failures.other, color: 'bg-gray-200',
+                reason: 'Miscellaneous failures — check API logs for details' },
             ].filter(f => f.value > 0).map(f => (
               <div key={f.key} className="flex items-center gap-2">
                 <div className="flex-1">
@@ -609,6 +650,7 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
                       style={{ width: `${Math.min(100, (f.value / totalFailures) * 100)}%` }}
                     />
                   </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{f.reason}</div>
                 </div>
               </div>
             ))}
