@@ -94,12 +94,13 @@ esac
 log "Starting Retail Sentiment Intelligence services..."
 echo ""
 
-# 1. Activate virtual environment
-if [[ -d "$VENV_DIR" ]]; then
+# 1. Activate virtual environment (prefer .venv, fall back to conda/system)
+if [[ -d "$VENV_DIR" ]] && "$VENV_DIR/bin/python" -c "import fastapi" 2>/dev/null; then
   source "$VENV_DIR/bin/activate"
   ok "Python venv activated ($VENV_DIR)"
 else
-  warn "No .venv found — using system Python"
+  # Use whatever python is on PATH (e.g. conda base)
+  ok "Using system Python ($(which python))"
 fi
 
 # 2. Check port availability
@@ -125,8 +126,7 @@ if ! check_port "$API_PORT"; then
   fi
 else
   cd "$PROJECT_DIR"
-  PORT=$API_PORT nohup python -m uvicorn src.dashboard.api:app \
-    --host 0.0.0.0 --port "$API_PORT" --reload \
+  DASHBOARD_PORT=$API_PORT nohup python -m src.dashboard.api \
     > "$PROJECT_DIR/logs/api.log" 2>&1 &
   echo $! > "$PID_DIR/api.pid"
   sleep 2
