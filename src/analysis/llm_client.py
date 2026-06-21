@@ -296,8 +296,24 @@ class HuggingFaceSentimentClient(BaseLLMClient):
         self.cost_tracker = cost_tracker
         self._pipeline = None
         self._zero_shot = None
+        # Resolve the sentiment model from the registry (config/models.yaml)
+        # so the fine-tuned ModernBERT checkpoint is picked up automatically.
+        # Falls back to whatever LLMConfig says (legacy pipeline_config.yaml).
         self._model_name = config.model
-        log.info("hf_client_init", model=self._model_name)
+        self._max_length = 512
+        self._fallback_model = ""
+        try:
+            from src.utils.config import load_config
+            _reg = load_config().models.sentiment
+            if _reg.model:
+                self._model_name = _reg.model
+            if _reg.max_length:
+                self._max_length = int(_reg.max_length)
+            if _reg.fallback_model:
+                self._fallback_model = _reg.fallback_model
+        except Exception:
+            pass
+        log.info("hf_client_init", model=self._model_name, max_length=self._max_length)
 
     @property
     def model_name(self) -> str:
@@ -310,13 +326,33 @@ class HuggingFaceSentimentClient(BaseLLMClient):
     def _get_pipeline(self):
         if self._pipeline is None:
             from transformers import pipeline
-            self._pipeline = pipeline(
-                "sentiment-analysis",
-                model=self._model_name,
-                tokenizer=self._model_name,
-                max_length=512,
-                truncation=True,
-            )
+            try:
+                self._pipeline = pipeline(
+                    "sentiment-analysis",
+                    model=self._model_name,
+                    tokenizer=self._model_name,
+                    max_length=self._max_length,
+                    truncation=True,
+                )
+                log.info("sentiment_model_loaded", model=self._model_name, max_length=self._max_length)
+            except Exception as e:
+                if not self._fallback_model:
+                    raise
+                log.warning(
+                    "sentiment_model_load_failed",
+                    model=self._model_name,
+                    error=str(e),
+                    fallback=self._fallback_model,
+                )
+                self._pipeline = pipeline(
+                    "sentiment-analysis",
+                    model=self._fallback_model,
+                    tokenizer=self._fallback_model,
+                    max_length=512,
+                    truncation=True,
+                )
+                self._model_name = self._fallback_model
+                self._max_length = 512
         return self._pipeline
 
     def _get_zero_shot(self):
@@ -649,7 +685,11 @@ class HuggingFaceSentimentClient(BaseLLMClient):
     def analyze_sentiment(self, text: str) -> dict:
         """Analyze sentiment + aspects using HuggingFace models."""
         pipe = self._get_pipeline()
-        result = pipe(text[:512])[0]
+        # Char-budget guard ~ 4 chars/token; tokenizer truncation handles the
+        # exact token cap. Without this guard, very long posts spend time in
+        # the tokenizer for tokens we'd discard anyway.
+        char_budget = max(2048, self._max_length * 4)
+        result = pipe(text[:char_budget])[0]
 
         # Map cardiffnlp labels to our 3-class taxonomy
         sentiment = self._map_label(result["label"])
@@ -684,7 +724,8 @@ class HuggingFaceSentimentClient(BaseLLMClient):
     def analyze_batch(self, texts: list[str]) -> list[dict]:
         """Batch sentiment + aspect analysis."""
         pipe = self._get_pipeline()
-        truncated = [t[:512] for t in texts]
+        char_budget = max(2048, self._max_length * 4)
+        truncated = [t[:char_budget] for t in texts]
         results = pipe(truncated)
 
         analyzed = []
@@ -717,12 +758,15 @@ class HuggingFaceSentimentClient(BaseLLMClient):
         return analyzed
 
     def check_credibility(self, text: str, metadata: dict) -> dict:
-        """HF model doesn't do credibility — return neutral score."""
+        """Rule-based credibility scoring (linguistic + account-anomaly heuristics)."""
+        from src.trust.heuristics import score_credibility
+        unit_like = {"title": "", "body": text or "", "author_metadata": metadata or {}}
+        score, flags = score_credibility(unit_like)
         return {
-            "is_genuine": True,
-            "credibility_score": 0.5,
-            "flags": ["hf_model_no_credibility_check"],
-            "reasoning": "HuggingFace sentiment model does not support credibility analysis",
+            "is_genuine": score >= 0.5,
+            "credibility_score": score,
+            "flags": flags,
+            "reasoning": "rule_based_heuristic",
         }
 
     def _map_label(self, label: str) -> str:

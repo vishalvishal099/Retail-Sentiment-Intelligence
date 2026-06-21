@@ -85,3 +85,42 @@ dashboard:
   port: 8000
   websocket_enabled: true
   auth: "none"  # "none" | "bearer" | "azure_ad"
+
+# ─── Phase 3: Reddit OAuth (live reply posting) ─────────────────────────────
+# dry_run: true keeps the system safe — drafts are logged, never posted to
+# Reddit. Flip to false once client_id + client_secret are populated. Secrets
+# are best supplied via env vars (REDDIT_OAUTH_CLIENT_ID / REDDIT_OAUTH_CLIENT_SECRET)
+# rather than committed to YAML.
+reddit_oauth:
+  enabled: true
+  dry_run: true
+  client_id: ""
+  client_secret: ""
+  redirect_uri: "http://localhost:8000/api/auth/reddit/callback"
+  user_agent: "RetailSentimentIntelligence/1.0"
+  scope: "identity submit edit history"
+  rate_limit_seconds: 600  # 1 reply per 10 minutes (Reddit spam filter)
+
+# ─── Phase 4: Notifications (Slack + Email) ─────────────────────────────────
+# When auto_lifecycle is true, every newly-detected negative post (with
+# sentiment confidence >= confidence_threshold) is auto-inserted into the
+# post_lifecycle table with state=new, and a Slack + Email alert fires.
+# Each channel has its own dry_run toggle so you can test one without the other.
+notifications:
+  auto_lifecycle: true
+  confidence_threshold: 0.7
+  slack:
+    enabled: false
+    dry_run: true
+    webhook_url: ""        # SLACK_WEBHOOK_URL env var also works
+    channel: "#walmart-sentiment-alerts"
+  email:
+    enabled: false
+    dry_run: true
+    smtp_host: ""          # e.g. smtp.gmail.com  (env: SMTP_HOST)
+    smtp_port: 587
+    smtp_user: ""          # env: SMTP_USER
+    smtp_password: ""      # env: SMTP_PASSWORD — leave blank in YAML
+    use_tls: true
+    from_addr: "alerts@retail-sentiment.local"
+    recipients: []         # ["analyst@walmart.com", "ops@walmart.com"]

@@ -67,6 +67,23 @@ def run_scheduler():
         name="Weekly Aggregation",
     )
 
+    # Daily competitor insights (Phase 5) — runs after daily aggregation.
+    def _daily_insights():
+        from src.analysis.competitor_insights import generate_daily_insights
+        try:
+            generate_daily_insights(pipeline.storage)
+        except Exception as e:  # noqa: BLE001
+            log.warning("daily_insights_failed", error=str(e))
+
+    scheduler.add_job(
+        _daily_insights,
+        "cron",
+        hour=0,
+        minute=45,
+        id="daily_competitor_insights",
+        name="Daily Competitor Insights",
+    )
+
     log.info("scheduler_started",
              pipeline_interval=config.ingestion.interval_minutes,
              jobs=len(scheduler.get_jobs()))

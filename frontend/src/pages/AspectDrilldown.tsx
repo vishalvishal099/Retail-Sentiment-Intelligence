@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { api, AspectPost, DateRange } from '../api';
+import Card, { CardHeader } from '../components/Card';
 
 const LIMIT_OPTIONS = [10, 25, 50, 100, 200];
+
+const selectClass =
+  'border border-walmart-navy/15 rounded-pill px-4 py-1.5 text-sm bg-white shadow-sm text-walmart-navy focus:outline-none focus:ring-2 focus:ring-walmart-blue focus:border-walmart-blue';
 
 const RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: '1h', label: 'Last 1 hour' },
@@ -64,14 +68,14 @@ export default function AspectDrilldown() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-2xl font-bold capitalize">{aspect.replace(/_/g, ' ')} — Aspect Drilldown</h2>
+        <h2 className="text-2xl font-bold capitalize text-walmart-navy">{aspect.replace(/_/g, ' ')} — Aspect Drilldown</h2>
         <div className="flex items-center gap-2 text-sm">
           <label htmlFor="aspect-range" className="text-gray-600">Range:</label>
           <select
             id="aspect-range"
             value={range}
             onChange={(e) => setRange(e.target.value as DateRange)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className={selectClass}
           >
             {RANGE_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -80,34 +84,36 @@ export default function AspectDrilldown() {
         </div>
       </div>
 
-      {/* Trend */}
-      <div className="bg-white rounded-lg p-4 border">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">14-Day Trend</h3>
+      <Card>
+        <CardHeader title="14-Day Trend" accent />
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={(data?.trend as Record<string, unknown>[]) || []}>
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5EDF7" />
+            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#74767C' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#74767C' }} />
             <Tooltip />
-            <Line type="monotone" dataKey="total_posts" stroke="#3b82f6" strokeWidth={2} name="Posts" />
+            <Line type="monotone" dataKey="total_posts" stroke="#0071DC" strokeWidth={2.5} name="Posts" dot={{ r: 3, fill: '#0071DC' }} activeDot={{ r: 5, fill: '#FFC220', stroke: '#0071DC' }} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </Card>
 
-      {/* Posts */}
-      <div className="bg-white rounded-lg p-4 border">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="text-sm font-medium text-gray-700">
-            Posts mentioning <span className="capitalize">{aspect.replace(/_/g, ' ')}</span>
-            <span className="ml-2 text-gray-500">· {currentLabel}</span>
-            {data && <span className="ml-2 text-gray-500">({data.returned} of up to {data.limit})</span>}
-          </h3>
+      <Card>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-walmart-navy">
+              Posts mentioning <span className="capitalize">{aspect.replace(/_/g, ' ')}</span>
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {currentLabel}{data ? ` · ${data.returned} of up to ${data.limit}` : ''}
+            </p>
+          </div>
           <div className="flex items-center gap-2 text-sm">
             <label htmlFor="page-size" className="text-gray-600">Show:</label>
             <select
               id="page-size"
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-2 py-1 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className={selectClass}
             >
               {LIMIT_OPTIONS.map(n => (
                 <option key={n} value={n}>{n}</option>
@@ -123,7 +129,7 @@ export default function AspectDrilldown() {
         {!loading && data && data.posts.length > 0 && (
           <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
             {data.posts.map((post) => (
-              <article key={post.id || post.post_id} className="p-3 border rounded-lg hover:border-blue-300 transition-colors">
+              <article key={post.id || post.post_id} className="p-3 border border-walmart-navy/10 rounded-xl hover:border-walmart-blue/40 transition-colors">
                 <div className="flex items-center gap-2 mb-1 flex-wrap text-xs">
                   <SentimentBadge sentiment={post.sentiment} />
                   <span className="text-gray-500">r/{post.subreddit}</span>
@@ -139,7 +145,7 @@ export default function AspectDrilldown() {
                   )}
                 </div>
                 {post.title && (
-                  <div className="font-semibold text-gray-900 text-sm mb-1">{post.title}</div>
+                  <div className="font-semibold text-walmart-navy text-sm mb-1">{post.title}</div>
                 )}
                 {post.text && post.text !== post.title && (
                   <p className="text-sm text-gray-700 leading-relaxed line-clamp-3">{post.text}</p>
@@ -149,7 +155,7 @@ export default function AspectDrilldown() {
                     href={post.reddit_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                    className="inline-block mt-2 text-xs text-walmart-blue hover:underline font-medium"
                   >
                     View on Reddit ↗
                   </a>
@@ -158,16 +164,16 @@ export default function AspectDrilldown() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
   const colors: Record<string, string> = {
-    positive: 'bg-green-100 text-green-800',
-    negative: 'bg-red-100 text-red-800',
-    neutral: 'bg-gray-100 text-gray-600',
+    positive: 'bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/20',
+    negative: 'bg-sentiment-negative/10 text-sentiment-negative border border-sentiment-negative/20',
+    neutral: 'bg-walmart-navy/5 text-gray-600 border border-walmart-navy/10',
   };
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[sentiment] || colors.neutral}`}>{sentiment}</span>;
+  return <span className={`px-2 py-0.5 rounded-pill text-xs font-medium ${colors[sentiment] || colors.neutral}`}>{sentiment}</span>;
 }

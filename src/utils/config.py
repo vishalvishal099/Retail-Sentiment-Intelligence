@@ -119,6 +119,54 @@ class DashboardConfig:
     auth: str = "none"
 
 
+@dataclass
+class RedditOAuthConfig:
+    """Phase 3 — Reddit OAuth for posting replies.
+
+    `dry_run=True` is the default safe mode: the poster logs the intent and
+    returns a mock success without hitting Reddit. Flip to `False` once
+    `client_id` and `client_secret` are populated.
+    """
+    enabled: bool = True
+    dry_run: bool = True
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = "http://localhost:8000/api/auth/reddit/callback"
+    user_agent: str = "RetailSentimentIntelligence/1.0"
+    scope: str = "identity submit edit history"
+    rate_limit_seconds: int = 600  # 1 reply per 10 min
+
+
+@dataclass
+class SlackChannelConfig:
+    enabled: bool = False
+    dry_run: bool = True
+    webhook_url: str = ""
+    channel: str = "#walmart-sentiment-alerts"
+
+
+@dataclass
+class EmailChannelConfig:
+    enabled: bool = False
+    dry_run: bool = True
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    use_tls: bool = True
+    from_addr: str = "alerts@retail-sentiment.local"
+    recipients: list = field(default_factory=list)
+
+
+@dataclass
+class NotificationsConfig:
+    """Phase 4 — Slack + Email fan-out for negative-post alerts."""
+    auto_lifecycle: bool = True
+    confidence_threshold: float = 0.7
+    slack: SlackChannelConfig = field(default_factory=SlackChannelConfig)
+    email: EmailChannelConfig = field(default_factory=EmailChannelConfig)
+
+
 # =============================================================================
 # Model registry — flexible per-stage model configuration loaded from
 # config/models.yaml. Each stage (sentiment, aspects, vision, reply,
@@ -200,6 +248,10 @@ class AppConfig:
     # New (Phase 3): per-stage model registry loaded from config/models.yaml
     models: ModelsConfig = field(default_factory=ModelsConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
+    # Phase 3: Reddit OAuth for live reply posting (dry-run by default).
+    reddit_oauth: RedditOAuthConfig = field(default_factory=RedditOAuthConfig)
+    # Phase 4: Slack + Email notifications + post lifecycle automation.
+    notifications: NotificationsConfig = field(default_factory=NotificationsConfig)
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
@@ -287,6 +339,47 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
             port=int(os.getenv("DASHBOARD_PORT", yaml_data.get("dashboard", {}).get("port", 8000))),
             websocket_enabled=yaml_data.get("dashboard", {}).get("websocket_enabled", True),
             auth=yaml_data.get("dashboard", {}).get("auth", "none"),
+        ),
+    )
+
+    # ── Phase 3: Reddit OAuth (replies) ──────────────────────────────────────
+    reddit_yaml = yaml_data.get("reddit_oauth", {}) or {}
+    config.reddit_oauth = RedditOAuthConfig(
+        enabled=bool(reddit_yaml.get("enabled", True)),
+        dry_run=bool(reddit_yaml.get("dry_run", True)) if os.getenv("REDDIT_OAUTH_DRY_RUN") is None
+            else os.getenv("REDDIT_OAUTH_DRY_RUN", "true").lower() in ("1", "true", "yes", "on"),
+        client_id=os.getenv("REDDIT_OAUTH_CLIENT_ID", reddit_yaml.get("client_id", "")),
+        client_secret=os.getenv("REDDIT_OAUTH_CLIENT_SECRET", reddit_yaml.get("client_secret", "")),
+        redirect_uri=os.getenv("REDDIT_OAUTH_REDIRECT_URI",
+            reddit_yaml.get("redirect_uri", "http://localhost:8000/api/auth/reddit/callback")),
+        user_agent=reddit_yaml.get("user_agent", "RetailSentimentIntelligence/1.0"),
+        scope=reddit_yaml.get("scope", "identity submit edit history"),
+        rate_limit_seconds=int(reddit_yaml.get("rate_limit_seconds", 600)),
+    )
+
+    # ── Phase 4: Notifications (Slack + Email) ───────────────────────────────
+    notif_yaml = yaml_data.get("notifications", {}) or {}
+    slack_yaml = notif_yaml.get("slack", {}) or {}
+    email_yaml = notif_yaml.get("email", {}) or {}
+    config.notifications = NotificationsConfig(
+        auto_lifecycle=bool(notif_yaml.get("auto_lifecycle", True)),
+        confidence_threshold=float(notif_yaml.get("confidence_threshold", 0.7)),
+        slack=SlackChannelConfig(
+            enabled=bool(slack_yaml.get("enabled", False)),
+            dry_run=bool(slack_yaml.get("dry_run", True)),
+            webhook_url=os.getenv("SLACK_WEBHOOK_URL", slack_yaml.get("webhook_url", "")),
+            channel=slack_yaml.get("channel", "#walmart-sentiment-alerts"),
+        ),
+        email=EmailChannelConfig(
+            enabled=bool(email_yaml.get("enabled", False)),
+            dry_run=bool(email_yaml.get("dry_run", True)),
+            smtp_host=os.getenv("SMTP_HOST", email_yaml.get("smtp_host", "")),
+            smtp_port=int(os.getenv("SMTP_PORT", email_yaml.get("smtp_port", 587))),
+            smtp_user=os.getenv("SMTP_USER", email_yaml.get("smtp_user", "")),
+            smtp_password=os.getenv("SMTP_PASSWORD", email_yaml.get("smtp_password", "")),
+            use_tls=bool(email_yaml.get("use_tls", True)),
+            from_addr=email_yaml.get("from_addr", "alerts@retail-sentiment.local"),
+            recipients=list(email_yaml.get("recipients", []) or []),
         ),
     )
 

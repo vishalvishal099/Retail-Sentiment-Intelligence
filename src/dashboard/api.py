@@ -18,12 +18,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, JSONResponse
 
 from src.utils.config import load_config
 from src.utils.logger import setup_logging, get_logger
-from src.utils.segments import segment_for, all_segments, segment_label, UNKNOWN_SEGMENT
+from src.utils.segments import segment_for, all_segments, segment_label, UNKNOWN_SEGMENT, macro_segment_for, MACRO_GROUPS, macro_segment_label
 from src.storage.store import create_storage
 from src.aggregation.aggregator import Aggregator
 from src.alerts.engine import AlertEngine
@@ -49,8 +50,28 @@ _pipeline_state: dict = {
     "last_exit_code": None,
     "last_trigger": None,  # "manual" | "scheduled"
     "last_log_tail": [],
+    "current_stage": None,  # live stage marker parsed from subprocess stdout
+    "last_params": None,    # {"lookback_hours": N} — set on start, preserved across runs
+    "last_counters": None,  # {"ingested": N, "trusted": N, ...} — updates live
+    # Per-subreddit ingest progress for the in-flight run. Keys are sub names;
+    # each value carries the timeline + page count so the UI can show
+    # "X days reached, Y days remaining, Z% covered, ETA …".
+    "ingest_progress": None,
+}
+
+# Map pipeline log `stage=...` values onto the UI's stage names.
+_STAGE_MAP = {
+    "ingest": "ingest",
+    "preprocess": "ingest",   # roll preprocess into Ingest in UI
+    "vision": "vision",        # image enrichment (gemma caption)
+    "trust": "trust",
+    "analyze": "analyze",
+    "aggregate": "aggregate",
+    "alerts": "aggregate",   # alerts run after aggregate; keep UI on Aggregate
 }
 _pipeline_lock = asyncio.Lock()
+_pipeline_proc: asyncio.subprocess.Process | None = None  # live handle so /stop can kill it
+_pipeline_stop_requested: bool = False
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _PIPELINE_INTERVAL_MINUTES = int(os.environ.get("PIPELINE_INTERVAL_MINUTES", "360"))
 _scheduler_task: asyncio.Task | None = None
@@ -85,6 +106,15 @@ async def _run_pipeline_subprocess(trigger: str, extra_args: list[str] | None = 
             last_trigger=trigger,
         )
         log.info("pipeline_run_started", run_id=run_id, trigger=trigger)
+        # Reset live counters + record params for this run.
+        _pipeline_state["last_params"] = dict(params) if params else {}
+        _pipeline_state["last_counters"] = {}
+        _pipeline_state["ingest_progress"] = {
+            "started_at": started_iso,
+            "subs": {},          # name -> per-sub progress dict
+            "order": [],         # insertion order for stable UI
+            "total_subs": 0,
+        }
         # Insert a "running" row so the UI can show in-flight jobs.
         _record_pipeline_run(
             run_id=run_id, started_at=started_iso, status="running",
@@ -94,30 +124,99 @@ async def _run_pipeline_subprocess(trigger: str, extra_args: list[str] | None = 
     started_at_mono = datetime.now(timezone.utc)
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_PROJECT_ROOT)
-    cmd_args = [sys.executable, "-m", "src.pipeline", "--once"]
-    if extra_args:
+    # Force unbuffered child stdout so we can read stage events live.
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    cmd_args = [sys.executable, "-u", "-m", "src.pipeline"]
+    # `--once` is the default cycle mode; standalone modes
+    # (--retry-vision, --analyze-pending) replace it entirely.
+    standalone_modes = {"--retry-vision", "--analyze-pending"}
+    if extra_args and any(a in standalone_modes for a in extra_args):
         cmd_args.extend(extra_args)
+    else:
+        cmd_args.append("--once")
+        if extra_args:
+            cmd_args.extend(extra_args)
     proc = await asyncio.create_subprocess_exec(
         *cmd_args,
         cwd=str(_PROJECT_ROOT),
         env=env,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    stdout_bytes, _ = await proc.communicate()
-    output = (stdout_bytes or b"").decode(errors="replace")
-    tail = output.strip().splitlines()[-25:]
-    status = "success" if proc.returncode == 0 else "failed"
+    global _pipeline_proc, _pipeline_stop_requested
+    _pipeline_proc = proc
+    _pipeline_stop_requested = False
+
+    # Stream lines as they arrive so `last_log_tail` + `current_stage`
+    # update while the cycle is still running (UI no longer sits on a
+    # static elapsed-time guess).
+    import re as _re
+    _stage_re = _re.compile(r"stage_complete\s*\[stage=(\w+)([^\]]*)\]")
+    _cycle_re = _re.compile(r"cycle_complete\s*\[([^\]]*)\]")
+    _ingest_start_re = _re.compile(r"(backfill_start|cycle_start|arctic_shift_fetch_complete)")
+    _sub_start_re = _re.compile(r"subreddit_fetch_start\s*\[([^\]]*)\]")
+    _sub_prog_re = _re.compile(r"subreddit_fetch_progress\s*\[([^\]]*)\]")
+    _sub_done_re = _re.compile(r"subreddit_fetch_complete\s*\[([^\]]*)\]")
+    collected: list[str] = []
+    assert proc.stdout is not None
+    _pipeline_state["current_stage"] = "ingest"
+    while True:
+        line_bytes = await proc.stdout.readline()
+        if not line_bytes:
+            break
+        line = line_bytes.decode(errors="replace").rstrip("\n")
+        collected.append(line)
+        if len(collected) > 200:
+            del collected[: len(collected) - 200]
+        _pipeline_state["last_log_tail"] = collected[-25:]
+        m = _stage_re.search(line)
+        if m:
+            stage_raw = m.group(1).lower()
+            mapped = _STAGE_MAP.get(stage_raw)
+            if mapped:
+                _pipeline_state["current_stage"] = mapped
+            _merge_stage_counters(
+                _pipeline_state["last_counters"], stage_raw, m.group(2),
+            )
+        elif _ingest_start_re.search(line) and _pipeline_state["current_stage"] is None:
+            _pipeline_state["current_stage"] = "ingest"
+        cm = _cycle_re.search(line)
+        if cm:
+            _merge_cycle_counters(_pipeline_state["last_counters"], cm.group(1))
+        sm = _sub_start_re.search(line)
+        if sm:
+            _apply_sub_event(_pipeline_state["ingest_progress"], "start", sm.group(1))
+        pm = _sub_prog_re.search(line)
+        if pm:
+            _apply_sub_event(_pipeline_state["ingest_progress"], "progress", pm.group(1))
+        dm = _sub_done_re.search(line)
+        if dm:
+            _apply_sub_event(_pipeline_state["ingest_progress"], "complete", dm.group(1))
+    await proc.wait()
+    output = "\n".join(collected)
+    tail = collected[-25:]
+    if _pipeline_stop_requested:
+        status = "stopped"
+    else:
+        status = "success" if proc.returncode == 0 else "failed"
     finished_iso = datetime.now(timezone.utc).isoformat()
     duration_ms = int((datetime.now(timezone.utc) - started_at_mono).total_seconds() * 1000)
-    counters = _parse_counters_from_log_tail(tail)
+    counters = dict(_pipeline_state.get("last_counters") or {})
+    # Fall back to log-tail parsing only if the live parser missed everything.
+    if not counters:
+        counters = _parse_counters_from_log_tail(tail)
+    _pipeline_state["last_counters"] = counters
     _pipeline_state.update(
         running=False,
         last_finished_at=finished_iso,
         last_status=status,
         last_exit_code=proc.returncode,
         last_log_tail=tail,
+        current_stage=None,
     )
+    _pipeline_proc = None
+    _pipeline_stop_requested = False
     _record_pipeline_run(
         run_id=run_id, started_at=started_iso, status=status,
         trigger=trigger, params=params, finished_at=finished_iso,
@@ -133,6 +232,171 @@ _COUNTER_KEYS = {
     "ingested", "processed", "trusted", "flagged", "analyzed",
     "candidates", "captioned", "size", "trusted_so_far",
 }
+
+
+# Maps `stage_complete [stage=<raw> ...]` kwargs onto canonical counter keys
+# the UI consumes. Format: { raw_stage: { source_kwarg: canonical_key } }.
+_STAGE_COUNTER_MAP: dict[str, dict[str, str]] = {
+    "ingest":     {"count": "ingested"},
+    "preprocess": {"count": "processed"},
+    "vision":     {"candidates": "vision_candidates", "captioned": "captioned"},
+    "trust":      {"trusted": "trusted", "flagged": "flagged"},
+    "analyze":    {"count": "analyzed"},
+    "alerts":     {"count": "alerts"},
+}
+
+
+def _merge_stage_counters(counters: dict | None, stage_raw: str, kvs: str) -> None:
+    """Update live counters from a single `stage_complete` log line."""
+    if counters is None:
+        return
+    mapping = _STAGE_COUNTER_MAP.get(stage_raw)
+    if not mapping:
+        return
+    import re as _re
+    for kv in _re.finditer(r"(\w+)=(-?\d+)", kvs):
+        k, v = kv.group(1), kv.group(2)
+        canonical = mapping.get(k)
+        if canonical:
+            try:
+                counters[canonical] = int(v)
+            except ValueError:
+                pass
+
+
+def _merge_cycle_counters(counters: dict | None, kvs: str) -> None:
+    """Update live counters from a `cycle_complete` log line (terminal totals)."""
+    if counters is None:
+        return
+    import re as _re
+    for kv in _re.finditer(r"(\w+)=(-?\d+)", kvs):
+        k, v = kv.group(1), kv.group(2)
+        if k in _COUNTER_KEYS:
+            try:
+                counters[k] = int(v)
+            except ValueError:
+                pass
+
+
+def _parse_kv_pairs(kvs: str) -> dict:
+    """Cheap parser for `key=value` tokens from a structlog text line.
+    Numeric strings are coerced to int/float; everything else stays str."""
+    import re as _re
+    out: dict = {}
+    for kv in _re.finditer(r"(\w+)=([\w\.\-:/+]+)", kvs):
+        k, v = kv.group(1), kv.group(2)
+        # Try int then float; fall back to str.
+        try:
+            out[k] = int(v)
+            continue
+        except ValueError:
+            pass
+        try:
+            out[k] = float(v)
+            continue
+        except ValueError:
+            pass
+        out[k] = v
+    return out
+
+
+def _apply_sub_event(progress: dict | None, kind: str, kvs: str) -> None:
+    """Update per-subreddit ingest progress from a single log line."""
+    if progress is None:
+        return
+    kv = _parse_kv_pairs(kvs)
+    sub = kv.get("subreddit")
+    if not sub:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    subs = progress.setdefault("subs", {})
+    order = progress.setdefault("order", [])
+    if sub not in subs:
+        subs[sub] = {
+            "subreddit": sub,
+            "since_utc": kv.get("since_utc"),
+            "until_utc": kv.get("until_utc"),
+            "position": kv.get("position"),
+            "total_subs": kv.get("total_subs"),
+            "fetch_limit": kv.get("fetch_limit"),
+            "window_days": kv.get("window_days"),
+            "oldest_utc": None,
+            "newest_utc": None,
+            "page_size": 0,
+            "total_fetched": 0,
+            "coverage_pct": 0.0,
+            "status": "pending",
+            "started_at": now,
+            "last_update": now,
+        }
+        order.append(sub)
+    record = subs[sub]
+    record["last_update"] = now
+    if kind == "start":
+        record["status"] = "running"
+        for f in ("since_utc", "until_utc", "position", "total_subs",
+                  "fetch_limit", "window_days"):
+            if f in kv:
+                record[f] = kv[f]
+        if "total_subs" in kv:
+            progress["total_subs"] = kv["total_subs"]
+    elif kind == "progress":
+        record["status"] = "running"
+        for f in ("oldest_utc", "newest_utc", "page_size", "total_fetched",
+                  "coverage_pct"):
+            if f in kv:
+                record[f] = kv[f]
+        # Recompute coverage_pct here too (defensive — log may round).
+        try:
+            since = float(record.get("since_utc") or 0)
+            until = float(record.get("until_utc") or 0)
+            oldest = float(record.get("oldest_utc") or until)
+            window = max(1.0, until - since)
+            covered = max(0.0, min(window, until - oldest))
+            record["coverage_pct"] = round(100.0 * covered / window, 1)
+        except (TypeError, ValueError):
+            pass
+    elif kind == "complete":
+        record["status"] = kv.get("status", "ok")
+        if "fetched" in kv:
+            record["total_fetched"] = kv["fetched"]
+        record["coverage_pct"] = 100.0
+        record["finished_at"] = now
+
+
+def _summarize_ingest_progress(progress: dict | None) -> dict | None:
+    """Aggregate per-sub progress into an overall % + ETA for the UI."""
+    if not progress or not progress.get("subs"):
+        return None
+    subs = progress["subs"]
+    order = progress.get("order", list(subs.keys()))
+    total = progress.get("total_subs") or len(subs) or 1
+    subs_done = sum(1 for r in subs.values() if r.get("status") in {"ok", "failed"})
+    # Average coverage across all subs we expect (counts not-yet-started
+    # subs as 0%, which gives a more honest "I haven't even started those
+    # yet" view during long runs).
+    cov_sum = sum((r.get("coverage_pct") or 0.0) for r in subs.values())
+    overall_pct = round(cov_sum / total, 1) if total else 0.0
+    # ETA based on elapsed wall time vs. overall_pct. Quiet during the first
+    # 5% so the first page (which is always slow) doesn't blow it up.
+    eta_seconds = None
+    started = progress.get("started_at")
+    if started and overall_pct >= 5.0 and overall_pct < 100.0:
+        try:
+            t0 = datetime.fromisoformat(started)
+            elapsed = (datetime.now(timezone.utc) - t0).total_seconds()
+            if elapsed > 0:
+                eta_seconds = int(elapsed * (100.0 - overall_pct) / overall_pct)
+        except ValueError:
+            pass
+    return {
+        "started_at": started,
+        "subs_total": total,
+        "subs_done": subs_done,
+        "overall_pct": overall_pct,
+        "eta_seconds": eta_seconds,
+        "subreddits": [subs[name] for name in order if name in subs],
+    }
 
 
 def _parse_counters_from_log_tail(tail: list[str]) -> dict:
@@ -292,13 +556,76 @@ def pipeline_status():
             next_run = last_fin + timedelta(minutes=_PIPELINE_INTERVAL_MINUTES)
         except ValueError:
             pass
+    # Cumulative DB-side totals so the UI can show "as-of-now" counts that
+    # survive across runs (counters reset every cycle; these don't).
+    totals = _pipeline_totals()
+    summary = _summarize_ingest_progress(_pipeline_state.get("ingest_progress"))
     return {
         **_pipeline_state,
+        "ingest_progress": summary,
         "interval_minutes": _PIPELINE_INTERVAL_MINUTES,
         "scheduler_enabled": _scheduler_task is not None and not _scheduler_task.done(),
         "scheduler_started_at": _scheduler_started_at.isoformat() if _scheduler_started_at else None,
         "next_scheduled_run_at": next_run.isoformat() if next_run else None,
+        "totals": totals,
     }
+
+
+def _pipeline_totals() -> dict:
+    """Cumulative counts pulled straight from the database. Fail-soft.
+
+    Opens a short-lived read-only SQLite connection so we never share the
+    main `_storage._conn` with concurrent funnel/sources queries (that mix
+    raised `returned NULL without setting an exception` on Python 3.13).
+    """
+    out = {
+        "raw_posts": 0,
+        "trusted_posts": 0,
+        "analyzed_posts": 0,
+        "ingested_today": 0,
+        "ingested_24h": 0,
+    }
+    if _config is None:
+        return out
+    import sqlite3
+    from datetime import datetime, timezone
+    conn = None
+    try:
+        db_path = _config.storage.sqlite_path
+        conn = sqlite3.connect(
+            f"file:{db_path}?mode=ro", uri=True, timeout=2.0,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("pipeline_totals_connect_failed", error=str(e))
+        return out
+
+    # `is_trusted` lives inside the JSON `data` blob, not as a column.
+    queries: list[tuple[str, str, tuple]] = [
+        ("raw_posts",       "SELECT COUNT(*) FROM raw_posts", ()),
+        ("trusted_posts",   "SELECT COUNT(*) FROM raw_posts WHERE json_extract(data, '$.is_trusted') = 1", ()),
+        ("analyzed_posts",  "SELECT COUNT(*) FROM analyses", ()),
+    ]
+    now_ts = datetime.now(timezone.utc).timestamp()
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    ).timestamp()
+    queries.append(("ingested_24h",
+        "SELECT COUNT(*) FROM raw_posts WHERE created_timestamp >= ?", (now_ts - 86400,)))
+    queries.append(("ingested_today",
+        "SELECT COUNT(*) FROM raw_posts WHERE created_timestamp >= ?", (today_start,)))
+
+    try:
+        for key, sql, params in queries:
+            try:
+                out[key] = int(conn.execute(sql, params).fetchone()[0] or 0)
+            except Exception as e:  # noqa: BLE001
+                log.warning("pipeline_totals_query_failed", key=key, error=str(e))
+    finally:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return out
 
 
 @app.post("/api/pipeline/run")
@@ -319,6 +646,77 @@ async def pipeline_run(background_tasks: BackgroundTasks, lookback_hours: int | 
         params = {"lookback_hours": lookback_hours}
     background_tasks.add_task(_run_pipeline_subprocess, "manual", extra_args=extra_args or None, params=params)
     return {"started": True, "state": _pipeline_state}
+
+
+@app.post("/api/pipeline/stop")
+async def pipeline_stop():
+    """Cancel the in-flight pipeline cycle, if any.
+
+    Sends SIGTERM to the subprocess, waits up to 5s for graceful exit, then
+    SIGKILLs. The stream reader will exit when the pipe closes and the run
+    will be recorded with status='stopped'.
+    """
+    global _pipeline_stop_requested
+    proc = _pipeline_proc
+    if proc is None or proc.returncode is not None:
+        return {"stopped": False, "reason": "not_running", "state": _pipeline_state}
+    _pipeline_stop_requested = True
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        return {"stopped": True, "reason": "already_exited", "state": _pipeline_state}
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5.0)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+    log.info("pipeline_run_stopped", run_id=_pipeline_state.get("last_run_id"))
+    return {"stopped": True, "state": _pipeline_state}
+
+
+@app.post("/api/pipeline/retry-vision")
+async def pipeline_retry_vision(background_tasks: BackgroundTasks):
+    """Re-caption stored raw_posts that have images but no caption.
+
+    Useful after Ollama was down during a backfill. Runs as a background
+    subprocess so the request returns immediately; progress shows up in
+    the live log panel like a normal run.
+    """
+    if _pipeline_state["running"]:
+        return {"started": False, "reason": "already_running", "state": _pipeline_state}
+    background_tasks.add_task(
+        _run_pipeline_subprocess,
+        "retry-vision",
+        extra_args=["--retry-vision"],
+        params={"mode": "retry-vision"},
+    )
+    return {"started": True, "state": _pipeline_state}
+
+
+@app.get("/api/pipeline/cursors")
+def pipeline_cursors():
+    """Per-subreddit ingestion watermarks + most recent fetch window.
+
+    Lets the UI show exactly *what time delta* each scheduled run has
+    covered, so analysts can spot gaps (e.g. a subreddit whose
+    `last_window.fetched` has been 0 for 3 cycles in a row).
+    """
+    from src.storage.cursor import CursorTracker
+    from src.pipeline import INGEST_OVERLAP_SECONDS
+    try:
+        ct = CursorTracker(_config.storage.sqlite_path) if _config else CursorTracker()
+        rows = ct.list_cursors()
+        ct.close()
+    except Exception as e:  # noqa: BLE001
+        log.warning("pipeline_cursors_failed", error=str(e))
+        rows = []
+    return {
+        "cursors": rows,
+        "overlap_seconds": INGEST_OVERLAP_SECONDS,
+        "next_scheduled_run_at": _next_scheduled_run_at.isoformat() if _next_scheduled_run_at else None,
+    }
 
 
 # ─── Pipeline page: data sources, funnel, jobs, registry CRUD ────────────────
@@ -420,7 +818,15 @@ def ingestion_funnel(range: str = Query("week"), segment: str | None = None):
         if _is_trusted_analysis(an):
             trusted += 1
 
-    images_total = media_buckets["image_only"] + media_buckets["text_plus_image"]
+    # `captioned` counts every post with an `image_caption` field set.
+    # The pipeline also captions video thumbnails and link previews, so the
+    # raw bucket count (image_only + text_plus_image) can be smaller than
+    # `captioned`. Widen the denominator to include video + any extra
+    # captions so the percentage never exceeds 100% — what users expect.
+    images_total = max(
+        media_buckets["image_only"] + media_buckets["text_plus_image"] + media_buckets["video"],
+        captioned,
+    )
     pct_captioned = round(100 * captioned / images_total, 1) if images_total else 0.0
 
     # Vision failure breakdown: categorize why images were not captioned
@@ -505,6 +911,7 @@ def ingestion_sources(range: str = Query("week")):
         items.append({
             "subreddit": e.subreddit,
             "segment": e.segment,
+            "macro_group": e.macro_group,
             "enabled": e.enabled,
             "fetched": int(c.get("cnt") or 0),
             "analyzed": int(c.get("analyzed") or 0),
@@ -531,6 +938,7 @@ def ingestion_list_subreddits():
                 "subreddit": e.subreddit,
                 "group": e.group,
                 "segment": e.segment,
+                "macro_group": e.macro_group,
                 "subscribers": e.subscribers,
                 "enabled": e.enabled,
                 "subreddit_type": e.subreddit_type,
@@ -597,6 +1005,7 @@ async def ingestion_backfill(body: dict, background_tasks: BackgroundTasks):
     _ensure_initialized()
     from datetime import datetime as _dt
     from src.ingestion.subreddit_registry import load_all, save_all
+    from src.storage.cursor import CursorTracker
 
     try:
         from_dt = _dt.fromisoformat((body.get("from") or "").replace("Z", "+00:00"))
@@ -620,6 +1029,23 @@ async def ingestion_backfill(body: dict, background_tasks: BackgroundTasks):
         for e in entries:
             e.enabled = e.subreddit.lower() in sel_lower
         save_all(entries)
+        subs_to_run = [e.subreddit for e in entries if e.subreddit.lower() in sel_lower]
+    else:
+        subs_to_run = [e.subreddit for e in entries if e.enabled]
+
+    # Rewind cursors so the next ingest actually starts at `from`. Without
+    # this the pipeline reads cursor.get_cursor(sub) (the last successful
+    # watermark) and ignores the requested window entirely.
+    from_utc = from_dt.timestamp()
+    original_cursors: dict[str, float] = {}
+    try:
+        ct = CursorTracker(_config.storage.sqlite_path)
+        for sub in subs_to_run:
+            original_cursors[sub] = ct.get_cursor(sub)
+            ct.update_cursor(sub, from_utc, "")
+        log.info("backfill_cursors_rewound", count=len(subs_to_run), from_utc=from_utc)
+    except Exception as ex:  # noqa: BLE001
+        log.error("backfill_cursor_rewind_failed", error=str(ex))
 
     async def _run_then_restore():
         try:
@@ -650,6 +1076,367 @@ async def ingestion_backfill(body: dict, background_tasks: BackgroundTasks):
                    "days": (to_dt - from_dt).days},
         "subreddits": selected_subs or "all_currently_enabled",
     }
+
+
+# ─── Admin: destructive flush ──────────────────────────────────────────────
+# Used by the Pipeline page to wipe local SQLite data and restart from scratch
+# (typically followed by a 90-day backfill). Requires explicit ?confirm=YES_DELETE_ALL
+# to prevent accidental hits. Always backs up data/local.db first.
+
+@app.post("/api/admin/flush")
+async def admin_flush(
+    confirm: str = Query("", description="Must be 'YES_DELETE_ALL' to proceed"),
+    backup: bool = Query(True, description="Backup data/local.db before flushing"),
+):
+    """Wipe all data tables (raw_posts, analyses, aggregates, feedback, alerts,
+    pipeline_runs, cursors) so the next run rebuilds from scratch.
+
+    Returns the row counts deleted per table and the path of the DB backup
+    (if `backup=True`).
+    """
+    _ensure_initialized()
+    if confirm != "YES_DELETE_ALL":
+        return {
+            "flushed": False,
+            "reason": "missing or invalid confirm token (expected 'YES_DELETE_ALL')",
+        }
+    if _pipeline_state["running"]:
+        return {"flushed": False, "reason": "pipeline currently running — wait for it to finish"}
+
+    import shutil
+    from pathlib import Path as _Path
+    from src.storage.cursor import CursorTracker
+
+    backup_path: str | None = None
+    if backup:
+        try:
+            db_path = _Path(getattr(_storage, "db_path", "data/local.db"))
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            target = db_path.with_suffix(f".db.bak.{ts}")
+            if db_path.exists():
+                shutil.copy2(db_path, target)
+                backup_path = str(target)
+                log.warning("admin_flush_backup_created", path=backup_path)
+        except Exception as e:  # noqa: BLE001
+            log.error("admin_flush_backup_failed", error=str(e))
+            return {"flushed": False, "reason": f"backup failed: {e}"}
+
+    deleted_tables = _storage.flush_all() if hasattr(_storage, "flush_all") else {}
+
+    # Reset cursors so next ingestion starts from scratch
+    deleted_cursors = 0
+    try:
+        ct = CursorTracker(getattr(_storage, "db_path", "data/local.db"))
+        deleted_cursors = ct.reset_all()
+        ct.close()
+    except Exception as e:  # noqa: BLE001
+        log.error("admin_flush_cursor_reset_failed", error=str(e))
+
+    log.warning("admin_flush_completed", tables=deleted_tables, cursors=deleted_cursors)
+    return {
+        "flushed": True,
+        "deleted_tables": deleted_tables,
+        "deleted_cursors": deleted_cursors,
+        "backup_path": backup_path,
+    }
+
+
+# ─── Phase 3: Reddit OAuth (login + callback + status + logout) ─────────────
+# Cookie-based, single-process session store. No external deps. The cookie is
+# a random session id; the server maps it to a `TokenBundle`. State tokens for
+# CSRF are kept alongside until consumed by the callback.
+
+_OAUTH_SESSIONS: dict[str, dict] = {}      # session_id -> {"token": TokenBundle.to_session(), ...}
+_OAUTH_PENDING_STATE: dict[str, str] = {}  # session_id -> CSRF state token
+_OAUTH_COOKIE = "rsi_session"
+
+
+def _get_oauth_session_id(request: Request) -> str | None:
+    return request.cookies.get(_OAUTH_COOKIE)
+
+
+def _ensure_oauth_session_id(request: Request, response: Response) -> str:
+    sid = request.cookies.get(_OAUTH_COOKIE)
+    if not sid:
+        import secrets as _secrets
+        sid = _secrets.token_urlsafe(24)
+        # httponly + samesite=lax so the callback redirect still carries the cookie.
+        response.set_cookie(_OAUTH_COOKIE, sid, httponly=True, samesite="lax", max_age=30 * 24 * 3600)
+    return sid
+
+
+def _clear_oauth_session(sid: str | None) -> None:
+    if sid and sid in _OAUTH_SESSIONS:
+        del _OAUTH_SESSIONS[sid]
+    if sid and sid in _OAUTH_PENDING_STATE:
+        del _OAUTH_PENDING_STATE[sid]
+
+
+@app.get("/api/auth/reddit/login")
+def auth_reddit_login(request: Request):
+    """Begin the OAuth dance: returns the URL the browser should send the user
+    to for Reddit consent. (We don't 302 from here so the SPA can decide how
+    to navigate — typically a `window.location.href = ...` assignment.)
+    """
+    _ensure_initialized()
+    cfg = _config.reddit_oauth
+    if not cfg.enabled:
+        return JSONResponse({"ok": False, "error": "reddit_oauth_disabled"}, status_code=400)
+    if cfg.dry_run:
+        return JSONResponse({
+            "ok": False,
+            "dry_run": True,
+            "error": "reddit_oauth in dry_run mode — replies are logged, no live login required",
+        }, status_code=200)
+    if not cfg.client_id or not cfg.client_secret:
+        return JSONResponse({
+            "ok": False,
+            "error": "reddit_oauth.client_id/client_secret not configured",
+        }, status_code=400)
+    from src.reddit.oauth import build_authorize_url, new_state_token
+    response = JSONResponse({"ok": True})
+    sid = _ensure_oauth_session_id(request, response)
+    state = new_state_token()
+    _OAUTH_PENDING_STATE[sid] = state
+    url = build_authorize_url(cfg, state)
+    response = JSONResponse({"ok": True, "authorize_url": url})
+    response.set_cookie(_OAUTH_COOKIE, sid, httponly=True, samesite="lax", max_age=30 * 24 * 3600)
+    return response
+
+
+@app.get("/api/auth/reddit/callback")
+def auth_reddit_callback(request: Request, code: str = Query(""), state: str = Query(""), error: str = Query("")):
+    """Reddit redirects the browser here with `?code=...&state=...`.
+
+    We verify the state, exchange the code, stash the token, and 302 the
+    browser back to the SPA.
+    """
+    _ensure_initialized()
+    cfg = _config.reddit_oauth
+    spa_redirect = "/?reddit_login=success"
+    sid = _get_oauth_session_id(request)
+
+    if error:
+        log.warning("reddit_oauth_callback_error", error=error)
+        return RedirectResponse(f"/?reddit_login=denied&error={error}", status_code=302)
+
+    expected_state = _OAUTH_PENDING_STATE.get(sid or "", "")
+    if not state or not expected_state or state != expected_state:
+        log.warning("reddit_oauth_state_mismatch", got=state, expected=bool(expected_state))
+        return RedirectResponse("/?reddit_login=state_mismatch", status_code=302)
+    _OAUTH_PENDING_STATE.pop(sid or "", None)
+
+    try:
+        from src.reddit.oauth import exchange_code_for_token
+        bundle = exchange_code_for_token(cfg, code)
+    except Exception as e:  # noqa: BLE001
+        log.error("reddit_oauth_exchange_failed", error=str(e))
+        return RedirectResponse("/?reddit_login=exchange_failed", status_code=302)
+
+    if sid:
+        _OAUTH_SESSIONS[sid] = {"token": bundle.to_session()}
+    log.info("reddit_oauth_session_created", username=bundle.username)
+    return RedirectResponse(spa_redirect, status_code=302)
+
+
+@app.get("/api/auth/reddit/status")
+def auth_reddit_status(request: Request):
+    """Return whether the current browser session is logged in to Reddit."""
+    _ensure_initialized()
+    cfg = _config.reddit_oauth
+    sid = _get_oauth_session_id(request)
+    sess = _OAUTH_SESSIONS.get(sid or "", {}) if sid else {}
+    token_data = sess.get("token") or {}
+
+    from src.reddit.oauth import TokenBundle
+    bundle = TokenBundle.from_session(token_data) if token_data else None
+
+    return {
+        "enabled": cfg.enabled,
+        "dry_run": cfg.dry_run,
+        "logged_in": bool(bundle and not bundle.is_expired()),
+        "username": bundle.username if bundle else "",
+        "expires_at": bundle.expires_at if bundle else 0,
+        "client_configured": bool(cfg.client_id and cfg.client_secret),
+    }
+
+
+@app.post("/api/auth/reddit/logout")
+def auth_reddit_logout(request: Request):
+    """Drop the server-side token so the cookie no longer authenticates."""
+    sid = _get_oauth_session_id(request)
+    _clear_oauth_session(sid)
+    log.info("reddit_oauth_logged_out", sid=bool(sid))
+    return {"ok": True, "logged_out": True}
+
+
+def _current_reddit_token(request: Request):
+    """Helper used by the reply endpoint. Returns a TokenBundle (refreshed if
+    needed) or None if the user is not logged in.
+    """
+    sid = _get_oauth_session_id(request)
+    if not sid:
+        return None
+    sess = _OAUTH_SESSIONS.get(sid, {})
+    token_data = sess.get("token")
+    if not token_data:
+        return None
+    from src.reddit.oauth import TokenBundle, refresh_token
+    bundle = TokenBundle.from_session(token_data)
+    if not bundle:
+        return None
+    if bundle.is_expired() and bundle.refresh_token:
+        try:
+            bundle = refresh_token(_config.reddit_oauth, bundle.refresh_token)
+            _OAUTH_SESSIONS[sid] = {"token": bundle.to_session()}
+        except Exception as e:  # noqa: BLE001
+            log.warning("reddit_oauth_refresh_failed", error=str(e))
+            return None
+    return bundle
+
+
+# ─── Phase 4: Post Lifecycle ────────────────────────────────────────────────
+
+LIFECYCLE_STATES = ("new", "acknowledged", "reply_sent", "issue_fixed", "resolved")
+_LIFECYCLE_TRANSITIONS = {
+    "new": {"acknowledged"},
+    "acknowledged": {"reply_sent", "resolved"},
+    "reply_sent": {"issue_fixed", "resolved"},
+    "issue_fixed": {"resolved"},
+    "resolved": set(),
+}
+
+
+@app.get("/api/lifecycle")
+def lifecycle_list(state: str | None = Query(None), limit: int = Query(200, ge=1, le=1000)):
+    """Lifecycle board — counts per state + cards (optionally filtered)."""
+    _ensure_initialized()
+    if state and state not in LIFECYCLE_STATES:
+        return JSONResponse({"error": f"unknown state '{state}'"}, status_code=400)
+    rows = _storage.lifecycle_list(state=state, limit=limit)
+    counts = _storage.lifecycle_counts()
+    # Always include all known states with zero so the board renders clean columns.
+    counts_full = {s: counts.get(s, 0) for s in LIFECYCLE_STATES}
+    return {
+        "states": list(LIFECYCLE_STATES),
+        "counts": counts_full,
+        "rows": rows,
+    }
+
+
+@app.get("/api/lifecycle/{post_id}")
+def lifecycle_get(post_id: str):
+    _ensure_initialized()
+    row = _storage.lifecycle_get(post_id)
+    if not row:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    # Enrich with the latest analysis for display.
+    analysis = _storage.get_item("analyses", f"analysis_{post_id}", row.get("subreddit", ""))
+    raw = _storage.get_item("raw_posts", post_id, row.get("subreddit", ""))
+    return {"lifecycle": row, "analysis": analysis, "raw": raw}
+
+
+@app.post("/api/lifecycle/{post_id}/transition")
+def lifecycle_transition(post_id: str, payload: dict):
+    """Move a lifecycle row to a new state. Allowed transitions are validated
+    server-side. Logs the transition into `history`.
+    """
+    _ensure_initialized()
+    target = (payload.get("to_state") or "").strip()
+    note = (payload.get("note") or "").strip()
+    by = (payload.get("by") or "analyst").strip()
+    if target not in LIFECYCLE_STATES:
+        return JSONResponse({"error": f"unknown state '{target}'"}, status_code=400)
+
+    row = _storage.lifecycle_get(post_id)
+    if not row:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+
+    current = row.get("state", "new")
+    allowed = _LIFECYCLE_TRANSITIONS.get(current, set())
+    if target not in allowed and target != current:
+        return JSONResponse(
+            {"error": f"transition '{current}' -> '{target}' not allowed",
+             "allowed": sorted(allowed)},
+            status_code=400,
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    history = row.get("history") or []
+    history.append({"at": now, "from_state": current, "to_state": target, "by": by, "note": note})
+    row["state"] = target
+    row["history"] = history
+    row["updated_at"] = now
+    if target == "acknowledged" and not row.get("acknowledged_at"):
+        row["acknowledged_at"] = now
+    if target == "reply_sent" and not row.get("reply_sent_at"):
+        row["reply_sent_at"] = now
+    if target == "resolved" and not row.get("resolved_at"):
+        row["resolved_at"] = now
+
+    _storage.lifecycle_upsert(row)
+    log.info("lifecycle_transition", post_id=post_id, from_state=current, to_state=target, by=by)
+    return {"ok": True, "lifecycle": row}
+
+
+@app.post("/api/lifecycle/{post_id}/resolve")
+def lifecycle_resolve(post_id: str, payload: dict):
+    """Convenience endpoint: mark a lifecycle row as resolved (skips
+    intermediate states). Records optional resolution note in history.
+    """
+    _ensure_initialized()
+    row = _storage.lifecycle_get(post_id)
+    if not row:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    now = datetime.now(timezone.utc).isoformat()
+    history = row.get("history") or []
+    history.append({
+        "at": now,
+        "from_state": row.get("state"),
+        "to_state": "resolved",
+        "by": payload.get("by", "analyst"),
+        "note": payload.get("note", ""),
+    })
+    row["state"] = "resolved"
+    row["resolved_at"] = now
+    row["updated_at"] = now
+    row["history"] = history
+    _storage.lifecycle_upsert(row)
+    log.info("lifecycle_resolved", post_id=post_id)
+    return {"ok": True, "lifecycle": row}
+
+
+# ─── Phase 5: Competitor Insights ───────────────────────────────────────────
+
+@app.get("/api/insights/latest")
+def insights_latest(kind: str = Query("competitor_daily")):
+    """Most-recent competitor insights bundle (daily by default)."""
+    _ensure_initialized()
+    row = _storage.insights_latest(kind=kind)
+    if not row:
+        return {"available": False, "kind": kind}
+    return {"available": True, **row}
+
+
+@app.get("/api/insights/history")
+def insights_history(limit: int = Query(20, ge=1, le=100)):
+    _ensure_initialized()
+    return {"history": _storage.insights_history(limit=limit)}
+
+
+@app.post("/api/insights/generate")
+def insights_generate(payload: dict | None = None):
+    """Trigger an on-demand insights run for the requested window (1-90 days)."""
+    _ensure_initialized()
+    days = 7
+    if payload:
+        try:
+            days = int(payload.get("window_days", 7))
+        except (TypeError, ValueError):
+            days = 7
+    from src.analysis.competitor_insights import generate_insights
+    result = generate_insights(_storage, window_days=days, kind="competitor_on_demand")
+    return result
 
 
 @app.get("/api/jobs/recent")
@@ -877,12 +1664,13 @@ def _backfill_segments_if_needed() -> None:
     log.info("segment_backfill_complete", updated=updated)
 
 
-def _compute_window_aggregate(start: datetime, end: datetime, segment: str | None = None) -> dict:
+def _compute_window_aggregate(start: datetime, end: datetime, segment: str | None = None, macro_segment: str | None = None) -> dict:
     """Totals + sentiment + aspects + subreddits for posts CREATED in [start, end).
 
     `segment` (optional) restricts to a single segment slug. Counting of
     `trusted_posts` goes through `_is_trusted_analysis` so every page agrees on
     the same gate.
+    `macro_segment` (optional, 'walmart'|'competitor') is layered on top of `segment`.
     """
     import json as _json
     rows = _fetch_window_rows(start, end)
@@ -891,13 +1679,18 @@ def _compute_window_aggregate(start: datetime, end: datetime, segment: str | Non
     aspect_sentiment: dict[str, Counter] = {}
     subreddit_dist: Counter = Counter()
     segment_dist: Counter = Counter()
+    macro_dist: Counter = Counter()
     trusted = 0
     kept = 0
     for row in rows:
         a = _json.loads(row["adata"])
         r = _json.loads(row["rdata"]) if row["rdata"] else {}
-        row_segment = (r.get("segment") or segment_for(r.get("subreddit", a.get("subreddit", "")))) or UNKNOWN_SEGMENT
+        sub = a.get("subreddit", "") or r.get("subreddit", "")
+        row_segment = (r.get("segment") or segment_for(sub)) or UNKNOWN_SEGMENT
+        row_macro = macro_segment_for(sub)
         if segment and row_segment != segment:
+            continue
+        if macro_segment and row_macro != macro_segment:
             continue
         kept += 1
         sentiment = a.get("sentiment", "neutral")
@@ -908,6 +1701,7 @@ def _compute_window_aggregate(start: datetime, end: datetime, segment: str | Non
         if sub:
             subreddit_dist[sub] += 1
         segment_dist[row_segment] += 1
+        macro_dist[row_macro] += 1
         for asp in a.get("aspects", []) or []:
             name = asp if isinstance(asp, str) else (asp.get("aspect") if isinstance(asp, dict) else None)
             if not name:
@@ -926,6 +1720,7 @@ def _compute_window_aggregate(start: datetime, end: datetime, segment: str | Non
         "aspect_sentiment": {k: dict(v) for k, v in aspect_sentiment.items()},
         "subreddit_distribution": dict(subreddit_dist),
         "segment_distribution": dict(segment_dist),
+        "macro_segment_distribution": dict(macro_dist),
     }
 
 
@@ -1027,19 +1822,23 @@ def _compute_top_issues_from_window(window_stats: dict) -> list[dict]:
 def get_brand_health(
     range: str = Query("today"),
     segment: str | None = Query(None, description="Optional segment slug to filter by (see /api/segments)."),
+    macro_segment: str | None = Query(None, description="Optional macro group: 'walmart' or 'competitor'."),
 ):
     """Overall brand health: sentiment gauge, volume, aspect heatmap data.
 
     Window semantics: posts whose *creation* time falls in the selected window.
     Segment semantics: when `segment` is set, only posts whose subreddit maps
     to that segment are counted (see config/segments).
+    `macro_segment` (Walmart vs Competitor) layers on top of `segment`.
     """
     _ensure_initialized()
     if range not in _VALID_RANGES:
         return {"message": f"Invalid range. Valid: {_VALID_RANGES}", "data": None}
+    if macro_segment and macro_segment not in MACRO_GROUPS:
+        return {"message": f"Invalid macro_segment. Valid: {list(MACRO_GROUPS)}", "data": None}
 
     window_start, window_end, days_requested, date_label = _resolve_window(range)
-    stats = _compute_window_aggregate(window_start, window_end, segment=segment)
+    stats = _compute_window_aggregate(window_start, window_end, segment=segment, macro_segment=macro_segment)
     if stats["total_posts"] == 0:
         return {"message": f"No data for selected range ({date_label})", "data": None}
 
@@ -1064,6 +1863,7 @@ def get_brand_health(
         "date": date_label,
         "range": range,
         "segment": segment,
+        "macro_segment": macro_segment,
         "days_requested": days_requested,
         "days_with_data": days_with_data,
         "total_posts": stats["total_posts"],
@@ -1074,6 +1874,7 @@ def get_brand_health(
         "aspect_breakdown": stats["aspect_breakdown"],
         "subreddit_distribution": stats["subreddit_distribution"],
         "segment_distribution": stats["segment_distribution"],
+        "macro_segment_distribution": stats.get("macro_segment_distribution", {}),
         "trend_7d": trend,
         "top_issues": top_issues,
     }
@@ -1083,6 +1884,139 @@ def get_brand_health(
             f"longer ranges will look similar until older history is ingested."
         )
     return response
+
+
+@app.get("/api/brand-health/priority-negatives")
+def get_priority_negatives(
+    range: str = Query("today"),
+    segment: str | None = Query(None),
+    macro_segment: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Top-N negative posts ranked by `trust_score × sentiment_confidence`.
+
+    Powers the "Priority negative posts" panel on Brand Health. Each row is
+    tagged P1 (urgent: trusted + high-confidence) or P2 (medium urgency) so
+    the social team can triage. Posts that don't meet either threshold are
+    excluded.
+
+    Tier thresholds:
+        P1 — trust_score ≥ 0.7 AND sentiment_confidence ≥ 0.8
+        P2 — trust_score ≥ 0.5 AND sentiment_confidence ≥ 0.6 (and not P1)
+    """
+    _ensure_initialized()
+    if range not in _VALID_RANGES:
+        return {"posts": [], "count": 0, "error": f"Invalid range. Valid: {_VALID_RANGES}"}
+    if macro_segment and macro_segment not in MACRO_GROUPS:
+        return {"posts": [], "count": 0, "error": f"invalid macro_segment '{macro_segment}'"}
+
+    # Resolve window in the same way /api/posts does so the time filter
+    # matches what the analyst sees in the rest of Brand Health.
+    now = datetime.now(timezone.utc)
+    since_ts: float | None = None
+    if range in _HOUR_RANGES:
+        since_ts = (now - timedelta(hours=_HOUR_RANGES[range])).timestamp()
+    elif range in _DAY_RANGES:
+        offset_days, days_back = _DAY_RANGES[range]
+        if days_back == 1:
+            anchor_utc = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            since_ts = (anchor_utc - timedelta(days=offset_days)).timestamp()
+        else:
+            since_ts = (now - timedelta(days=days_back)).timestamp()
+
+    where = ["json_extract(a.data, '$.sentiment') = 'negative'"]
+    params: list = []
+    if segment:
+        where.append("json_extract(p.data, '$.segment') = ?")
+        params.append(segment)
+    if macro_segment:
+        from src.ingestion.subreddit_registry import load_all as _load_all_registry
+        macro_subs = [e.subreddit for e in _load_all_registry() if e.macro_group == macro_segment]
+        if not macro_subs:
+            return {"posts": [], "count": 0, "tiers": {"P1": 0, "P2": 0}}
+        placeholders = ",".join(["?"] * len(macro_subs))
+        where.append(f"a.subreddit IN ({placeholders})")
+        params.extend(macro_subs)
+    if since_ts is not None:
+        where.append(
+            "COALESCE(CAST(json_extract(p.data, '$.created_timestamp') AS REAL), 0) >= ?"
+        )
+        params.append(since_ts)
+
+    # Over-fetch so we have enough candidates after the priority-tier filter.
+    # Cap to a sane upper bound.
+    fetch_cap = max(limit * 5, 200)
+    where_sql = " WHERE " + " AND ".join(where)
+    sql = (
+        "SELECT a.data AS adata, p.data AS pdata "
+        "FROM analyses a "
+        "LEFT JOIN raw_posts p ON p.id = a.post_id "
+        f"{where_sql} "
+        # Order by the priority score directly in SQL so the LIMIT keeps the
+        # top candidates. Tier filtering happens in Python because the
+        # threshold logic is cleaner there.
+        "ORDER BY ("
+        "  COALESCE(CAST(json_extract(a.data, '$.trust_score') AS REAL), 0) "
+        "  * COALESCE(CAST(json_extract(a.data, '$.sentiment_confidence') AS REAL), 0)"
+        ") DESC LIMIT ?"
+    )
+    params.append(fetch_cap)
+
+    import json as _json
+    try:
+        rows = _storage._conn.execute(sql, params).fetchall()  # type: ignore[attr-defined]
+    except Exception as e:  # noqa: BLE001
+        log.error("priority_negatives_query_failed", error=str(e))
+        return {"posts": [], "count": 0, "error": str(e)}
+
+    out: list[dict] = []
+    tier_counts = {"P1": 0, "P2": 0}
+    for row in rows:
+        a = _json.loads(row["adata"]) if row["adata"] else {}
+        p = _json.loads(row["pdata"]) if row["pdata"] else {}
+        trust = float(a.get("trust_score") or 0.0)
+        conf = float(a.get("sentiment_confidence") or 0.0)
+        if trust >= 0.7 and conf >= 0.8:
+            tier = "P1"
+        elif trust >= 0.5 and conf >= 0.6:
+            tier = "P2"
+        else:
+            continue
+        post_id = a.get("post_id", "")
+        reddit_url = ""
+        if p.get("url"):
+            reddit_url = p["url"]
+        elif post_id.startswith("reddit_"):
+            bare = post_id[len("reddit_"):]
+            reddit_url = f"https://www.reddit.com/r/{a.get('subreddit', '')}/comments/{bare}/"
+        out.append({
+            "post_id": post_id,
+            "priority_tier": tier,
+            "priority_score": round(trust * conf, 4),
+            "sentiment_confidence": round(conf, 3),
+            "trust_score": round(trust, 3),
+            "subreddit": a.get("subreddit", ""),
+            "segment": p.get("segment") or segment_for(p.get("subreddit", a.get("subreddit", ""))),
+            "macro_segment": macro_segment_for(a.get("subreddit", "") or p.get("subreddit", "")),
+            "title": p.get("title", ""),
+            "text": p.get("body", p.get("title", "")),
+            "aspects": a.get("aspects", []),
+            "author": p.get("author", ""),
+            "score": p.get("score", 0),
+            "created_timestamp": p.get("created_timestamp", 0),
+            "reddit_url": reddit_url,
+        })
+        tier_counts[tier] += 1
+        if len(out) >= limit:
+            break
+
+    return {
+        "posts": out,
+        "count": len(out),
+        "tiers": tier_counts,
+        "range": range,
+        "limit": limit,
+    }
 
 
 @app.get("/api/segments")
@@ -1095,6 +2029,16 @@ def list_segments():
     }
 
 
+@app.get("/api/macro-segments")
+def list_macro_segments():
+    """Walmart vs Competitor groupings for the BrandHealth toggle."""
+    return {
+        "macro_segments": [
+            {"slug": m, "label": macro_segment_label(m)} for m in MACRO_GROUPS
+        ]
+    }
+
+
 # ─── P0: Aspect Drilldown ─────────────────────────────────────────────────────
 
 @app.get("/api/aspects/{aspect}")
@@ -1103,6 +2047,7 @@ def get_aspect_drilldown(
     days: int = Query(14, ge=1, le=90),
     limit: int = Query(25, ge=1, le=500),
     range: str | None = Query(None, description="Optional range token (matches /api/brand-health). Overrides `days` for the post filter."),
+    macro_segment: str | None = Query(None, description="Optional macro group: 'walmart' or 'competitor'."),
 ):
     """Deep-dive into a specific aspect: trend + paginated posts.
 
@@ -1158,11 +2103,17 @@ def get_aspect_drilldown(
         posts_sql, [f"%{aspect}%", window_start.timestamp(), window_end.timestamp(), limit]
     ).fetchall()
 
+    # Optional macro_segment post-filter (Walmart vs Competitor).
+    _macro_filter = macro_segment if macro_segment in MACRO_GROUPS else None
+
     posts = []
     for row in rows:
         a = _json.loads(row["adata"])
         raw = _json.loads(row["rdata"]) if row["rdata"] else {}
         post_id = a.get("post_id", "")
+        sub = a.get("subreddit", "") or raw.get("subreddit", "")
+        if _macro_filter and macro_segment_for(sub) != _macro_filter:
+            continue
 
         reddit_url = ""
         if raw.get("url"):
@@ -1444,8 +2395,15 @@ def draft_reply(post_id: str, payload: dict | None = None):
 
 
 @app.post("/api/review/{post_id}/reply")
-def save_reply(post_id: str, payload: dict):
-    """Persist the analyst-edited reply to the audit log + analysis record."""
+def save_reply(post_id: str, payload: dict, request: Request):
+    """Persist the analyst-edited reply, then (optionally) post it to Reddit.
+
+    - `reply_text` is always saved to the feedback log + analysis record.
+    - If `payload["post_to_reddit"]` is truthy, we also call the Reddit poster
+      using the current session's token. With `reddit_oauth.dry_run=True`
+      (default), the poster just logs the intent — the dashboard surfaces
+      `posted` / `dry_run` / `rate_limited` distinctly.
+    """
     _ensure_initialized()
     now = datetime.now(timezone.utc).isoformat()
     reply_text = (payload.get("reply_text") or "").strip()
@@ -1470,7 +2428,30 @@ def save_reply(post_id: str, payload: dict):
         analysis["reply_text"] = reply_text
         _storage.upsert("analyses", analysis)
     log.info("auto_reply_saved", post_id=post_id, length=len(reply_text))
-    return {"status": "saved", "feedback_id": fb["id"], "reply_posted_at": now}
+
+    response: dict = {"status": "saved", "feedback_id": fb["id"], "reply_posted_at": now}
+
+    # Optional second leg: actually post to Reddit. We treat this as best-effort
+    # — the local audit log save above is the source of truth.
+    if payload.get("post_to_reddit"):
+        from src.reddit.poster import post_reply as reddit_post_reply
+        cfg = _config.reddit_oauth
+        bundle = _current_reddit_token(request)
+        access_token = bundle.access_token if (bundle and not cfg.dry_run) else None
+        username = bundle.username if bundle else None
+        result = reddit_post_reply(
+            post_id=post_id,
+            reply_text=reply_text,
+            cfg=cfg,
+            access_token=access_token,
+            username=username,
+        )
+        response["reddit"] = result
+        if result.get("ok") and not result.get("dry_run") and result.get("posted_id") and analysis:
+            analysis["reddit_posted_id"] = result["posted_id"]
+            _storage.upsert("analyses", analysis)
+
+    return response
 
 
 @app.get("/api/review/stats")
@@ -1516,6 +2497,7 @@ def search_posts(
     sentiment: str = Query(None),
     aspect: str = Query(None),
     segment: str = Query(None, description="Optional segment slug to filter by (see /api/segments)."),
+    macro_segment: str = Query(None, description="Optional macro group: 'walmart' or 'competitor'."),
     trust_min: float = Query(None, ge=0, le=1),
     range: str = Query(None),
     tz_offset: int = Query(None, description="Browser timezone offset in minutes west of UTC (Date.getTimezoneOffset())"),
@@ -1568,6 +2550,17 @@ def search_posts(
         # we fall back to a Python-side check below (rare after backfill).
         where.append("json_extract(p.data, '$.segment') = ?")
         params.append(segment)
+    if macro_segment:
+        if macro_segment not in MACRO_GROUPS:
+            return {"posts": [], "count": 0, "error": f"invalid macro_segment '{macro_segment}'"}
+        # Build the subreddit IN-list for this macro group from the registry.
+        from src.ingestion.subreddit_registry import load_all as _load_all_registry
+        macro_subs = [e.subreddit for e in _load_all_registry() if e.macro_group == macro_segment]
+        if not macro_subs:
+            return {"posts": [], "count": 0}
+        placeholders = ",".join(["?"] * len(macro_subs))
+        where.append(f"a.subreddit IN ({placeholders})")
+        params.extend(macro_subs)
     if since_ts is not None:
         # Use post creation time, not pipeline-analyzed time. Coalesce in case
         # an older row is missing created_timestamp.
@@ -1620,6 +2613,7 @@ def search_posts(
             "sentiment_confidence": a.get("sentiment_confidence", 0),
             "subreddit": a.get("subreddit", ""),
             "segment": p.get("segment") or segment_for(p.get("subreddit", a.get("subreddit", ""))),
+            "macro_segment": macro_segment_for(a.get("subreddit", "") or p.get("subreddit", "")),
             "trust_score": ts,
             "is_trusted": _is_trusted_analysis(a),
             "human_validated": a.get("human_validated", False),

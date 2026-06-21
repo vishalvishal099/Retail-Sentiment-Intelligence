@@ -1,7 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --walmart-navy: #041E42;
+  --walmart-blue: #0071DC;
+  --walmart-spark: #FFC220;
+  --walmart-sky: #4DBDF5;
+  --bg-base: #F2F8FD;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
-  @apply antialiased text-gray-900;
+  @apply antialiased text-gray-900 font-sans;
+  background-color: var(--bg-base);
+}
+
+/* Walmart-styled chart tooltip */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  border-radius: 12px !important;
+  border: 1px solid #E5EDF7 !important;
+  box-shadow: 0 4px 12px -2px rgba(4, 30, 66, 0.08) !important;
 }

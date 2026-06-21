@@ -114,6 +114,36 @@ class SQLiteBackend(StorageBackend):
             );
             CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at DESC);
             CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
+
+            CREATE TABLE IF NOT EXISTS post_lifecycle (
+                post_id TEXT PRIMARY KEY,
+                subreddit TEXT,
+                state TEXT NOT NULL,           -- new | acknowledged | reply_sent | issue_fixed | resolved
+                priority TEXT,                 -- low | medium | high
+                title TEXT,
+                top_aspect TEXT,
+                sentiment_score REAL,
+                sentiment_confidence REAL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                acknowledged_at TEXT,
+                reply_sent_at TEXT,
+                resolved_at TEXT,
+                reddit_posted_id TEXT,
+                history_json TEXT,             -- JSON list of {at, from_state, to_state, by, note}
+                data TEXT                      -- JSON blob with the rest
+            );
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_state ON post_lifecycle(state);
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_created ON post_lifecycle(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS insights (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,            -- 'competitor_daily' | 'competitor_on_demand'
+                window_days INTEGER,
+                generated_at TEXT NOT NULL,
+                payload TEXT                   -- JSON blob
+            );
+            CREATE INDEX IF NOT EXISTS idx_insights_kind_gen ON insights(kind, generated_at DESC);
         """)
         self._conn.commit()
 
@@ -191,6 +221,121 @@ class SQLiteBackend(StorageBackend):
             (status, item_id)
         )
         self._conn.commit()
+
+    def flush_all(self) -> dict[str, int]:
+        """Delete all rows from data tables (raw_posts, analyses, aggregates, feedback, alerts, pipeline_runs).
+
+        Cursors are NOT deleted here — call CursorTracker.reset_all() separately.
+        Caller is responsible for backing up the DB file before invoking.
+        Returns row counts deleted per table.
+        """
+        tables = ["raw_posts", "analyses", "aggregates", "feedback", "alerts", "pipeline_runs"]
+        deleted: dict[str, int] = {}
+        for tbl in tables:
+            try:
+                cur = self._conn.execute(f"SELECT COUNT(*) FROM {tbl}")
+                deleted[tbl] = cur.fetchone()[0]
+                self._conn.execute(f"DELETE FROM {tbl}")
+            except sqlite3.OperationalError:
+                deleted[tbl] = 0
+        self._conn.commit()
+        # Reclaim disk
+        try:
+            self._conn.execute("VACUUM")
+        except sqlite3.OperationalError:
+            pass
+        log.warning("flush_all", deleted=deleted)
+        return deleted
+
+    # ─── Post Lifecycle (Phase 4) ───────────────────────────────────────
+    LIFECYCLE_STATES = ("new", "acknowledged", "reply_sent", "issue_fixed", "resolved")
+
+    def lifecycle_upsert(self, row: dict) -> None:
+        """Insert or update a lifecycle row. `row` is a dict; arbitrary extra
+        keys land in the `data` JSON blob.
+        """
+        history = row.get("history") or []
+        cols = {
+            "post_id": row["post_id"],
+            "subreddit": row.get("subreddit", ""),
+            "state": row.get("state", "new"),
+            "priority": row.get("priority", "medium"),
+            "title": (row.get("title") or "")[:500],
+            "top_aspect": row.get("top_aspect", ""),
+            "sentiment_score": float(row.get("sentiment_score") or 0.0),
+            "sentiment_confidence": float(row.get("sentiment_confidence") or 0.0),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "acknowledged_at": row.get("acknowledged_at"),
+            "reply_sent_at": row.get("reply_sent_at"),
+            "resolved_at": row.get("resolved_at"),
+            "reddit_posted_id": row.get("reddit_posted_id"),
+            "history_json": json.dumps(history),
+            "data": json.dumps(row),
+        }
+        self._conn.execute(
+            """INSERT OR REPLACE INTO post_lifecycle
+               (post_id, subreddit, state, priority, title, top_aspect,
+                sentiment_score, sentiment_confidence, created_at, updated_at,
+                acknowledged_at, reply_sent_at, resolved_at, reddit_posted_id,
+                history_json, data)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            tuple(cols.values()),
+        )
+        self._conn.commit()
+
+    def lifecycle_get(self, post_id: str) -> Optional[dict]:
+        cur = self._conn.execute("SELECT data FROM post_lifecycle WHERE post_id = ?", (post_id,))
+        row = cur.fetchone()
+        return json.loads(row["data"]) if row else None
+
+    def lifecycle_list(self, state: Optional[str] = None, limit: int = 200) -> list[dict]:
+        if state:
+            cur = self._conn.execute(
+                "SELECT data FROM post_lifecycle WHERE state = ? ORDER BY created_at DESC LIMIT ?",
+                (state, limit),
+            )
+        else:
+            cur = self._conn.execute(
+                "SELECT data FROM post_lifecycle ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        return [json.loads(r["data"]) for r in cur.fetchall()]
+
+    def lifecycle_counts(self) -> dict[str, int]:
+        cur = self._conn.execute(
+            "SELECT state, COUNT(*) AS n FROM post_lifecycle GROUP BY state"
+        )
+        return {row["state"]: row["n"] for row in cur.fetchall()}
+
+    # ─── Competitor insights (Phase 5) ──────────────────────────────────
+    def insights_upsert(self, kind: str, window_days: int, payload: dict, generated_at: str) -> str:
+        item_id = f"{kind}_{window_days}d_{generated_at}"
+        self._conn.execute(
+            "INSERT OR REPLACE INTO insights (id, kind, window_days, generated_at, payload) VALUES (?,?,?,?,?)",
+            (item_id, kind, window_days, generated_at, json.dumps(payload)),
+        )
+        self._conn.commit()
+        return item_id
+
+    def insights_latest(self, kind: str = "competitor_daily") -> Optional[dict]:
+        cur = self._conn.execute(
+            "SELECT id, kind, window_days, generated_at, payload FROM insights WHERE kind = ? ORDER BY generated_at DESC LIMIT 1",
+            (kind,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["payload"] = json.loads(row["payload"])
+        return out
+
+    def insights_history(self, limit: int = 20) -> list[dict]:
+        cur = self._conn.execute(
+            "SELECT id, kind, window_days, generated_at FROM insights ORDER BY generated_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [dict(r) for r in cur.fetchall()]
 
     def close(self):
         self._conn.close()

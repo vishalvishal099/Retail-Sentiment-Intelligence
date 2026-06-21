@@ -4,7 +4,9 @@ Coordinates: Ingestion → Preprocess → Trust Filter → Analysis → Aggregat
 """
 
 import csv
+import os
 import time
+import uuid
 from enum import Enum
 from pathlib import Path
 
@@ -23,6 +25,12 @@ from src.aggregation.aggregator import Aggregator
 from src.alerts.engine import AlertEngine
 
 log = get_logger("pipeline")
+
+# Overlap buffer (seconds) applied when computing the `since` boundary for the
+# fetcher. Prevents posts at the cursor boundary (or indexed late by Arctic
+# Shift) from being skipped between runs. Storage layer uses INSERT OR REPLACE
+# on `id`, so re-fetched posts are deduplicated for free.
+INGEST_OVERLAP_SECONDS = int(os.environ.get("INGEST_OVERLAP_SECONDS", "300"))
 
 
 class PipelineStage(Enum):
@@ -58,6 +66,14 @@ class RetailSentimentPipeline:
         self.alert_engine: AlertEngine = None
         self.cost_tracker: CostTracker = None
         self._subreddits: list[str] = []
+        # Per-cycle staging: cursor advances are computed during _ingest but
+        # only persisted after storage.upsert_batch(raw_posts) succeeds, so a
+        # killed/crashed run never leaves a high-water-mark with no data.
+        self._pending_cursor_advances: dict[str, tuple[float, str]] = {}
+        # Per-cycle audit trail: one row per (run, subreddit) recording the
+        # fetch window we actually asked for. Written via cursor history.
+        self._run_id: str = uuid.uuid4().hex[:12]
+        self._cursor_history: list[dict] = []
 
     def initialize(self):
         """Initialize all components."""
@@ -103,7 +119,11 @@ class RetailSentimentPipeline:
 
     def run_cycle(self) -> dict:
         """Execute one full pipeline cycle."""
-        log.info("cycle_start")
+        # Fresh per-cycle audit state.
+        self._run_id = uuid.uuid4().hex[:12]
+        self._pending_cursor_advances = {}
+        self._cursor_history = []
+        log.info("cycle_start", run_id=self._run_id, overlap_seconds=INGEST_OVERLAP_SECONDS)
         reset_dedup_cache()
 
         # Stage 1: Ingest
@@ -127,6 +147,12 @@ class RetailSentimentPipeline:
         # Stage 3: Store raw (before trust/analysis so we don't lose data on crash)
         self.storage.upsert_batch("raw_posts", clean_units)
 
+        # Stage 3b: Commit cursor advances NOW that raw_posts is persisted.
+        # If the run dies after this point, the analyzer will pick up the
+        # un-analyzed raw rows next cycle (analyze_pending_*) but the
+        # ingest watermarks are safely advanced and won't refetch.
+        self._commit_cursors()
+
         # Stage 4: Trust Filter
         scored_units = self.trust_scorer.score_batch(clean_units)
         trusted = [u for u in scored_units if u.get("is_trusted")]
@@ -143,6 +169,9 @@ class RetailSentimentPipeline:
 
         # Store analyses
         self.storage.upsert_batch("analyses", analyses)
+
+        # Auto-create lifecycle entries for high-confidence negatives
+        self._maybe_create_lifecycle(analyses, scored_units)
 
         # Stage 6: Aggregate
         aggregate = self.aggregator.aggregate_window("daily")
@@ -205,6 +234,7 @@ class RetailSentimentPipeline:
             analyses = self.analyzer.analyze_batch(scored)
             if analyses:
                 self.storage.upsert_batch("analyses", analyses)
+                self._maybe_create_lifecycle(analyses, scored)
             total_analyzed += len(analyses)
             batches += 1
             log.info(
@@ -248,15 +278,51 @@ class RetailSentimentPipeline:
         from src.ingestion.arctic_shift import fetch_posts_arctic, fetch_comments_arctic
         from datetime import datetime, timezone, timedelta
 
+        now_utc = datetime.now(timezone.utc).timestamp()
         all_units = []
-        for subreddit in self._subreddits:
+        total_subs = len(self._subreddits)
+        for idx, subreddit in enumerate(self._subreddits, 1):
+            cursor_utc = self.cursor.get_cursor(subreddit)
+            if cursor_utc == 0.0:
+                since_utc = (datetime.now(timezone.utc) - timedelta(days=self.config.ingestion.backfill_days)).timestamp()
+                log.info("backfill_start", subreddit=subreddit, days=self.config.ingestion.backfill_days)
+            else:
+                # Apply overlap buffer so posts right at the boundary (or
+                # indexed late by Arctic Shift) are not skipped. Dedup at the
+                # storage layer handles any duplicates.
+                since_utc = max(0.0, cursor_utc - INGEST_OVERLAP_SECONDS)
+            until_utc = now_utc
+            # Scale post limit with the window size so long backfills aren't
+            # capped at the per-call default of 500. ~100 posts/day upper
+            # bound covers even busy subs (r/walmart peaks ~70/day).
+            window_days = max(1.0, (until_utc - since_utc) / 86400.0)
+            fetch_limit = max(500, min(int(window_days * 120), 20000))
+            fetched = 0
+            status = "ok"
+            error_msg = None
+            # Per-sub progress event so the dashboard can show a live
+            # "X of N subreddits, Y% covered" panel during long backfills.
+            log.info(
+                "subreddit_fetch_start",
+                subreddit=subreddit, position=idx, total_subs=total_subs,
+                since_utc=since_utc, until_utc=until_utc,
+                window_days=round(window_days, 2), fetch_limit=fetch_limit,
+            )
+            def _on_page(info, _sub=subreddit, _since=since_utc, _until=until_utc):
+                # Walk backward in time; oldest_utc shrinks toward since_utc.
+                covered = max(0.0, _until - info["oldest_utc"])
+                total = max(1.0, _until - _since)
+                pct = min(100.0, round(100.0 * covered / total, 1))
+                log.info(
+                    "subreddit_fetch_progress",
+                    subreddit=_sub, oldest_utc=info["oldest_utc"],
+                    newest_utc=info["newest_utc"], page_size=info["page_size"],
+                    total_fetched=info["total_fetched"], coverage_pct=pct,
+                )
             try:
-                last_utc = self.cursor.get_cursor(subreddit)
-                if last_utc == 0.0:
-                    last_utc = (datetime.now(timezone.utc) - timedelta(days=self.config.ingestion.backfill_days)).timestamp()
-                    log.info("backfill_start", subreddit=subreddit, days=self.config.ingestion.backfill_days)
-
-                posts = list(fetch_posts_arctic(subreddit, since_utc=last_utc))
+                posts = list(fetch_posts_arctic(
+                    subreddit, since_utc=since_utc, limit=fetch_limit, on_page=_on_page,
+                ))
 
                 for post in posts:
                     comments = fetch_comments_arctic(
@@ -267,14 +333,35 @@ class RetailSentimentPipeline:
                     all_units.extend(comments)
 
                 all_units.extend(posts)
+                fetched = len(posts)
 
                 if posts:
                     newest_utc = max(p.get("created_timestamp", 0) for p in posts)
-                    self.cursor.update_cursor(subreddit, newest_utc, posts[0]["id"])
+                    # Stage the advance; commit only after storage write.
+                    self._pending_cursor_advances[subreddit] = (newest_utc, posts[0]["id"])
 
             except Exception as e:
-                log.error("subreddit_ingest_failed", subreddit=subreddit, provider="arctic_shift", error=str(e))
-                continue
+                status = "failed"
+                error_msg = str(e)
+                log.error("subreddit_ingest_failed", subreddit=subreddit, provider="arctic_shift", error=error_msg)
+            finally:
+                self._cursor_history.append({
+                    "run_id": self._run_id,
+                    "subreddit": subreddit,
+                    "provider": "arctic_shift",
+                    "cursor_before": cursor_utc,
+                    "since_utc": since_utc,
+                    "until_utc": until_utc,
+                    "overlap_seconds": INGEST_OVERLAP_SECONDS if cursor_utc > 0 else 0,
+                    "fetched": fetched,
+                    "status": status,
+                    "error": error_msg,
+                })
+                log.info(
+                    "subreddit_fetch_complete",
+                    subreddit=subreddit, position=idx, total_subs=total_subs,
+                    fetched=fetched, status=status,
+                )
 
         return all_units
 
@@ -282,32 +369,81 @@ class RetailSentimentPipeline:
         """Fetch via PRAW (requires Reddit API credentials)."""
         from src.ingestion.fetcher import fetch_posts, get_backfill_timestamp
         from src.ingestion.comments import fetch_comments
+        from datetime import datetime, timezone
 
         all_units = []
         for subreddit in self._subreddits:
+            cursor_utc = self.cursor.get_cursor(subreddit)
+            if cursor_utc == 0.0:
+                since_utc = get_backfill_timestamp(self.config.ingestion.backfill_days)
+                log.info("backfill_start", subreddit=subreddit, days=self.config.ingestion.backfill_days)
+            else:
+                since_utc = max(0.0, cursor_utc - INGEST_OVERLAP_SECONDS)
+            until_utc = datetime.now(timezone.utc).timestamp()
+            fetched = 0
+            status = "ok"
+            error_msg = None
             try:
-                last_utc = self.cursor.get_cursor(subreddit)
-                if last_utc == 0.0:
-                    last_utc = get_backfill_timestamp(self.config.ingestion.backfill_days)
-                    log.info("backfill_start", subreddit=subreddit, days=self.config.ingestion.backfill_days)
-
-                posts = list(fetch_posts(self.reddit, subreddit, last_fetched_utc=last_utc))
+                posts = list(fetch_posts(self.reddit, subreddit, last_fetched_utc=since_utc))
 
                 for post in posts:
                     comments = fetch_comments(self.reddit, post["id"], self.config.ingestion)
                     all_units.extend(comments)
 
                 all_units.extend(posts)
+                fetched = len(posts)
 
                 if posts:
                     newest_utc = max(p.get("created_timestamp", 0) for p in posts)
-                    self.cursor.update_cursor(subreddit, newest_utc, posts[0]["id"])
+                    self._pending_cursor_advances[subreddit] = (newest_utc, posts[0]["id"])
 
             except Exception as e:
-                log.error("subreddit_ingest_failed", subreddit=subreddit, provider="praw", error=str(e))
-                continue
+                status = "failed"
+                error_msg = str(e)
+                log.error("subreddit_ingest_failed", subreddit=subreddit, provider="praw", error=error_msg)
+            finally:
+                self._cursor_history.append({
+                    "run_id": self._run_id,
+                    "subreddit": subreddit,
+                    "provider": "praw",
+                    "cursor_before": cursor_utc,
+                    "since_utc": since_utc,
+                    "until_utc": until_utc,
+                    "overlap_seconds": INGEST_OVERLAP_SECONDS if cursor_utc > 0 else 0,
+                    "fetched": fetched,
+                    "status": status,
+                    "error": error_msg,
+                })
 
         return all_units
+
+    def _commit_cursors(self) -> None:
+        """Advance per-subreddit cursors after a successful storage write.
+
+        Called by `run_cycle` only after `storage.upsert_batch('raw_posts', …)`
+        succeeds. Also flushes the per-subreddit fetch-window audit rows.
+        Both operations are idempotent / fail-soft.
+        """
+        for subreddit, (newest_utc, newest_id) in self._pending_cursor_advances.items():
+            try:
+                self.cursor.update_cursor(subreddit, newest_utc, newest_id)
+            except Exception as e:  # noqa: BLE001
+                log.error("cursor_commit_failed", subreddit=subreddit, error=str(e))
+        # Flush history rows whether or not posts were fetched, so analysts
+        # can see the empty windows too.
+        for row in self._cursor_history:
+            try:
+                self.cursor.record_history(**row)
+            except Exception as e:  # noqa: BLE001
+                log.warning("cursor_history_write_failed", subreddit=row.get("subreddit"), error=str(e))
+        log.info(
+            "cursors_committed",
+            run_id=self._run_id,
+            advanced=len(self._pending_cursor_advances),
+            history_rows=len(self._cursor_history),
+        )
+        self._pending_cursor_advances = {}
+        self._cursor_history = []
 
     def _analyze(self, units: list[dict]) -> list[dict]:
         """Run sentiment + aspect analysis on units in batches."""
@@ -329,6 +465,83 @@ class RetailSentimentPipeline:
                 break
 
         return analyses
+
+    def _maybe_create_lifecycle(self, analyses: list[dict], scored_units: list[dict]) -> None:
+        """Insert a `post_lifecycle` row + dispatch notifications for any
+        post that just came back as confidently negative.
+
+        Idempotent: skips posts that already have a lifecycle entry.
+        Honours the `notifications.auto_lifecycle` flag.
+        """
+        notif_cfg = getattr(self.config, "notifications", None)
+        if notif_cfg is None or not notif_cfg.auto_lifecycle:
+            return
+
+        threshold = float(notif_cfg.confidence_threshold or 0.7)
+        unit_by_id = {u.get("id"): u for u in scored_units}
+
+        from datetime import datetime, timezone
+        from src.notifications.dispatcher import dispatch_negative_post
+
+        created = 0
+        for a in analyses:
+            if a.get("sentiment") != "negative":
+                continue
+            conf = float(a.get("sentiment_confidence") or 0.0)
+            if conf < threshold:
+                continue
+            post_id = a.get("post_id") or a.get("id")
+            if not post_id:
+                continue
+            existing = self.storage.lifecycle_get(post_id)
+            if existing:
+                continue
+
+            unit = unit_by_id.get(post_id) or {}
+            now = datetime.now(timezone.utc).isoformat()
+            aspects = a.get("aspects") or []
+            top_aspect = aspects[0] if aspects else ""
+            title = unit.get("title") or unit.get("text", "")[:200]
+            sub = a.get("subreddit") or unit.get("subreddit", "")
+            score = float(a.get("sentiment_score") or 0.0)
+
+            row = {
+                "post_id": post_id,
+                "subreddit": sub,
+                "state": "new",
+                "priority": "high" if conf >= 0.85 else "medium",
+                "title": title,
+                "top_aspect": top_aspect,
+                "sentiment_score": score,
+                "sentiment_confidence": conf,
+                "created_at": now,
+                "updated_at": now,
+                "history": [{"at": now, "from_state": None, "to_state": "new", "by": "auto", "note": "auto-created from pipeline"}],
+                "reddit_url": unit.get("url") or unit.get("permalink", ""),
+            }
+            try:
+                self.storage.lifecycle_upsert(row)
+                created += 1
+            except Exception as e:  # noqa: BLE001
+                log.warning("lifecycle_upsert_failed", post_id=post_id, error=str(e))
+                continue
+
+            try:
+                dispatch_negative_post(
+                    notif_cfg,
+                    post_id=post_id,
+                    title=title,
+                    subreddit=sub,
+                    sentiment_score=score,
+                    confidence=conf,
+                    body_excerpt=(unit.get("text") or "")[:600],
+                    reddit_url=row["reddit_url"],
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("notif_dispatch_error", post_id=post_id, error=str(e))
+
+        if created:
+            log.info("lifecycle_auto_created", count=created)
 
     def _enrich_with_vision(self, units: list[dict]) -> None:
         """Caption image-bearing posts in place via the vision model.
@@ -367,6 +580,72 @@ class RetailSentimentPipeline:
             model=vision.model_name,
         )
 
+    def retry_vision(self, batch_size: int = 200) -> dict:
+        """Re-caption image-bearing raw_posts that have no `image_caption`.
+
+        Useful after Ollama was down during an ingest: pulls every raw post
+        that has an image URL but no caption, runs vision on it, and
+        upserts the post back. Idempotent and safe to re-run; posts that
+        already have a caption are skipped.
+        """
+        from src.ingestion import image_preprocess
+        from src.analysis.vision import get_vision_client
+
+        vcfg = self.config.models.vision
+        if not vcfg.enabled:
+            log.info("retry_vision_disabled")
+            return {"checked": 0, "captioned": 0, "skipped": 0, "failed": 0}
+
+        # Read all candidates via raw SQL (much faster than full iteration).
+        rows = self.storage._conn.execute(
+            "SELECT id, data FROM raw_posts"
+        ).fetchall()
+        import json as _json
+        units: list[dict] = []
+        for r in rows:
+            try:
+                u = _json.loads(r["data"])
+            except Exception:
+                continue
+            if image_preprocess.has_image(u) and not u.get("image_caption"):
+                units.append(u)
+
+        log.info("retry_vision_start", candidates=len(units))
+        if not units:
+            return {"checked": 0, "captioned": 0, "skipped": 0, "failed": 0}
+
+        vision = get_vision_client(vcfg, ollama_url=self.config.llm.ollama_url)
+        captioned = 0
+        failed = 0
+        for i, unit in enumerate(units):
+            url = image_preprocess.pick_image_url(unit)
+            if not url:
+                failed += 1
+                continue
+            post_id = unit.get("id", "").replace("reddit_", "")
+            cached = image_preprocess.fetch_and_normalize(post_id, url, vcfg)
+            if not cached:
+                failed += 1
+                continue
+            caption = vision.caption(cached)
+            if not caption:
+                failed += 1
+                continue
+            unit["image_caption"] = caption
+            unit["image_cached_path"] = str(cached)
+            self.storage.upsert("raw_posts", unit)
+            captioned += 1
+            if (i + 1) % batch_size == 0:
+                log.info("retry_vision_progress", done=i + 1, total=len(units), captioned=captioned, failed=failed)
+        result = {
+            "checked": len(units),
+            "captioned": captioned,
+            "failed": failed,
+            "skipped": 0,
+        }
+        log.info("retry_vision_complete", **result)
+        return result
+
     def _load_subreddits(self) -> list[str]:
         """Load the *enabled* subreddit list from the registry CSV.
 
@@ -396,6 +675,8 @@ def main():
       --analyze-pending    Process posts already in storage with status 'pending'
                            through trust + analyzer. No network calls. Useful for
                            backfilling analysis after a large ingest.
+      --retry-vision       Re-caption image-bearing raw_posts that have no caption
+                           (e.g. when Ollama was down during ingest).
       --max-batches N      Cap how many batches --analyze-pending will process.
       --lookback-hours N   Override the default lookback window (hours).
     """
@@ -418,7 +699,33 @@ def main():
         print(f"Analyze-pending result: {result}")
         return
 
+    if "--retry-vision" in sys.argv:
+        result = pipeline.retry_vision()
+        print(f"Retry-vision result: {result}")
+        return
+
     if "--once" in sys.argv:
+        # Optional one-shot lookback override: walk every cursor back to
+        # `now - lookback_hours` so this single cycle pulls a wider window.
+        # Cursors then advance normally to the new high-water mark, so the
+        # NEXT scheduled run resumes incremental ingestion without gaps.
+        if "--lookback-hours" in sys.argv:
+            idx = sys.argv.index("--lookback-hours")
+            if idx + 1 < len(sys.argv):
+                try:
+                    hours = int(sys.argv[idx + 1])
+                except ValueError:
+                    hours = 0
+                if hours > 0:
+                    from datetime import datetime, timezone, timedelta
+                    target = (datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp()
+                    rewound = 0
+                    for sub in pipeline._subreddits:
+                        cur = pipeline.cursor.get_cursor(sub)
+                        if cur == 0.0 or cur > target:
+                            pipeline.cursor.update_cursor(sub, target, "")
+                            rewound += 1
+                    log.info("lookback_applied", hours=hours, subreddits_rewound=rewound)
         result = pipeline.run_cycle()
         print(f"Pipeline cycle result: {result}")
     else:

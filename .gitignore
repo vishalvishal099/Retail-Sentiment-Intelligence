@@ -12,6 +12,19 @@ build/
 data/local.db
 data/local.db-shm
 data/local.db-wal
+data/local.db.bak.*
 data/llm_costs.jsonl
+data/image_cache/
 .pids/
 logs/
+.vscode/
+*.bak
+
+# Local-only large artifacts (not pushed to remote)
+models/
+*.safetensors
+*.bin
+*.pt
+*.onnx
+*.gguf
+*.tar.gz

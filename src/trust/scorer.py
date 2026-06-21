@@ -34,11 +34,14 @@ class TrustScorer:
         meta_score = score_metadata(unit, self.config)
         dedup_score = score_originality(unit)
 
-        # LLM credibility (skip if no LLM client or if metadata already gives high/low signal)
+        # LLM credibility — only invoked when metadata is ambiguous
+        # (0.3 < meta < 0.8). Outside that band metadata is already
+        # decisive, so we skip the call to cap cost on cloud providers.
+        # With the HF provider this routes to a rule-based heuristic
+        # (free); with cloud providers it is a real LLM call.
         llm_score = 0.5  # neutral default
-        llm_flags = []
+        llm_flags: list[str] = []
         if self.llm_client and 0.3 < meta_score < 0.8:
-            # Only call LLM when metadata is ambiguous (cost optimization)
             cred_result = self.llm_client.check_credibility(
                 text=self._get_text(unit),
                 metadata=unit.get("author_metadata", {}),

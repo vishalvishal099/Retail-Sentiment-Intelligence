@@ -16,15 +16,19 @@
 models:
 
   # ── Stage 1 ───────────────────────────────────────────────────────────────
-  # Sentiment classification — short-text positive/negative/neutral + confidence.
-  # cardiffnlp's RoBERTa is #1 on TweetEval; Reddit text is close enough to
-  # Twitter for this to be the best free pick.
+  # Sentiment classification — positive / negative / neutral + confidence.
+  # Default is our fine-tuned ModernBERT-base (3-stage curriculum: TweetEval →
+  # GoEmotions → Walmart-200 5-fold CV). Beats the cardiffnlp RoBERTa baseline
+  # by +0.137 macro F1 overall and +0.722 on long posts (≥512 tokens) — see
+  # docs/MODEL_COMPARISON.md. Fall back to RoBERTa if the local checkpoint is
+  # missing (e.g. fresh clone before training has been run).
   sentiment:
     enabled: true
     provider: huggingface       # huggingface | ollama | openai | azure_openai
-    model: cardiffnlp/twitter-roberta-base-sentiment-latest
+    model: models/modernbert_walmart/final
+    fallback_model: cardiffnlp/twitter-roberta-base-sentiment-latest
     device: auto                # auto | cpu | mps | cuda
-    max_length: 512
+    max_length: 1024            # ModernBERT supports up to 8192; 1024 matches training
     confidence_threshold: 0.7   # below this → flagged needs_review
 
   # ── Stage 2 ───────────────────────────────────────────────────────────────

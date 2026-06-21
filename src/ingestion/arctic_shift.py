@@ -11,7 +11,7 @@ import json
 import subprocess
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Generator
+from typing import Callable, Generator, Optional
 from urllib.parse import urlencode
 
 from src.ingestion.preprocess import preprocess_units
@@ -54,6 +54,7 @@ def fetch_posts_arctic(
     since_utc: float = 0.0,
     limit: int = 500,
     self_posts_only: bool = False,
+    on_page: Optional[Callable[[dict], None]] = None,
 ) -> Generator[dict, None, None]:
     """
     Fetch posts from Arctic Shift API for a given subreddit.
@@ -64,6 +65,10 @@ def fetch_posts_arctic(
         since_utc: Only return posts created after this UTC timestamp
         limit: Max posts to fetch (API max per request is 100)
         self_posts_only: If True, only fetch text posts (better for sentiment)
+        on_page:     Optional callback invoked after each successful page with
+                     a dict {'oldest_utc', 'newest_utc', 'page_size',
+                     'total_fetched', 'subreddit', 'since_utc'}. Used by the
+                     pipeline to emit live progress events.
     """
     fetched = 0
     before = None  # pagination: fetch posts created before this timestamp
@@ -113,6 +118,20 @@ def fetch_posts_arctic(
 
         # Check if there's more data
         if len(posts) < batch_size:
+            if on_page:
+                try:
+                    page_oldest = min((p.get("created_utc", 0) for p in posts), default=0)
+                    page_newest = max((p.get("created_utc", 0) for p in posts), default=0)
+                    on_page({
+                        "subreddit": subreddit,
+                        "since_utc": since_utc,
+                        "oldest_utc": page_oldest,
+                        "newest_utc": page_newest,
+                        "page_size": len(posts),
+                        "total_fetched": fetched,
+                    })
+                except Exception:
+                    pass
             break
 
         # Use the last post's created_utc as cursor for next page
@@ -121,6 +140,21 @@ def fetch_posts_arctic(
             before = last_created
         else:
             break
+
+        if on_page:
+            try:
+                page_oldest = min((p.get("created_utc", 0) for p in posts), default=0)
+                page_newest = max((p.get("created_utc", 0) for p in posts), default=0)
+                on_page({
+                    "subreddit": subreddit,
+                    "since_utc": since_utc,
+                    "oldest_utc": page_oldest,
+                    "newest_utc": page_newest,
+                    "page_size": len(posts),
+                    "total_fetched": fetched,
+                })
+            except Exception:
+                pass
 
         # Rate limiting: be polite to the free API
         time.sleep(0.5)

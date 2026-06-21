@@ -25,6 +25,7 @@ class AlertEngine:
         alerts.extend(self.detect_volume_spike())
         alerts.extend(self.detect_sentiment_crash())
         alerts.extend(self.detect_emerging_topics())
+        alerts.extend(self.detect_competitor_neg_spike())
         return alerts
 
     def detect_volume_spike(self, sigma_threshold: float = 2.0) -> list[dict]:
@@ -214,3 +215,79 @@ class AlertEngine:
                 else:
                     counts.append(0)
         return counts
+
+    def detect_competitor_neg_spike(
+        self,
+        min_posts_per_window: int = 25,
+        delta_threshold: float = 0.15,
+    ) -> list[dict]:
+        """Per-competitor week-over-week negative-ratio spike.
+
+        For each competitor subreddit, compare its negative ratio in the last
+        7 days vs the previous 7 days. Emit a medium-severity alert if the
+        ratio jumped by `delta_threshold` (e.g. +15 pts) and there are enough
+        posts in both windows to be meaningful.
+        """
+        from src.utils.segments import macro_segment_for
+
+        now = datetime.now(timezone.utc)
+        this_start = now - timedelta(days=7)
+        prev_start = now - timedelta(days=14)
+
+        sql = (
+            "SELECT a.data AS adata, r.subreddit AS sub, r.created_timestamp AS ts "
+            "FROM analyses a JOIN raw_posts r ON a.post_id = r.id "
+            "WHERE r.created_timestamp >= ?"
+        )
+        try:
+            cur = self.storage._conn.execute(sql, (prev_start.timestamp(),))
+            rows = cur.fetchall()
+        except Exception:
+            return []
+
+        import json as _json
+        bucket: dict[str, dict[str, dict[str, int]]] = defaultdict(
+            lambda: {"this": {"neg": 0, "total": 0}, "prev": {"neg": 0, "total": 0}}
+        )
+        for row in rows:
+            sub = row["sub"]
+            if not sub or macro_segment_for(sub) != "competitor":
+                continue
+            ts = row["ts"] or 0
+            window = "this" if ts >= this_start.timestamp() else "prev"
+            try:
+                a = _json.loads(row["adata"])
+            except Exception:
+                continue
+            bucket[sub][window]["total"] += 1
+            if a.get("sentiment") == "negative":
+                bucket[sub][window]["neg"] += 1
+
+        alerts = []
+        for sub, b in bucket.items():
+            t_total = b["this"]["total"]
+            p_total = b["prev"]["total"]
+            if t_total < min_posts_per_window or p_total < min_posts_per_window:
+                continue
+            t_ratio = b["this"]["neg"] / t_total
+            p_ratio = b["prev"]["neg"] / p_total
+            delta = t_ratio - p_ratio
+            if delta < delta_threshold:
+                continue
+            alerts.append({
+                "id": f"alert_comp_neg_{sub}_{now.strftime('%Y%m%d')}",
+                "type": "competitor_neg_spike",
+                "severity": "high" if delta >= 0.25 else "medium",
+                "title": f"r/{sub} negative ratio jumped +{delta:.0%} WoW",
+                "details": {
+                    "subreddit": sub,
+                    "this_week_negative_ratio": round(t_ratio, 3),
+                    "prev_week_negative_ratio": round(p_ratio, 3),
+                    "delta": round(delta, 3),
+                    "this_week_posts": t_total,
+                    "prev_week_posts": p_total,
+                },
+                "detected_at": now.isoformat(),
+                "time_window": now.strftime("%Y-%m-%d"),
+            })
+        return alerts

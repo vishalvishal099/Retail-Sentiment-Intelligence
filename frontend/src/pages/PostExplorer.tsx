@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ExplorerPost, DateRange } from '../api';
+import Card from '../components/Card';
+import Button from '../components/Button';
 
 const SENTIMENTS = ['', 'positive', 'negative', 'neutral'] as const;
 
@@ -68,20 +70,23 @@ export default function PostExplorer() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-2xl font-bold">Post Explorer</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-walmart-navy">Post Explorer</h2>
+          <p className="text-xs text-gray-500 mt-1">Search the analyzed-post archive by subreddit, sentiment, aspect or trust score.</p>
+        </div>
         <div className="flex items-center gap-2 flex-wrap text-xs">
           {filters.sentiment && (
-            <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20">
               Sentiment: {filters.sentiment}
             </span>
           )}
           {filters.range && (
-            <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20">
               Range: {RANGE_LABELS[filters.range as DateRange] || filters.range}
             </span>
           )}
           {filters.aspect && (
-            <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20">
               Aspect: {filters.aspect}
             </span>
           )}
@@ -89,36 +94,33 @@ export default function PostExplorer() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border rounded-lg p-4 flex gap-4 items-end flex-wrap">
-        <FilterInput label="Subreddit" value={filters.subreddit} onChange={v => setFilters(f => ({ ...f, subreddit: v }))} placeholder="e.g. walmart" />
-        <FilterSelect label="Sentiment" value={filters.sentiment} onChange={v => setFilters(f => ({ ...f, sentiment: v }))} options={[...SENTIMENTS]} />
-        <FilterInput label="Aspect" value={filters.aspect} onChange={v => setFilters(f => ({ ...f, aspect: v }))} placeholder="e.g. pricing" />
-        <FilterSelect
-          label="Range"
-          value={filters.range}
-          onChange={v => setFilters(f => ({ ...f, range: v }))}
-          options={['', '1h', '6h', '24h', 'today', 'yesterday', 'week', 'month', '60d', '90d']}
-        />
-        <FilterInput label="Min Trust" value={filters.trust_min} onChange={v => setFilters(f => ({ ...f, trust_min: v }))} placeholder="0.0-1.0" />
-        <FilterInput label="Limit" value={filters.limit} onChange={v => setFilters(f => ({ ...f, limit: v }))} placeholder="50" />
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Searching…' : 'Search'}
-        </button>
-      </div>
+      <Card>
+        <div className="flex gap-4 items-end flex-wrap">
+          <FilterInput label="Subreddit" value={filters.subreddit} onChange={v => setFilters(f => ({ ...f, subreddit: v }))} placeholder="e.g. walmart" />
+          <FilterSelect label="Sentiment" value={filters.sentiment} onChange={v => setFilters(f => ({ ...f, sentiment: v }))} options={[...SENTIMENTS]} />
+          <FilterInput label="Aspect" value={filters.aspect} onChange={v => setFilters(f => ({ ...f, aspect: v }))} placeholder="e.g. pricing" />
+          <FilterSelect
+            label="Range"
+            value={filters.range}
+            onChange={v => setFilters(f => ({ ...f, range: v }))}
+            options={['', '1h', '6h', '24h', 'today', 'yesterday', 'week', 'month', '60d', '90d']}
+          />
+          <FilterInput label="Min Trust" value={filters.trust_min} onChange={v => setFilters(f => ({ ...f, trust_min: v }))} placeholder="0.0-1.0" />
+          <FilterInput label="Limit" value={filters.limit} onChange={v => setFilters(f => ({ ...f, limit: v }))} placeholder="50" />
+          <Button onClick={handleSearch} disabled={loading} variant="primary">
+            {loading ? 'Searching…' : 'Search'}
+          </Button>
+        </div>
+      </Card>
 
-      {/* Results */}
       <div className="text-xs text-gray-500">
         {loading ? 'Loading…' : `${posts.length} result${posts.length === 1 ? '' : 's'}`}
       </div>
       <div className="space-y-2">
         {posts.length === 0 && !loading && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
-            <p className="font-medium">No posts match these filters.</p>
-            <p className="text-xs text-amber-800 mt-1">
+          <div className="bg-walmart-spark/10 border border-walmart-spark/40 rounded-xl p-4 text-sm text-walmart-navy">
+            <p className="font-semibold">No posts match these filters.</p>
+            <p className="text-xs mt-1 text-walmart-navy/80">
               Filters use the post's <strong>created time</strong> (when the Redditor wrote it), not when our
               pipeline analyzed it. If "Today" is empty, no posts with this sentiment were written today yet —
               try widening to <strong>Last 24h</strong>, <strong>This week</strong>, or removing the sentiment filter.
@@ -126,11 +128,11 @@ export default function PostExplorer() {
           </div>
         )}
         {posts.map((post, i) => (
-          <article key={post.id || i} className="bg-white border rounded-lg p-3 text-sm hover:border-blue-300 transition-colors">
+          <article key={post.id || i} className="bg-surface border border-walmart-navy/10 rounded-2xl shadow-card p-3 text-sm hover:border-walmart-blue/40 transition-colors">
             <div className="flex items-center gap-2 mb-1 flex-wrap text-xs">
               <SentimentBadge sentiment={post.sentiment} />
               {post.human_validated && (
-                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200" title="Human-validated">
+                <span className="px-2 py-0.5 rounded-pill bg-walmart-spark/20 text-walmart-navy border border-walmart-spark/40" title="Human-validated">
                   ✓ Validated
                 </span>
               )}
@@ -144,7 +146,7 @@ export default function PostExplorer() {
                 <span className="text-gray-400">trust {post.trust_score.toFixed(2)}</span>
               )}
             </div>
-            {post.title && <div className="font-semibold text-gray-900 mb-1">{post.title}</div>}
+            {post.title && <div className="font-semibold text-walmart-navy mb-1">{post.title}</div>}
             {post.text && post.text !== post.title && (
               <p className="text-gray-700 line-clamp-3">{post.text}</p>
             )}
@@ -153,7 +155,7 @@ export default function PostExplorer() {
                 href={post.reddit_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-block mt-2 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                className="inline-block mt-2 text-xs text-walmart-blue hover:underline font-medium"
               >
                 View on Reddit ↗
               </a>
@@ -168,8 +170,8 @@ export default function PostExplorer() {
 function FilterInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <label className="text-xs text-gray-500 block mb-1">{label}</label>
-      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="border rounded px-3 py-1.5 text-sm w-32" />
+      <label className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold block mb-1">{label}</label>
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="border border-walmart-navy/15 rounded-pill px-3 py-1.5 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-walmart-blue focus:border-walmart-blue" />
     </div>
   );
 }
@@ -177,8 +179,8 @@ function FilterInput({ label, value, onChange, placeholder }: { label: string; v
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div>
-      <label className="text-xs text-gray-500 block mb-1">{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)} className="border rounded px-3 py-1.5 text-sm">
+      <label className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold block mb-1">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} className="border border-walmart-navy/15 rounded-pill px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-walmart-blue focus:border-walmart-blue">
         {options.map(o => <option key={o} value={o}>{o || 'All'}</option>)}
       </select>
     </div>
@@ -187,9 +189,9 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
   const colors: Record<string, string> = {
-    positive: 'bg-green-100 text-green-800',
-    negative: 'bg-red-100 text-red-800',
-    neutral: 'bg-gray-100 text-gray-600',
+    positive: 'bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/20',
+    negative: 'bg-sentiment-negative/10 text-sentiment-negative border border-sentiment-negative/20',
+    neutral: 'bg-walmart-navy/5 text-gray-600 border border-walmart-navy/10',
   };
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[sentiment] || colors.neutral}`}>{sentiment}</span>;
+  return <span className={`px-2 py-0.5 rounded-pill text-xs font-medium ${colors[sentiment] || colors.neutral}`}>{sentiment}</span>;
 }

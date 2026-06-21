@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src.utils.logger import get_logger
-from src.utils.segments import segment_for, _slugify
+from src.utils.segments import segment_for, _slugify, macro_segment_for, MACRO_GROUPS, DEFAULT_MACRO
 
 log = get_logger("subreddit_registry")
 
@@ -30,7 +30,7 @@ DEFAULT_CSV = PROJECT_ROOT / "data" / "subreddits_clean.csv"
 
 # Canonical column order — anything we write goes back in this order so the
 # file stays diffable. New columns are appended.
-COLUMNS = ["subreddit", "group", "subscribers", "created_utc", "subreddit_type", "enabled"]
+COLUMNS = ["subreddit", "group", "macro_group", "subscribers", "created_utc", "subreddit_type", "enabled"]
 
 
 @dataclass
@@ -41,6 +41,7 @@ class SubredditEntry:
     created_utc: str
     subreddit_type: str
     enabled: bool
+    macro_group: str = DEFAULT_MACRO
 
     @property
     def segment(self) -> str:
@@ -50,6 +51,7 @@ class SubredditEntry:
         return {
             "subreddit": self.subreddit,
             "group": self.group,
+            "macro_group": self.macro_group if self.macro_group in MACRO_GROUPS else DEFAULT_MACRO,
             "subscribers": str(self.subscribers) if self.subscribers else "",
             "created_utc": self.created_utc or "",
             "subreddit_type": self.subreddit_type or "public",
@@ -85,6 +87,11 @@ def load_all(csv_path: Path | str = DEFAULT_CSV) -> list[SubredditEntry]:
                 created_utc=(row.get("created_utc") or "").strip(),
                 subreddit_type=(row.get("subreddit_type") or "public").strip(),
                 enabled=_truthy(row.get("enabled")),
+                macro_group=(
+                    (row.get("macro_group") or "").strip().lower()
+                    if (row.get("macro_group") or "").strip().lower() in MACRO_GROUPS
+                    else macro_segment_for(sub)
+                ),
             ))
     return entries
 
@@ -153,6 +160,7 @@ def upsert(name: str, group: str = "", enabled: bool = True,
         result = SubredditEntry(
             subreddit=name, group=group, subscribers=subscribers,
             created_utc="", subreddit_type=subreddit_type, enabled=enabled,
+            macro_group=macro_segment_for(name),
         )
         entries.append(result)
     save_all(entries, csv_path)

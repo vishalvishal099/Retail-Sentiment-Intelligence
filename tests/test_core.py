@@ -3,7 +3,7 @@ Tests for trust scorer, preprocessor, and storage.
 """
 
 import pytest
-from src.trust.heuristics import score_metadata
+from src.trust.heuristics import score_metadata, score_credibility
 from src.trust.dedup import score_originality, reset_dedup_store
 from src.ingestion.preprocess import preprocess_unit, reset_dedup_cache
 from src.utils.privacy import hash_username
@@ -37,6 +37,64 @@ class TestTrustHeuristics:
     def test_score_bounds(self):
         unit = {"body": "test", "score": 0, "author_metadata": {"account_age_days": 0, "total_karma": 0}}
         score = score_metadata(unit)
+        assert 0.0 <= score <= 1.0
+
+
+class TestCredibilityHeuristics:
+    def test_organic_retail_post_high_score(self):
+        unit = {
+            "title": "Store 1234 freight delays",
+            "body": (
+                "Our coach moved me from deli to OGP last week. As an associate "
+                "I think the new schedule is rough but workable for cap 2. "
+                "Anyone else seeing freight pile up on aisle 12 lately?"
+            ),
+            "author_metadata": {"account_age_days": 800, "total_karma": 3000},
+        }
+        score, flags = score_credibility(unit)
+        assert score >= 0.6, f"expected high credibility, got {score} (flags={flags})"
+        assert any("retail" in f or "organic" in f for f in flags)
+
+    def test_promo_spam_low_score(self):
+        unit = {
+            "title": "AMAZING DEAL!!!",
+            "body": (
+                "BUY NOW!!! CLICK HERE for promo code!!! Don't miss this "
+                "limited time offer!!! Link in bio!!! Use code SAVE50!!!"
+            ),
+            "author_metadata": {"account_age_days": 2, "total_karma": 0},
+        }
+        score, flags = score_credibility(unit)
+        assert score <= 0.3, f"expected low credibility, got {score} (flags={flags})"
+        assert "promotional_language" in flags
+
+    def test_karma_age_mismatch_flagged(self):
+        unit = {
+            "title": "Test",
+            "body": "some text about walmart shopping experience here today",
+            "author_metadata": {"account_age_days": 5, "total_karma": 5000},
+        }
+        _, flags = score_credibility(unit)
+        assert "karma_age_mismatch" in flags
+
+    def test_neutral_post_mid_score(self):
+        unit = {
+            "title": "Question",
+            "body": "Has anyone shopped at the store recently? Curious about prices.",
+            "author_metadata": {"account_age_days": 100, "total_karma": 100},
+        }
+        score, _ = score_credibility(unit)
+        assert 0.3 <= score <= 0.7
+
+    def test_empty_content_low(self):
+        unit = {"title": "", "body": "", "author_metadata": {}}
+        score, flags = score_credibility(unit)
+        assert score <= 0.4
+        assert "empty_content" in flags
+
+    def test_score_bounds(self):
+        unit = {"title": "x", "body": "y", "author_metadata": {}}
+        score, _ = score_credibility(unit)
         assert 0.0 <= score <= 1.0
 
 
