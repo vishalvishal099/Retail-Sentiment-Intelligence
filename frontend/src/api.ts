@@ -75,6 +75,29 @@ export interface InsightsResponse {
   payload?: InsightsPayload;
 }
 
+export interface NotificationGroup {
+  id: string;
+  group_name: string;
+  subreddits: string[];
+  email_dl: string[];
+  slack_channel?: string;
+  enabled: boolean;
+  priority_filter: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationLogEntry {
+  id: number;
+  group_id: string;
+  group_name?: string;
+  post_id: string;
+  channel: string;
+  status: string;
+  error?: string | null;
+  sent_at: string;
+}
+
 async function fetchJSON<T>(url: string): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`);
   if (!response.ok) {
@@ -97,6 +120,11 @@ export interface BrandHealthData {
   days_requested?: number;
   days_with_data?: number;
   total_posts: number;
+  /** Rows in raw_posts for the window (before analyzer runs). Always ≥ total_posts.
+   *  The difference is `pending_analysis`. */
+  fetched_count?: number;
+  /** How many posts have been ingested but not yet analyzed in this window. */
+  pending_analysis?: number;
   trusted_posts: number;
   trust_gate?: TrustGateInfo;
   sentiment_distribution: { positive: number; negative: number; neutral: number };
@@ -302,11 +330,16 @@ export interface IngestProgress {
  */
 export interface PipelineCursor {
   subreddit: string;
-  /** Unix seconds. Highest post created_utc we've successfully stored. */
+  /** Unix seconds. The `since` boundary passed to the fetcher on the next run.
+   *  NOT the newest post we've seen — use `newest_post_utc` for that. */
   last_fetched_utc: number | null;
   last_fetched_id: string | null;
   /** ISO timestamp of the cursor row's last update. */
   updated_at: string | null;
+  /** MAX(created_timestamp) actually in raw_posts for this sub — the true
+   *  "last post seen". Can differ from last_fetched_utc when cursor drift
+   *  occurs (a lookback-hours rewind that upstream returned 0 for). */
+  newest_post_utc: number | null;
   /** Most recent (run, subreddit) fetch window from cursor_history. */
   last_window: {
     since_utc: number;
@@ -316,6 +349,90 @@ export interface PipelineCursor {
     recorded_at: string;
     overlap_seconds: number;
   } | null;
+}
+
+// ─── Data-freshness / gap-fill ────────────────────────────────────────────
+
+export interface GapEntry {
+  subreddit: string;
+  post_count: number;
+  newest_post_utc: number | null;
+  cursor_utc: number | null;
+  gap_hours: number | null;
+  cursor_drift_hours: number;
+  resume_from_utc: number;
+  needs_fetch: boolean;
+  /** 'fresh' | 'stale' | 'cursor_ahead_of_data' | 'never_fetched' */
+  reason: string;
+}
+
+export interface GapReport {
+  generated_at: string;
+  gap_threshold_hours: number;
+  totals: { subreddits: number; stale: number; drifted: number; fresh: number };
+  /** Metadata about the last successful ingest — drives the "Catch up from …" button.
+   *  Null if no successful ingest has ever run. */
+  last_successful_ingest?: {
+    id: string;
+    started_at: string;
+    finished_at: string;
+    trigger: string;
+    ingested: number;
+    analyzed: number;
+    hours_ago: number | null;
+  } | null;
+  subreddits: GapEntry[];
+}
+
+export interface FillGapsPlanEntry {
+  subreddit: string;
+  old_cursor_utc: number;
+  new_cursor_utc: number;
+  rewind_hours: number | null;
+  reason: string;
+}
+
+export interface FillGapsResponse {
+  started: boolean;
+  reason?: string;
+  detail?: string;
+  dry_run?: boolean;
+  plan?: {
+    dry_run: boolean;
+    since_utc: number | null;
+    gap_threshold_hours: number;
+    rewound_subreddits: number;
+    plan: FillGapsPlanEntry[];
+    gap_report: GapReport;
+  };
+  state?: PipelineStatus;
+}
+
+export interface AnalysisBacklog {
+  raw_posts: number;
+  analyses: number;
+  pending: number;
+}
+
+export interface ImageFailureSample {
+  post_id: string;
+  subreddit: string;
+  created_utc: number;
+  title: string;
+  url: string;
+  status: string;   // fetched | deleted | throttled | forbidden | gone | too_large | not_image | server_error | connection_error | decode_error | client_error
+  http_code: number | null;
+  error: string;
+  checked_at: string | null;
+  permalink: string | null;
+}
+
+export interface ImageFailuresReport {
+  total_checked: number;
+  total_fetched: number;
+  total_failed: number;
+  totals_by_status: Record<string, number>;
+  samples: ImageFailureSample[];
 }
 
 // ─── Pipeline page types ──────────────────────────────────────────────────
@@ -434,7 +551,12 @@ export const api = {
     }>(`/aspects/${encodeURIComponent(aspect)}?${qs.toString()}`);
   },
   getAlerts: () => fetchJSON<{ alerts: Alert[]; count: number }>('/alerts'),
-  getReviewQueue: (limit = 20) => fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review?limit=${limit}`),
+  getReviewQueue: (limit = 20, sentiment?: string, range?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (sentiment) params.set('sentiment', sentiment);
+    if (range) params.set('range', range);
+    return fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review?${params}`);
+  },
   getReviewStats: () => fetchJSON<ReviewStats>('/review/stats'),
   submitReview: (postId: string, correction: Record<string, unknown>) =>
     fetch(`${API_BASE}/review/${postId}`, {
@@ -488,7 +610,8 @@ export const api = {
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
     // Tell the API the browser's timezone so "today" anchors on local midnight.
     if (!qs.has('tz_offset')) qs.set('tz_offset', String(new Date().getTimezoneOffset()));
-    return fetchJSON<{ posts: ExplorerPost[]; count: number }>(`/posts?${qs}`);
+    // `count` = returned page size, `total` = true match count in the window.
+    return fetchJSON<{ posts: ExplorerPost[]; count: number; total: number }>(`/posts?${qs}`);
   },
   getTrustStats: () => fetchJSON<Record<string, unknown>>('/trust-stats'),
   getPipelineStatus: () => fetchJSON<PipelineStatus>('/pipeline/status'),
@@ -518,6 +641,26 @@ export const api = {
       overlap_seconds: number;
       next_scheduled_run_at: string | null;
     }>('/pipeline/cursors'),
+
+  // ─── Data-freshness / gap-fill ─────────────────────────────────────────
+  getPipelineGaps: (gapHours: number = 1) =>
+    fetchJSON<GapReport>(`/pipeline/gaps?gap_hours=${gapHours}`),
+  fillGaps: (opts: { since?: string; gapHours?: number; dryRun?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.since) qs.set('since', opts.since);
+    if (opts.gapHours !== undefined) qs.set('gap_hours', String(opts.gapHours));
+    if (opts.dryRun) qs.set('dry_run', 'true');
+    return fetch(`${API_BASE}/pipeline/fill-gaps?${qs}`, { method: 'POST' })
+      .then(r => r.json()) as Promise<FillGapsResponse>;
+  },
+  getAnalysisBacklog: () => fetchJSON<AnalysisBacklog>('/pipeline/analysis-backlog'),
+  analyzePending: (maxBatches?: number) => {
+    const qs = maxBatches ? `?max_batches=${maxBatches}` : '';
+    return fetch(`${API_BASE}/pipeline/analyze-pending${qs}`, { method: 'POST' })
+      .then(r => r.json()) as Promise<{ started: boolean; reason?: string; state: PipelineStatus }>;
+  },
+  getImageFailures: (limit: number = 50) =>
+    fetchJSON<ImageFailuresReport>(`/ingestion/image-failures?limit=${limit}`),
 
   // ─── Pipeline page ────────────────────────────────────────────────────
   getIngestionFunnel: (range: DateRange = 'week', segment?: string | null) => {
@@ -638,4 +781,32 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ window_days: windowDays }),
     }).then(r => r.json()) as Promise<{ id: string; kind: string; generated_at: string; payload: InsightsPayload }>,
+
+  // ─── Notification Groups ─────────────────────────────────────────────
+  getNotificationConfig: () =>
+    fetchJSON<{ sender_email: string; groups: NotificationGroup[] }>('/notifications/config'),
+  getNotificationGroups: () =>
+    fetchJSON<{ groups: NotificationGroup[] }>('/notifications/groups'),
+  createNotificationGroup: (group: Partial<NotificationGroup>) =>
+    fetch(`${API_BASE}/notifications/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(group),
+    }).then(r => r.json()) as Promise<{ ok: boolean; group: NotificationGroup }>,
+  updateNotificationGroup: (groupId: string, group: Partial<NotificationGroup>) =>
+    fetch(`${API_BASE}/notifications/groups/${groupId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(group),
+    }).then(r => r.json()) as Promise<{ ok: boolean; group: NotificationGroup }>,
+  deleteNotificationGroup: (groupId: string) =>
+    fetch(`${API_BASE}/notifications/groups/${groupId}`, { method: 'DELETE' })
+      .then(r => r.json()) as Promise<{ ok: boolean }>,
+  testNotificationGroup: (groupId: string) =>
+    fetch(`${API_BASE}/notifications/test/${groupId}`, { method: 'POST' })
+      .then(r => r.json()) as Promise<{ ok: boolean; results: Record<string, any> }>,
+  getNotificationLog: (limit = 50) =>
+    fetchJSON<{ log: NotificationLogEntry[] }>(`/notifications/log?limit=${limit}`),
+  getAvailableSubreddits: () =>
+    fetchJSON<{ subreddits: Array<{ subreddit: string; group: string; macro_group: string }> }>('/notifications/subreddits'),
 };

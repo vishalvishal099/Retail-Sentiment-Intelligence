@@ -1,0 +1,30 @@
+{
+  "in_training_run": {
+    "n_posts": 200,
+    "trust_score_mean": 0.71232,
+    "trust_score_std": 0.042167262063711804,
+    "trust_score_min": 0.525,
+    "trust_score_max": 0.795,
+    "sentiment_confidence_mean": 0.9999830251932145,
+    "sentiment_confidence_std": 9.964542698070428e-05,
+    "gate_score_mean": 0.7123150000000001,
+    "n_trusted_final": 200,
+    "n_flagged_final": 0,
+    "pct_trusted_final": 100.0,
+    "n_trusted_legacy_0p5": 200,
+    "agreement_with_human_pct": 100.0,
+    "agreement_when_trusted": 100.0,
+    "agreement_when_flagged": null
+  },
+  "out_of_fold_generalization": {
+    "macro_f1": 0.7641655805871035,
+    "cv_macro_f1_mean": 0.7362414709473533,
+    "cv_macro_f1_std": 0.11546482281686254,
+    "per_class_f1": {
+      "negative": 0.8778625954198473,
+      "neutral": 0.7479674796747967,
+      "positive": 0.6666666666666666
+    },
+    "roberta_baseline_macro_f1": 0.6271888754299001
+  }
+}

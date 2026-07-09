@@ -105,7 +105,18 @@ def fetch_and_normalize(
                     return None
                 buf.write(chunk)
     except Exception as e:
-        log.warning("image_fetch_failed", post_id=post_id, url=image_url[:80], error=str(e))
+        # Common, expected failures — the URL is dead or throttled. Demote
+        # to INFO so the log isn't dominated by them. Only truly unexpected
+        # errors (5xx, network stack, decode) stay at WARNING.
+        msg = str(e)
+        is_expected = any(code in msg for code in (
+            "404 Client Error",   # Deleted / removed post
+            "403 Client Error",   # Forbidden (private / age-gated)
+            "410 Client Error",   # Gone
+            "429 Client Error",   # Rate limit (esp. imgur)
+        ))
+        level = log.info if is_expected else log.warning
+        level("image_fetch_failed", post_id=post_id, url=image_url[:80], error=msg)
         return None
 
     # 2. Resize + re-encode to JPEG
@@ -132,3 +143,103 @@ def fetch_and_normalize(
 
     log.info("image_cached", post_id=post_id, path=str(out_path), size=out_path.stat().st_size)
     return out_path
+
+
+# ─── Rich-status variant used by _enrich_with_vision so the outcome (fetched,
+#     deleted, throttled, ...) is preserved on the post itself and can be shown
+#     in the Pipeline UI. Wraps fetch_and_normalize; identical logic, extra
+#     bookkeeping.
+def fetch_with_status(
+    post_id: str,
+    image_url: str,
+    cfg: ModelStageConfig,
+) -> tuple[Optional[Path], dict]:
+    """Same as fetch_and_normalize but also returns a status dict.
+
+    Status dict fields:
+      - status:       'fetched' | 'deleted' | 'forbidden' | 'gone' | 'throttled'
+                      | 'too_large' | 'not_image' | 'server_error'
+                      | 'connection_error' | 'decode_error' | 'client_error'
+      - http_code:    int if known (from HTTPError), else None
+      - error:        Short error message (truncated)
+      - checked_at:   ISO-8601 UTC timestamp of the fetch attempt
+    """
+    from datetime import datetime, timezone
+    cache_dir = Path(cfg.cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    out_path = cache_dir / f"{post_id}.jpg"
+    checked_at = datetime.now(timezone.utc).isoformat()
+
+    # Cache hit — already have it, no network call.
+    if out_path.exists() and out_path.stat().st_size > 0:
+        return out_path, {
+            "status": "fetched",
+            "http_code": None,
+            "error": None,
+            "checked_at": checked_at,
+            "cached": True,
+        }
+
+    try:
+        with requests.get(image_url, timeout=cfg.fetch_timeout, stream=True) as r:
+            r.raise_for_status()
+            ctype = r.headers.get("Content-Type", "").lower()
+            if "image" not in ctype:
+                log.info("image_skip_non_image", post_id=post_id, ctype=ctype)
+                return None, {"status": "not_image", "http_code": r.status_code,
+                              "error": f"content-type={ctype}", "checked_at": checked_at}
+            buf = io.BytesIO()
+            total = 0
+            for chunk in r.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > cfg.max_image_bytes:
+                    log.info("image_skip_too_large", post_id=post_id, bytes=total)
+                    return None, {"status": "too_large", "http_code": r.status_code,
+                                  "error": f"bytes>{cfg.max_image_bytes}", "checked_at": checked_at}
+                buf.write(chunk)
+    except requests.HTTPError as e:
+        code = getattr(e.response, "status_code", None)
+        status_map = {404: "deleted", 410: "gone", 403: "forbidden", 429: "throttled"}
+        status = status_map.get(code, ("client_error" if code and code < 500 else "server_error"))
+        is_expected = code in status_map
+        level = log.info if is_expected else log.warning
+        level("image_fetch_failed", post_id=post_id, url=image_url[:80], error=str(e))
+        return None, {"status": status, "http_code": code, "error": str(e)[:200], "checked_at": checked_at}
+    except Exception as e:
+        # Connection reset, DNS, timeout, TLS handshake, etc.
+        log.warning("image_fetch_failed", post_id=post_id, url=image_url[:80], error=str(e))
+        return None, {"status": "connection_error", "http_code": None,
+                      "error": str(e)[:200], "checked_at": checked_at}
+
+    # Normalize step
+    try:
+        buf.seek(0)
+        img = Image.open(buf)
+        if getattr(img, "is_animated", False):
+            img.seek(0)
+        img = img.convert("RGB")
+        max_dim = cfg.max_image_dimension or 768
+        w, h = img.size
+        if max(w, h) > max_dim:
+            scale = max_dim / float(max(w, h))
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        img.save(out_path, format="JPEG", quality=85, optimize=True)
+    except Exception as e:
+        log.warning("image_normalize_failed", post_id=post_id, error=str(e))
+        try:
+            os.unlink(out_path)
+        except FileNotFoundError:
+            pass
+        return None, {"status": "decode_error", "http_code": None,
+                      "error": str(e)[:200], "checked_at": checked_at}
+
+    log.info("image_cached", post_id=post_id, path=str(out_path), size=out_path.stat().st_size)
+    return out_path, {
+        "status": "fetched",
+        "http_code": None,
+        "error": None,
+        "checked_at": checked_at,
+        "cached": False,
+    }

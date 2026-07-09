@@ -45,6 +45,11 @@ class LLMConfig:
     ollama_keep_alive: str = "10m"
     ollama_request_timeout: int = 60
 
+    # Walmart LLM Gateway (STG/Sandbox)
+    wmt_gateway_url: str = "https://llmgateway-stg.walmart.com/v1"
+    wmt_gateway_key: str = ""
+    wmt_gateway_model: str = "gpt-4o-mini"
+
 
 @dataclass
 class IngestionConfig:
@@ -286,6 +291,9 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
             azure_api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
             azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             hf_token=os.getenv("HF_TOKEN", ""),
+            wmt_gateway_url=os.getenv("WMT_LLM_GATEWAY_URL", "https://llmgateway-stg.walmart.com/v1"),
+            wmt_gateway_key=os.getenv("WMT_LLM_GATEWAY_KEY", ""),
+            wmt_gateway_model=os.getenv("WMT_LLM_GATEWAY_MODEL", "gpt-4o-mini"),
         ),
         ingestion=IngestionConfig(
             interval_minutes=int(os.getenv("INGESTION_INTERVAL_MINUTES", yaml_data.get("ingestion", {}).get("interval_minutes", 60))),

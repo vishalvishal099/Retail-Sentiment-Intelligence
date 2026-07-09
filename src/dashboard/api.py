@@ -126,10 +126,21 @@ async def _run_pipeline_subprocess(trigger: str, extra_args: list[str] | None = 
     env["PYTHONPATH"] = str(_PROJECT_ROOT)
     # Force unbuffered child stdout so we can read stage events live.
     env.setdefault("PYTHONUNBUFFERED", "1")
-    cmd_args = [sys.executable, "-u", "-m", "src.pipeline"]
+    # All HF models are already cached under ~/.cache/huggingface/. Skip the
+    # Hub freshness HEAD check so we don't stall 40s per model load when the
+    # host is unreachable (off VPN, on corp WiFi with DPI, etc.). Users who
+    # want to pull an updated weight can unset these to re-enable checks.
+    env.setdefault("HF_HUB_OFFLINE", "1")
+    env.setdefault("TRANSFORMERS_OFFLINE", "1")
+    # The API runs in .venv (fastapi only). The pipeline needs the ML stack
+    # (transformers/torch); allow overriding the interpreter via env var so
+    # we can point at /opt/miniconda3/bin/python without duplicating 2 GB of
+    # wheels into .venv.
+    pipeline_python = os.environ.get("PIPELINE_PYTHON", sys.executable)
+    cmd_args = [pipeline_python, "-u", "-m", "src.pipeline"]
     # `--once` is the default cycle mode; standalone modes
-    # (--retry-vision, --analyze-pending) replace it entirely.
-    standalone_modes = {"--retry-vision", "--analyze-pending"}
+    # (--retry-vision, --analyze-pending, --fill-gaps) replace it entirely.
+    standalone_modes = {"--retry-vision", "--analyze-pending", "--fill-gaps"}
     if extra_args and any(a in standalone_modes for a in extra_args):
         cmd_args.extend(extra_args)
     else:
@@ -702,6 +713,12 @@ def pipeline_cursors():
     Lets the UI show exactly *what time delta* each scheduled run has
     covered, so analysts can spot gaps (e.g. a subreddit whose
     `last_window.fetched` has been 0 for 3 cycles in a row).
+
+    Each row also carries `newest_post_utc` — the MAX(created_timestamp)
+    actually in raw_posts for that sub. This can differ from `last_fetched_utc`
+    when a lookback-hours rewind put the cursor behind the data we already
+    have (cursor drift). The UI treats freshness against newest_post_utc,
+    not the cursor.
     """
     from src.storage.cursor import CursorTracker
     from src.pipeline import INGEST_OVERLAP_SECONDS
@@ -709,6 +726,17 @@ def pipeline_cursors():
         ct = CursorTracker(_config.storage.sqlite_path) if _config else CursorTracker()
         rows = ct.list_cursors()
         ct.close()
+        # Enrich each row with the actual newest post timestamp from raw_posts.
+        # One aggregate query, no per-sub roundtrips.
+        _ensure_initialized()
+        newest = dict(_storage._conn.execute(
+            "SELECT subreddit, MAX(created_timestamp) FROM raw_posts GROUP BY subreddit"
+        ).fetchall())
+        # Case-insensitive match — DB rows sometimes use different casing than the CSV.
+        newest_ci = {k.lower(): v for k, v in newest.items() if k}
+        for r in rows:
+            sub = r.get("subreddit") or ""
+            r["newest_post_utc"] = newest_ci.get(sub.lower())
     except Exception as e:  # noqa: BLE001
         log.warning("pipeline_cursors_failed", error=str(e))
         rows = []
@@ -717,6 +745,219 @@ def pipeline_cursors():
         "overlap_seconds": INGEST_OVERLAP_SECONDS,
         "next_scheduled_run_at": _next_scheduled_run_at.isoformat() if _next_scheduled_run_at else None,
     }
+
+
+@app.get("/api/pipeline/gaps")
+def pipeline_gaps(gap_hours: float = Query(1.0, ge=0.0, le=720.0)):
+    """Per-subreddit data-freshness report.
+
+    Pure read: computes the gap between the newest raw_post and now for every
+    configured subreddit. Flags subs whose cursor has drifted behind their
+    data (a symptom of a lookback-hours rewind that upstream then returned
+    zero results for).
+
+    Used by the "Fill gaps" dashboard panel and as the dry-run preview for
+    POST /api/pipeline/fill-gaps.
+    """
+    _ensure_initialized()
+    from src.pipeline import RetailSentimentPipeline
+    try:
+        # Reuse the API's already-initialized components; only compute_gaps
+        # is called (pure read, no ingest).
+        pl = RetailSentimentPipeline(_config)
+        pl.initialize()
+        report = pl.compute_gaps(gap_threshold_hours=gap_hours)
+        try:
+            pl.cursor.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return report
+    except Exception as e:  # noqa: BLE001
+        log.warning("pipeline_gaps_failed", error=str(e))
+        return {"error": str(e), "subreddits": [], "totals": {}}
+
+
+@app.post("/api/pipeline/fill-gaps")
+async def pipeline_fill_gaps(
+    background_tasks: BackgroundTasks,
+    since: str | None = Query(None, description="Anchor timestamp (ISO 8601 UTC). Every sub whose cursor is more recent than this will be rewound to this timestamp. Example: '2026-06-29T00:00:00Z'"),
+    gap_hours: float = Query(1.0, ge=0.0, le=720.0, description="Only used when `since` is omitted: skip subs whose gap is smaller than this."),
+    dry_run: bool = Query(False, description="If true, returns the plan without touching cursors or running the pipeline."),
+):
+    """Surgical backfill: rewind only the stale subs and run one cycle.
+
+    Two ways to invoke:
+      - Provide `since=YYYY-MM-DDTHH:MM:SSZ` — every subreddit whose cursor
+        is more recent than that gets rewound to that timestamp. Matches the
+        "last successful run was 29 June, fill everything since then" case.
+      - Omit `since` — per-sub auto: rewind each stale sub to just after its
+        newest raw_post (minus overlap buffer). Fresh subs are left alone.
+
+    In both modes storage dedupes on `id`, so any refetched posts are
+    idempotent.
+    """
+    if _pipeline_state["running"]:
+        return {"started": False, "reason": "already_running", "state": _pipeline_state}
+
+    # Dry-run short-circuits to the plan; no subprocess is spawned.
+    if dry_run:
+        _ensure_initialized()
+        from src.pipeline import RetailSentimentPipeline
+        try:
+            pl = RetailSentimentPipeline(_config)
+            pl.initialize()
+            since_ts: float | None = None
+            if since:
+                from datetime import datetime, timezone
+                try:
+                    dtv = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                    if dtv.tzinfo is None:
+                        dtv = dtv.replace(tzinfo=timezone.utc)
+                    since_ts = dtv.timestamp()
+                except ValueError:
+                    return {"started": False, "reason": "bad_since", "detail": f"{since!r} is not ISO 8601"}
+            plan = pl.fill_gaps(since_utc=since_ts, gap_threshold_hours=gap_hours, dry_run=True)
+            try:
+                pl.cursor.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return {"started": False, "dry_run": True, "plan": plan}
+        except Exception as e:  # noqa: BLE001
+            return {"started": False, "reason": "dry_run_failed", "detail": str(e)}
+
+    # Apply mode: hand off to the pipeline subprocess with the flags so it
+    # runs under PIPELINE_PYTHON with the ML stack available.
+    extra_args: list[str] = ["--fill-gaps", "--gap-hours", str(gap_hours)]
+    if since:
+        extra_args.extend(["--since", since])
+    params = {"mode": "fill-gaps", "since": since, "gap_hours": gap_hours}
+    background_tasks.add_task(
+        _run_pipeline_subprocess,
+        "fill-gaps",
+        extra_args=extra_args,
+        params=params,
+    )
+    return {"started": True, "state": _pipeline_state, "plan_preview": "see /api/pipeline/gaps"}
+
+
+@app.get("/api/pipeline/analysis-backlog")
+def pipeline_analysis_backlog():
+    """How many raw_posts exist without a matching row in `analyses`.
+
+    Cheap SQL count used by the "Analyze pending" button in the Pipeline UI
+    so it can show a live badge (e.g. "9,510 pending").
+    """
+    _ensure_initialized()
+    try:
+        raw = _storage._conn.execute("SELECT COUNT(*) FROM raw_posts").fetchone()[0]
+        ana = _storage._conn.execute("SELECT COUNT(*) FROM analyses").fetchone()[0]
+        # A tighter measure: raw rows that don't have an analysis row.
+        # analyses.post_id references raw_posts.id (analyses.id is prefixed
+        # with "analysis_", so joining on id would count every row as pending).
+        pending = _storage._conn.execute(
+            "SELECT COUNT(*) FROM raw_posts r LEFT JOIN analyses a ON a.post_id = r.id "
+            "WHERE a.post_id IS NULL"
+        ).fetchone()[0]
+        return {"raw_posts": raw, "analyses": ana, "pending": pending}
+    except Exception as e:  # noqa: BLE001
+        log.warning("analysis_backlog_failed", error=str(e))
+        return {"raw_posts": 0, "analyses": 0, "pending": 0, "error": str(e)}
+
+
+@app.post("/api/pipeline/analyze-pending")
+async def pipeline_analyze_pending(
+    background_tasks: BackgroundTasks,
+    max_batches: int | None = Query(None, ge=1, le=10000),
+):
+    """Kick a subprocess that runs `python -m src.pipeline --analyze-pending`.
+
+    No network calls — just processes raw_posts already on disk that have
+    no analysis row. Uses the same ML interpreter as normal cycles.
+    """
+    if _pipeline_state["running"]:
+        return {"started": False, "reason": "already_running", "state": _pipeline_state}
+    extra_args: list[str] = ["--analyze-pending"]
+    if max_batches:
+        extra_args.extend(["--max-batches", str(max_batches)])
+    params = {"mode": "analyze-pending", "max_batches": max_batches}
+    background_tasks.add_task(
+        _run_pipeline_subprocess,
+        "analyze-pending",
+        extra_args=extra_args,
+        params=params,
+    )
+    return {"started": True, "state": _pipeline_state}
+
+
+@app.get("/api/ingestion/image-failures")
+def ingestion_image_failures(limit: int = Query(50, ge=1, le=500)):
+    """Per-post record of image fetch outcomes.
+
+    Powers the Pipeline UI's "Image availability" panel. Shows the breakdown
+    of image-bearing posts by fetch status (fetched / deleted / throttled / …)
+    plus the most recent N failed posts so analysts can see WHICH images
+    disappeared (Reddit user deleted the post, imgur throttled us, etc.).
+
+    Data source: raw_posts.data.image_fetch, populated by the vision-enrichment
+    stage. Posts ingested before this field existed simply don't appear here.
+    """
+    _ensure_initialized()
+    try:
+        # Only rows that have an image_fetch object (i.e. we tried to fetch).
+        rows = _storage._conn.execute(
+            "SELECT id, subreddit, created_timestamp, "
+            "       json_extract(data, '$.image_fetch') AS fetch_json, "
+            "       json_extract(data, '$.title') AS title, "
+            "       json_extract(data, '$.permalink') AS permalink "
+            "FROM raw_posts "
+            "WHERE json_extract(data, '$.image_fetch') IS NOT NULL "
+            "ORDER BY created_timestamp DESC "
+            "LIMIT 5000"
+        ).fetchall()
+
+        import json as _json
+        totals: dict[str, int] = {}
+        samples: list[dict] = []
+        for r in rows:
+            try:
+                fetch = _json.loads(r["fetch_json"]) if r["fetch_json"] else None
+            except Exception:  # noqa: BLE001
+                fetch = None
+            if not fetch:
+                continue
+            status = fetch.get("status", "unknown")
+            totals[status] = totals.get(status, 0) + 1
+            # Collect only failed samples for the drill-down table.
+            if status != "fetched" and len(samples) < limit:
+                samples.append({
+                    "post_id": r["id"],
+                    "subreddit": r["subreddit"],
+                    "created_utc": r["created_timestamp"],
+                    "title": (r["title"] or "")[:120],
+                    "url": fetch.get("url", "")[:150],
+                    "status": status,
+                    "http_code": fetch.get("http_code"),
+                    "error": (fetch.get("error") or "")[:200],
+                    "checked_at": fetch.get("checked_at"),
+                    "permalink": r["permalink"],
+                })
+
+        total_checked = sum(totals.values())
+        total_fetched = totals.get("fetched", 0)
+        total_failed = total_checked - total_fetched
+        return {
+            "total_checked": total_checked,
+            "total_fetched": total_fetched,
+            "total_failed": total_failed,
+            "totals_by_status": totals,
+            "samples": samples,
+        }
+    except Exception as e:  # noqa: BLE001
+        log.warning("image_failures_query_failed", error=str(e))
+        return {
+            "total_checked": 0, "total_fetched": 0, "total_failed": 0,
+            "totals_by_status": {}, "samples": [], "error": str(e),
+        }
 
 
 # ─── Pipeline page: data sources, funnel, jobs, registry CRUD ────────────────
@@ -1299,7 +1540,7 @@ def _current_reddit_token(request: Request):
 
 LIFECYCLE_STATES = ("new", "acknowledged", "reply_sent", "issue_fixed", "resolved")
 _LIFECYCLE_TRANSITIONS = {
-    "new": {"acknowledged"},
+    "new": {"reply_sent", "resolved"},
     "acknowledged": {"reply_sent", "resolved"},
     "reply_sent": {"issue_fixed", "resolved"},
     "issue_fixed": {"resolved"},
@@ -1520,6 +1761,21 @@ _DAY_RANGES = {
     "90d": (89, 90),
 }
 _VALID_RANGES = list(_HOUR_RANGES.keys()) + list(_DAY_RANGES.keys())
+
+
+def _range_to_cutoff(range_token: str) -> str | None:
+    """Convert a UI range token to an ISO timestamp cutoff string, or None if unknown."""
+    now = datetime.now(timezone.utc)
+    if range_token in _HOUR_RANGES:
+        cutoff = now - timedelta(hours=_HOUR_RANGES[range_token])
+        return cutoff.isoformat()
+    if range_token in _DAY_RANGES:
+        offset_days, days_back = _DAY_RANGES[range_token]
+        cutoff = (now - timedelta(days=offset_days + days_back - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return cutoff.isoformat()
+    return None
 
 
 def _resolve_window(range_token: str) -> tuple[datetime, datetime, int, str]:
@@ -1842,6 +2098,31 @@ def get_brand_health(
     if stats["total_posts"] == 0:
         return {"message": f"No data for selected range ({date_label})", "data": None}
 
+    # Fetched count = raw_posts in the window (before analysis). Brand Health's
+    # `total_posts` is the ANALYZED subset, so `fetched_count` can be higher
+    # when there's an analysis backlog. Exposing both lets the UI show
+    # "X analyzed of Y fetched (Z pending)" instead of an unexplained mismatch
+    # with the Pipeline page.
+    fetched_where = ["created_timestamp >= ?", "created_timestamp < ?"]
+    fetched_params: list = [window_start.timestamp(), window_end.timestamp()]
+    if macro_segment:
+        from src.ingestion.subreddit_registry import load_all as _load_all_registry
+        macro_subs = [e.subreddit for e in _load_all_registry() if e.macro_group == macro_segment]
+        if macro_subs:
+            placeholders = ",".join(["?"] * len(macro_subs))
+            fetched_where.append(f"subreddit IN ({placeholders})")
+            fetched_params.extend(macro_subs)
+    if segment:
+        fetched_where.append("json_extract(data, '$.segment') = ?")
+        fetched_params.append(segment)
+    try:
+        fetched_count = _storage._conn.execute(
+            f"SELECT COUNT(*) FROM raw_posts WHERE {' AND '.join(fetched_where)}",
+            fetched_params,
+        ).fetchone()[0]
+    except Exception:  # noqa: BLE001
+        fetched_count = stats["total_posts"]
+
     # Trend granularity: hourly for sub-day ranges, daily otherwise.
     if range in _HOUR_RANGES:
         trend = _compute_trend_by_hour(window_start, window_end)
@@ -1867,6 +2148,8 @@ def get_brand_health(
         "days_requested": days_requested,
         "days_with_data": days_with_data,
         "total_posts": stats["total_posts"],
+        "fetched_count": fetched_count,
+        "pending_analysis": max(0, fetched_count - stats["total_posts"]),
         "trend_granularity": trend_granularity,
         "trusted_posts": stats["trusted_posts"],
         "trust_gate": _trust_gate_info(),
@@ -1969,8 +2252,35 @@ def get_priority_negatives(
         log.error("priority_negatives_query_failed", error=str(e))
         return {"posts": [], "count": 0, "error": str(e)}
 
-    out: list[dict] = []
+    # ── True tier totals (window-wide, NOT limited to the returned sample) ──
+    # A separate COUNT(*) query so `tiers.P1` / `tiers.P2` reflect the whole
+    # window regardless of `limit`. Without this, tier_counts stops
+    # incrementing once we've collected `limit` posts and the UI shows
+    # "P1: 20" for every range.
     tier_counts = {"P1": 0, "P2": 0}
+    try:
+        count_sql = (
+            "SELECT "
+            "  SUM(CASE WHEN trust >= 0.7 AND conf >= 0.8 THEN 1 ELSE 0 END) AS p1, "
+            "  SUM(CASE WHEN (trust >= 0.5 AND conf >= 0.6) "
+            "             AND NOT (trust >= 0.7 AND conf >= 0.8) THEN 1 ELSE 0 END) AS p2 "
+            "FROM (SELECT "
+            "  COALESCE(CAST(json_extract(a.data, '$.trust_score') AS REAL), 0) AS trust, "
+            "  COALESCE(CAST(json_extract(a.data, '$.sentiment_confidence') AS REAL), 0) AS conf "
+            "  FROM analyses a LEFT JOIN raw_posts p ON p.id = a.post_id "
+            f"  {where_sql}"
+            ")"
+        )
+        # Reuse the exact same where-clause params, minus the trailing LIMIT
+        # value that only applied to the sample query.
+        count_params = params[:-1]
+        row = _storage._conn.execute(count_sql, count_params).fetchone()
+        tier_counts["P1"] = int(row["p1"] or 0)
+        tier_counts["P2"] = int(row["p2"] or 0)
+    except Exception as e:  # noqa: BLE001
+        log.warning("priority_negatives_count_failed", error=str(e))
+
+    out: list[dict] = []
     for row in rows:
         a = _json.loads(row["adata"]) if row["adata"] else {}
         p = _json.loads(row["pdata"]) if row["pdata"] else {}
@@ -2006,7 +2316,6 @@ def get_priority_negatives(
             "created_timestamp": p.get("created_timestamp", 0),
             "reddit_url": reddit_url,
         })
-        tier_counts[tier] += 1
         if len(out) >= limit:
             break
 
@@ -2041,7 +2350,7 @@ def list_macro_segments():
 
 # ─── P0: Aspect Drilldown ─────────────────────────────────────────────────────
 
-@app.get("/api/aspects/{aspect}")
+@app.get("/api/aspects/{aspect:path}")
 def get_aspect_drilldown(
     aspect: str,
     days: int = Query(14, ge=1, le=90),
@@ -2051,8 +2360,11 @@ def get_aspect_drilldown(
 ):
     """Deep-dive into a specific aspect: trend + paginated posts.
 
-    Posts are filtered by their *creation* timestamp so the drilldown stays
-    consistent with the Brand Health card that was clicked from.
+    Uses `:path` so aspect names containing `/` (e.g. "online/app",
+    "delivery/pickup") route correctly without needing URL-encoding by the
+    client. Posts are filtered by their *creation* timestamp so the
+    drilldown stays consistent with the Brand Health card that was clicked
+    from.
     """
     _ensure_initialized()
     import json as _json
@@ -2218,17 +2530,88 @@ def _collect_reply_examples(limit: int = 5) -> list[dict]:
     return [e for e in examples if e["reply_text"]]
 
 
+def _ensure_lifecycle_reply_sent(post_id: str, analysis: dict | None, now: str):
+    """Create or transition a lifecycle row into reply_sent when a reply is saved."""
+    try:
+        existing = _storage.lifecycle_get(post_id)
+        if existing:
+            # Already in reply_sent or beyond — nothing to do.
+            if existing.get("state") in ("reply_sent", "issue_fixed", "resolved"):
+                return
+            # Transition to reply_sent regardless of current state.
+            existing["state"] = "reply_sent"
+            existing["reply_sent_at"] = now
+            existing["updated_at"] = now
+            _storage.lifecycle_upsert(existing)
+        else:
+            # Create a new lifecycle entry directly in reply_sent.
+            subreddit = (analysis or {}).get("subreddit", "")
+            raw = _storage.get_item("raw_posts", post_id, subreddit)
+            row = {
+                "id": f"lc_{post_id}",
+                "post_id": post_id,
+                "state": "reply_sent",
+                "priority": "medium",
+                "subreddit": subreddit,
+                "title": (raw or {}).get("title", ""),
+                "top_aspect": "",
+                "sentiment_score": (analysis or {}).get("sentiment_confidence", 0),
+                "sentiment_confidence": (analysis or {}).get("sentiment_confidence", 0),
+                "created_at": now,
+                "updated_at": now,
+                "reply_sent_at": now,
+                "partition_key": subreddit,
+            }
+            if analysis:
+                aspects = analysis.get("aspects", [])
+                if aspects:
+                    a = aspects[0]
+                    row["top_aspect"] = a.get("aspect", "") if isinstance(a, dict) else str(a)
+            _storage.lifecycle_upsert(row)
+    except Exception as e:
+        log.error("lifecycle_reply_sent_auto_failed", post_id=post_id, error=str(e))
+
+
 @app.get("/api/review")
-def get_review_queue(limit: int = Query(20, ge=1, le=100)):
-    """Get posts needing human review (low confidence or flagged)."""
+def get_review_queue(
+    limit: int = Query(20, ge=1, le=100),
+    sentiment: str = Query(None),
+    range: str = Query(None, alias="range"),
+):
+    """Get posts needing human review. When sentiment/range filters are active,
+    return ALL matching posts (not just needs_review=1) so the analyst can
+    review and reply to any post that matches the criteria."""
     _ensure_initialized()
+
+    # When explicit filters are provided, drop the needs_review requirement so
+    # the page behaves like Post Explorer but for the reply workflow.
+    has_filters = bool(sentiment or range)
+
+    conditions: list[str] = []
+    params: list = []
+
+    if not has_filters:
+        conditions.append("json_extract(data, '$.needs_review') = 1")
+
+    if sentiment:
+        conditions.append("json_extract(data, '$.sentiment') = ?")
+        params.append(sentiment)
+
+    if range:
+        cutoff = _range_to_cutoff(range)
+        if cutoff:
+            conditions.append("json_extract(data, '$.analyzed_at') >= ?")
+            params.append(cutoff)
+
+    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    params.append(limit)
     query = (
-        "SELECT data FROM analyses "
-        "WHERE json_extract(data, '$.needs_review') = 1 "
-        "ORDER BY json_extract(data, '$.analyzed_at') DESC "
-        "LIMIT ?"
+        f"SELECT data FROM analyses "
+        f"WHERE {where_clause} "
+        f"ORDER BY json_extract(data, '$.analyzed_at') DESC "
+        f"LIMIT ?"
     )
-    analyses = _storage.query("analyses", query, [limit])
+    analyses = _storage.query("analyses", query, params)
 
     # Enrich with post data
     enriched = []
@@ -2431,6 +2814,9 @@ def save_reply(post_id: str, payload: dict, request: Request):
 
     response: dict = {"status": "saved", "feedback_id": fb["id"], "reply_posted_at": now}
 
+    # Auto-transition into lifecycle "reply_sent" state when a reply is saved.
+    _ensure_lifecycle_reply_sent(post_id, analysis, now)
+
     # Optional second leg: actually post to Reddit. We treat this as best-effort
     # — the local audit log save above is the source of truth.
     if payload.get("post_to_reddit"):
@@ -2482,11 +2868,66 @@ def review_stats():
 # ─── P1: Alert Feed ────────────────────────────────────────────────────────────
 
 @app.get("/api/alerts")
-def get_alerts():
-    """Get all current alerts."""
+def get_alerts(
+    range: str = Query("week", description="Time window filter on detected_at (ISO). Default: week."),
+    severity: str | None = Query(None, description="Optional filter: high | medium | low"),
+    live: bool = Query(False, description="If true, run detectors right now instead of reading stored alerts."),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Alerts feed. Reads from the `alerts` table by default (populated by
+    every pipeline cycle) so history is preserved. Filters by `detected_at`
+    matching the requested range; supports optional severity filter.
+
+    Set `live=true` to bypass storage and re-run the detectors against
+    current aggregates — useful for on-demand "check now" without waiting
+    for the next scheduled cycle.
+    """
     _ensure_initialized()
-    alerts = _alert_engine.detect_all()
-    return {"alerts": alerts, "count": len(alerts)}
+    if live:
+        alerts = _alert_engine.detect_all()
+        if severity:
+            alerts = [a for a in alerts if a.get("severity") == severity]
+        return {"alerts": alerts[:limit], "count": len(alerts[:limit]), "total": len(alerts), "source": "live"}
+
+    if range not in _VALID_RANGES:
+        return {"alerts": [], "count": 0, "error": f"Invalid range. Valid: {_VALID_RANGES}"}
+
+    # Compute the ISO cutoff so we can filter on detected_at (ISO 8601 string).
+    now = datetime.now(timezone.utc)
+    if range in _HOUR_RANGES:
+        cutoff_dt = now - timedelta(hours=_HOUR_RANGES[range])
+    else:
+        offset_days, days_back = _DAY_RANGES[range]
+        if days_back == 1:
+            cutoff_dt = (now - timedelta(days=offset_days)).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            cutoff_dt = now - timedelta(days=days_back)
+    cutoff_iso = cutoff_dt.isoformat()
+
+    where = ["json_extract(data, '$.detected_at') >= ?"]
+    params: list = [cutoff_iso]
+    if severity:
+        where.append("json_extract(data, '$.severity') = ?")
+        params.append(severity)
+    where_sql = " AND ".join(where)
+
+    try:
+        # Count first (for `total`), then fetch the page.
+        total = _storage._conn.execute(  # type: ignore[attr-defined]
+            f"SELECT COUNT(*) FROM alerts WHERE {where_sql}", params
+        ).fetchone()[0]
+        rows = _storage._conn.execute(  # type: ignore[attr-defined]
+            f"SELECT data FROM alerts WHERE {where_sql} "
+            "ORDER BY json_extract(data, '$.detected_at') DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    except Exception as e:  # noqa: BLE001
+        log.error("alerts_query_failed", error=str(e))
+        return {"alerts": [], "count": 0, "error": str(e)}
+
+    import json as _json
+    alerts = [_json.loads(r["data"]) for r in rows]
+    return {"alerts": alerts, "count": len(alerts), "total": total, "source": "stored", "range": range}
 
 
 # ─── P1: Post Explorer ─────────────────────────────────────────────────────────
@@ -2626,7 +3067,23 @@ def search_posts(
             "aspects": a.get("aspects", []),
             "reddit_url": reddit_url,
         })
-    return {"posts": out, "count": len(out), "trust_gate": _trust_gate_info()}
+
+    # `count` is the returned page size (always == len(out)); `total` is the
+    # true number of rows matching the filters in the window. Callers can
+    # show "Showing 50 of 5,234" without a second network round-trip.
+    total_matching = len(out)
+    try:
+        count_sql = (
+            "SELECT COUNT(*) FROM analyses a "
+            "LEFT JOIN raw_posts p ON p.id = a.post_id "
+            f"{where_sql}"
+        )
+        # Params minus the trailing LIMIT that only applied to the sample.
+        total_matching = _storage._conn.execute(count_sql, params[:-1]).fetchone()[0]  # type: ignore[attr-defined]
+    except Exception as e:  # noqa: BLE001
+        log.warning("posts_count_failed", error=str(e))
+
+    return {"posts": out, "count": len(out), "total": total_matching, "trust_gate": _trust_gate_info()}
 
 
 # ─── P2: Trust Analytics ───────────────────────────────────────────────────────
@@ -2698,17 +3155,168 @@ async def broadcast_alert(alert: dict):
             _ws_connections.remove(ws)
 
 
+# ─── Notification Groups CRUD ─────────────────────────────────────────────────
+
+NOTIFICATION_SENDER = "vishal.singh1@walmart.com"
+
+
+@app.get("/api/notifications/config")
+async def get_notification_config():
+    """Return global notification config + all groups."""
+    groups = _storage.notification_groups_list()
+    return {
+        "sender_email": NOTIFICATION_SENDER,
+        "groups": groups,
+    }
+
+
+@app.get("/api/notifications/groups")
+async def list_notification_groups():
+    return {"groups": _storage.notification_groups_list()}
+
+
+@app.get("/api/notifications/groups/{group_id}")
+async def get_notification_group(group_id: str):
+    g = _storage.notification_group_get(group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return g
+
+
+@app.post("/api/notifications/groups")
+async def create_notification_group(req: Request):
+    body = await req.json()
+    import uuid
+    group_id = body.get("id") or str(uuid.uuid4())[:8]
+    group = {
+        "id": group_id,
+        "group_name": body.get("group_name", "Unnamed Group"),
+        "subreddits": body.get("subreddits", []),
+        "email_dl": body.get("email_dl", []),
+        "slack_channel": body.get("slack_channel", ""),
+        "enabled": body.get("enabled", True),
+        "priority_filter": body.get("priority_filter", ["P1", "P2"]),
+    }
+    _storage.notification_group_upsert(group)
+    return {"ok": True, "group": _storage.notification_group_get(group_id)}
+
+
+@app.put("/api/notifications/groups/{group_id}")
+async def update_notification_group(group_id: str, req: Request):
+    existing = _storage.notification_group_get(group_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Group not found")
+    body = await req.json()
+    group = {
+        "id": group_id,
+        "group_name": body.get("group_name", existing["group_name"]),
+        "subreddits": body.get("subreddits", existing["subreddits"]),
+        "email_dl": body.get("email_dl", existing["email_dl"]),
+        "slack_channel": body.get("slack_channel", existing.get("slack_channel", "")),
+        "enabled": body.get("enabled", existing["enabled"]),
+        "priority_filter": body.get("priority_filter", existing["priority_filter"]),
+    }
+    _storage.notification_group_upsert(group)
+    return {"ok": True, "group": _storage.notification_group_get(group_id)}
+
+
+@app.delete("/api/notifications/groups/{group_id}")
+async def delete_notification_group(group_id: str):
+    deleted = _storage.notification_group_delete(group_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return {"ok": True}
+
+
+@app.get("/api/notifications/log")
+async def get_notification_log(limit: int = 50):
+    """Recent notification history with sent status."""
+    return {"log": _storage.notification_log_recent(limit)}
+
+
+@app.post("/api/notifications/test/{group_id}")
+async def test_notification_group(group_id: str, real: bool = Query(False, description="If true and Slack webhook is configured, actually POST to Slack instead of dry-run.")):
+    """Send a test notification to verify group config.
+
+    Default is dry-run (just logs). Pass `?real=true` to actually POST the
+    message to Slack — requires SLACK_WEBHOOK_URL env var (or the
+    `notifications.slack.webhook_url` config key) to be set.
+
+    Email is always dry-run from this endpoint — SMTP config isn't
+    per-group, so a real send requires the global email config to be filled
+    in and cannot be safely tested from a per-group button.
+    """
+    g = _storage.notification_group_get(group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    results = {}
+    if g["email_dl"]:
+        from src.notifications.email import send as send_email
+        from src.utils.config import EmailChannelConfig
+        cfg = EmailChannelConfig(
+            enabled=True,
+            dry_run=True,  # always dry-run for test (SMTP is global, not per-group)
+            from_addr=NOTIFICATION_SENDER,
+            recipients=g["email_dl"],
+        )
+        results["email"] = send_email(cfg, subject="[RSI Test] Notification group test", body=f"Test notification for group: {g['group_name']}")
+    if g.get("slack_channel"):
+        from src.notifications.slack import send as send_slack
+        from src.utils.config import SlackChannelConfig
+        # Only "real" send needs a webhook URL. Pull from env or global config.
+        webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
+        if not webhook_url and _config and getattr(_config, "notifications", None):
+            webhook_url = getattr(_config.notifications.slack, "webhook_url", "") or ""
+        cfg = SlackChannelConfig(
+            enabled=True,
+            dry_run=not real,
+            webhook_url=webhook_url,
+            channel=g["slack_channel"],
+        )
+        results["slack"] = send_slack(
+            cfg,
+            title="[RSI Test]",
+            body=f"Test notification for group: {g['group_name']} — sent from the Notifications page.",
+        )
+    outcome = "sent" if (real and results.get("slack", {}).get("ok") and not results.get("slack", {}).get("dry_run")) else "dry_run"
+    _storage.notification_log_insert(group_id, "test", "test", outcome)
+    return {"ok": True, "real": real, "results": results}
+
+
+@app.get("/api/notifications/subreddits")
+async def get_available_subreddits():
+    """Return list of tracked subreddits for group config UI."""
+    import csv
+    subs = []
+    csv_path = Path("data/subreddits_clean.csv")
+    if csv_path.exists():
+        with open(csv_path, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                subs.append({
+                    "subreddit": row.get("subreddit", ""),
+                    "group": row.get("group", ""),
+                    "macro_group": row.get("macro_group", ""),
+                })
+    return {"subreddits": subs}
+
+
 # ─── Entrypoint ───────────────────────────────────────────────────────────────
 
 def start_dashboard():
     """Start the dashboard server."""
     import uvicorn
     config = load_config()
+    # `reload=True` deadlocks when a pipeline subprocess is running: uvicorn
+    # waits for background tasks to finish before restarting, and pipeline
+    # runs can take 20+ minutes. Gate it behind DASHBOARD_RELOAD=1 so devs
+    # can opt in when they're not running long jobs.
+    reload_enabled = os.environ.get("DASHBOARD_RELOAD") == "1"
     uvicorn.run(
         "src.dashboard.api:app",
         host=config.dashboard.host,
         port=config.dashboard.port,
-        reload=True,
+        reload=reload_enabled,
     )
 
 

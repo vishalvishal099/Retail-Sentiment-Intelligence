@@ -1,23 +1,66 @@
 import { useEffect, useState } from 'react';
-import { api, ReviewItem, ReviewStats } from '../api';
+import { useSearchParams } from 'react-router-dom';
+import { api, ReviewItem, ReviewStats, DateRange } from '../api';
 import Card from '../components/Card';
+import Button from '../components/Button';
+
+const SENTIMENTS = ['', 'positive', 'negative', 'neutral'] as const;
+const RANGE_OPTIONS: { value: DateRange | ''; label: string }[] = [
+  { value: '', label: 'All time' },
+  { value: '1h', label: 'Last 1h' },
+  { value: '6h', label: 'Last 6h' },
+  { value: '12h', label: 'Last 12h' },
+  { value: '24h', label: 'Last 24h' },
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week', label: 'Last 7 Days' },
+  { value: 'month', label: 'Last 30 Days' },
+  { value: '90d', label: 'Last 90 Days' },
+];
 
 export default function ReviewQueue() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSentiment = searchParams.get('sentiment') || '';
+  const urlRange = searchParams.get('range') || '';
+  const [sentiment, setSentiment] = useState(urlSentiment);
+  const [range, setRange] = useState(urlRange);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ReviewStats | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const load = () => {
+  const load = (s?: string, r?: string) => {
+    const sen = s ?? urlSentiment;
+    const ran = r ?? urlRange;
     setLoading(true);
-    Promise.all([api.getReviewQueue(50), api.getReviewStats().catch(() => null)])
-      .then(([q, s]) => { setItems(q.queue); if (s) setStats(s); })
+    Promise.all([
+      api.getReviewQueue(50, sen || undefined, ran || undefined),
+      api.getReviewStats().catch(() => null),
+    ])
+      .then(([q, st]) => { setItems(q.queue); if (st) setStats(st); })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    setSentiment(urlSentiment);
+    setRange(urlRange);
+    load(urlSentiment, urlRange);
+  }, [urlSentiment, urlRange]);
+
+  const applyFilters = () => {
+    const next = new URLSearchParams();
+    if (sentiment) next.set('sentiment', sentiment);
+    if (range) next.set('range', range);
+    setSearchParams(next);
+  };
+
+  const clearFilters = () => {
+    setSentiment('');
+    setRange('');
+    setSearchParams({});
+  };
 
   const handleCorrection = async (item: ReviewItem, correctedSentiment: string) => {
     setBusyId(item.id);
@@ -56,6 +99,16 @@ export default function ReviewQueue() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap text-xs">
+          {urlSentiment && (
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20 font-medium">
+              Sentiment: {urlSentiment}
+            </span>
+          )}
+          {urlRange && (
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20 font-medium">
+              Range: {RANGE_OPTIONS.find(o => o.value === urlRange)?.label || urlRange}
+            </span>
+          )}
           <span className="px-3 py-1 rounded-pill bg-walmart-navy/5 text-walmart-navy border border-walmart-navy/15 font-medium">
             {items.length} items pending
           </span>
@@ -71,6 +124,44 @@ export default function ReviewQueue() {
           )}
         </div>
       </div>
+
+      {/* Filter Bar */}
+      <Card>
+        <div className="flex gap-4 items-end flex-wrap">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Sentiment</label>
+            <select
+              value={sentiment}
+              onChange={e => setSentiment(e.target.value)}
+              className="border border-walmart-navy/15 rounded-pill px-4 py-1.5 text-sm bg-white shadow-sm text-walmart-navy focus:outline-none focus:ring-2 focus:ring-walmart-blue"
+            >
+              {SENTIMENTS.map(s => (
+                <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Time Range</label>
+            <select
+              value={range}
+              onChange={e => setRange(e.target.value)}
+              className="border border-walmart-navy/15 rounded-pill px-4 py-1.5 text-sm bg-white shadow-sm text-walmart-navy focus:outline-none focus:ring-2 focus:ring-walmart-blue"
+            >
+              {RANGE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <Button onClick={applyFilters} disabled={loading} variant="primary">
+            {loading ? 'Loading…' : 'Apply'}
+          </Button>
+          {(urlSentiment || urlRange) && (
+            <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-sentiment-negative underline">
+              Clear filters
+            </button>
+          )}
+        </div>
+      </Card>
 
       {errorMsg && (
         <div className="bg-sentiment-negative/5 border border-sentiment-negative/20 text-sentiment-negative text-sm rounded-xl px-4 py-2.5">
@@ -297,18 +388,18 @@ function ReviewCard({
 
           {drafts.length === 0 && !generating && (
             <div className="bg-walmart-navy/5 border border-dashed border-walmart-navy/20 rounded-xl p-3 text-center text-xs text-gray-500">
-              No drafts yet. Click <span className="font-semibold text-walmart-navy">Generate Drafts</span> below — we'll build
-              two reply candidates (one content-aware composer + one neural model) so you can pick the better one.
+              No drafts yet. Click <span className="font-semibold text-walmart-navy">Generate Drafts</span> below — we'll generate
+              up to 3 reply candidates (GPT, Mistral, Smart Composer) so you can pick the best one.
             </div>
           )}
           {generating && (
             <div className="bg-walmart-blue/5 border border-walmart-blue/20 rounded-xl p-3 text-center text-xs text-walmart-blue">
-              ⏳ Generating two drafts… (first call loads the neural model — this may take a few seconds)
+              ⏳ Generating drafts from GPT, Mistral & Smart Composer… (first call may take a few seconds)
             </div>
           )}
 
           {drafts.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+            <div className={`grid grid-cols-1 ${drafts.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3 mb-2`}>
               {drafts.map((d, i) => {
                 const isSelected = i === selectedIdx;
                 const sourceColor =

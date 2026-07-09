@@ -5,6 +5,7 @@ Code is modular per R3.3 — swap models by changing config.
 """
 
 import json
+import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -313,7 +314,37 @@ class HuggingFaceSentimentClient(BaseLLMClient):
                 self._fallback_model = _reg.fallback_model
         except Exception:
             pass
+        # If the model name looks like a local relative path that exists on
+        # disk, resolve it to an absolute path. Without this, transformers +
+        # huggingface_hub (>=0.24) validate the string as a Hub repo ID
+        # first — and a value like "models/modernbert_walmart/final" has
+        # three path segments so it fails the "namespace/repo_name" regex,
+        # crashing the load and silently falling back to the baseline model.
+        # Absolute paths bypass the repo-ID validator entirely.
+        self._model_name = self._resolve_local_path(self._model_name)
+        if self._fallback_model:
+            self._fallback_model = self._resolve_local_path(self._fallback_model)
         log.info("hf_client_init", model=self._model_name, max_length=self._max_length)
+
+    @staticmethod
+    def _resolve_local_path(name: str) -> str:
+        """Convert a local relative model path to absolute so HF Hub's repo-ID
+        validator doesn't reject it. Leaves Hub IDs (`user/repo`) untouched.
+
+        Tries two anchors in order: the current working directory, then the
+        project root (three parents up from this file, which is `src/analysis/`).
+        The second anchor matters when the pipeline is invoked from a working
+        directory other than the project root — e.g. Jupyter kernels sometimes
+        change CWD to the notebook's own directory.
+        """
+        if not name:
+            return name
+        from pathlib import Path as _P
+        candidates = [_P(name), _P(__file__).resolve().parents[2] / name]
+        for p in candidates:
+            if p.exists() and p.is_dir():
+                return str(p.resolve())
+        return name
 
     @property
     def model_name(self) -> str:
@@ -1137,5 +1168,313 @@ def create_llm_client(config: LLMConfig, cost_tracker: Optional[CostTracker] = N
         return AzureOpenAIClient(config, cost_tracker)
     if config.provider == "ollama":
         return OllamaClient(config, cost_tracker)
+    if config.provider == "llm_gateway" and config.wmt_gateway_key:
+        return WalmartLLMGatewayClient(config, cost_tracker)
     # Default to free HuggingFace model
     return HuggingFaceSentimentClient(config, cost_tracker)
+
+
+class WalmartLLMGatewayClient(BaseLLMClient):
+    """Walmart internal LLM Gateway client (STG/Sandbox).
+
+    Uses the gateway's OpenAI-compatible chat endpoint for trust/credibility
+    scoring. Delegates sentiment analysis + aspects to the local HF pipeline
+    (free, fast) — gateway is only invoked for the trust LLM component.
+    """
+
+    def __init__(self, config: LLMConfig, cost_tracker: Optional[CostTracker] = None):
+        self.config = config
+        self.cost_tracker = cost_tracker
+        self._hf = HuggingFaceSentimentClient(config, cost_tracker)
+        # Circuit breaker: after N consecutive gateway failures (DNS, TLS,
+        # 5xx, timeout) we stop calling the gateway for the rest of the
+        # process and fall back to the local rule-based credibility scorer.
+        # Prevents log-spam when off VPN. Reset by restarting the process.
+        # Set WMT_GATEWAY_DISABLE=1 to start already tripped (skip the HTTP
+        # calls entirely) — useful on laptops that never have VPN access.
+        self._breaker_threshold = 3
+        self._breaker_failures = 0
+        self._disabled = os.environ.get("WMT_GATEWAY_DISABLE") == "1"
+        if self._disabled:
+            log.info("wmt_gateway_disabled_by_env")
+        log.info("wmt_gateway_client_init",
+                 url=config.wmt_gateway_url,
+                 model=config.wmt_gateway_model,
+                 disabled=self._disabled)
+
+    @property
+    def model_name(self) -> str:
+        return self.config.wmt_gateway_model
+
+    @property
+    def model_version(self) -> str:
+        return "wmt-gateway-stg"
+
+    # Sentiment + aspects delegate to local HF (free, fast)
+    def analyze_sentiment(self, text: str) -> dict:
+        return self._hf.analyze_sentiment(text)
+
+    def analyze_batch(self, texts: list[str]) -> list[dict]:
+        return self._hf.analyze_batch(texts)
+
+    def check_credibility(self, text: str, metadata: dict) -> dict:
+        """LLM-based credibility check via Walmart LLM Gateway.
+
+        Falls back to the local rule-based heuristic when:
+          - The circuit breaker has tripped (>= `_breaker_threshold`
+            consecutive failures in this process), or
+          - This call itself fails (DNS, TLS, timeout, HTTP >= 400).
+        Trips silence subsequent noise; without them a 10k-post batch off-VPN
+        emits 10k identical WARNING lines.
+        """
+        # Circuit-broken: skip HTTP entirely.
+        if self._disabled:
+            return self._hf.check_credibility(text, metadata)
+
+        from src.analysis.prompts import TRUST_SYSTEM_PROMPT, TRUST_FEW_SHOT
+        import requests
+
+        user_msg = (
+            f'Post: "{text}"\n'
+            f"Metadata: account_age={metadata.get('account_age_days', 0)} days, "
+            f"karma={metadata.get('total_karma', 0)}, "
+            f"posts_last_7d={metadata.get('post_frequency_7d', 0)}"
+        )
+
+        messages = [
+            {"role": "system", "content": TRUST_SYSTEM_PROMPT},
+            *TRUST_FEW_SHOT,
+            {"role": "user", "content": user_msg},
+        ]
+
+        url = self.config.wmt_gateway_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.wmt_gateway_key}",
+        }
+        payload = {
+            "model": self.config.wmt_gateway_model,
+            "messages": messages,
+            "temperature": 0.1,
+            "max_tokens": 200,
+            "response_format": {"type": "json_object"},
+        }
+
+        try:
+            resp = requests.post(
+                url, json=payload, headers=headers,
+                timeout=self.config.timeout_seconds,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            result_text = data["choices"][0]["message"]["content"]
+            usage = data.get("usage", {})
+
+            if self.cost_tracker:
+                self.cost_tracker.record(
+                    provider="wmt_llm_gateway",
+                    model=self.config.wmt_gateway_model,
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                    stage="trust",
+                )
+
+            parsed = json.loads(result_text)
+            log.info("gateway_credibility_ok", score=parsed.get("credibility_score"))
+            # Success — reset the breaker so a transient blip doesn't disable
+            # the gateway permanently.
+            self._breaker_failures = 0
+            return parsed
+
+        except Exception as e:
+            self._breaker_failures += 1
+            if self._breaker_failures >= self._breaker_threshold and not self._disabled:
+                self._disabled = True
+                log.warning(
+                    "wmt_gateway_disabled_by_breaker",
+                    consecutive_failures=self._breaker_failures,
+                    last_error=str(e),
+                    hint="Set WMT_GATEWAY_DISABLE=1 to skip this at startup.",
+                )
+            elif not self._disabled:
+                # Only log the raw error while the breaker is still armed.
+                # Once tripped, silent fallback for the rest of the run.
+                log.warning("wmt_gateway_credibility_failed", error=str(e))
+            # Fallback to rule-based heuristic
+            return self._hf.check_credibility(text, metadata)
+
+    def _gateway_generate_reply(self, prompt: str) -> str:
+        """Call the Walmart LLM Gateway to generate a reply draft."""
+        import requests
+
+        url = self.config.wmt_gateway_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.wmt_gateway_key}",
+        }
+        payload = {
+            "model": self.config.wmt_gateway_model,
+            "messages": [
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 300,
+        }
+        try:
+            resp = requests.post(
+                url, json=payload, headers=headers,
+                timeout=self.config.timeout_seconds,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["choices"][0]["message"]["content"].strip()
+            # Strip echo prefix
+            for prefix in ("Reply:", "reply:", "REPLY:"):
+                if text.startswith(prefix):
+                    text = text[len(prefix):].strip()
+
+            if self.cost_tracker:
+                usage = data.get("usage", {})
+                self.cost_tracker.record(
+                    provider="wmt_llm_gateway",
+                    model=self.config.wmt_gateway_model,
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                    stage="reply_draft",
+                )
+            return text
+        except Exception as e:
+            log.warning("gateway_reply_draft_failed", error=str(e))
+            return ""
+
+    def _ollama_generate_reply(self, prompt: str) -> str:
+        """Call local Ollama (Mistral) to generate a reply draft."""
+        import requests
+
+        url = (self.config.ollama_url or "http://localhost:11434").rstrip("/") + "/api/generate"
+        payload = {
+            "model": self.config.ollama_model or "mistral:7b-instruct",
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.55, "num_predict": 220, "top_p": 0.9},
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=self.config.ollama_request_timeout or 30)
+            r.raise_for_status()
+            text = (r.json().get("response") or "").strip()
+            for prefix in ("Reply:", "reply:", "REPLY:"):
+                if text.startswith(prefix):
+                    text = text[len(prefix):].strip()
+            return text
+        except Exception as e:
+            log.warning("ollama_reply_draft_failed", error=str(e))
+            return ""
+
+    def _build_reply_prompt(
+        self,
+        post_title: str,
+        post_text: str,
+        subreddit: str,
+        author: str,
+        aspects: list[str],
+        examples: Optional[list[dict]],
+    ) -> str:
+        aspect_str = ", ".join(aspects) if aspects else "general feedback"
+        few_shot = ""
+        for ex in (examples or [])[:3]:
+            p = (ex.get("post_text") or "").strip().replace("\n", " ")[:240]
+            r = (ex.get("reply_text") or "").strip().replace("\n", " ")[:240]
+            if p and r:
+                few_shot += f"\nExample customer post: {p}\nExample analyst reply: {r}\n"
+        post_blob = (post_title + "\n\n" + post_text).strip()[:1200]
+        return (
+            "You are a senior Walmart customer-care analyst replying on Reddit.\n"
+            "Write ONE reply to the customer below. Keep it 2-4 sentences,\n"
+            "empathetic, specific to their complaint, no corporate jargon,\n"
+            "no hashtags, no emojis. Do NOT promise refunds you can't verify;\n"
+            "invite them to DM order details if action is needed. Sign off as\n"
+            "a real person, not a brand.\n"
+            f"{few_shot}\n"
+            f"Subreddit: r/{subreddit}\n"
+            f"Customer ({author}) complaint about: {aspect_str}\n"
+            f"Customer post:\n{post_blob}\n\n"
+            "Reply:"
+        )
+
+    def generate_reply_pair(
+        self,
+        post_title: str,
+        post_text: str,
+        subreddit: str,
+        author: str,
+        aspects: list[str],
+        examples: Optional[list[dict]] = None,
+    ) -> dict:
+        """Three side-by-side drafts: GPT (gateway), Mistral (Ollama), Smart Composer."""
+        import random as _random
+        import time as _time
+
+        prompt = self._build_reply_prompt(post_title, post_text, subreddit, author, aspects, examples)
+        seed = int(_time.time() * 1000) ^ _random.randint(0, 1_000_000)
+
+        # Draft A — GPT-4o-mini via Walmart LLM Gateway
+        gpt_text = self._gateway_generate_reply(prompt)
+        # Draft B — Mistral via Ollama
+        mistral_text = self._ollama_generate_reply(prompt)
+        # Draft C — Smart Composer (always available)
+        composer_text = _smart_compose_reply(
+            post_title, post_text, subreddit, author, aspects, examples, seed=seed
+        )
+
+        drafts = []
+
+        if gpt_text:
+            drafts.append({
+                "reply": gpt_text,
+                "model_used": self.config.wmt_gateway_model,
+                "source": "llm",
+                "label": f"GPT ({self.config.wmt_gateway_model})",
+            })
+        else:
+            # Gateway unreachable (off-VPN) — generate a simulated GPT draft
+            # using a differently-seeded composer so the UI always shows 3 options.
+            seed_gpt = seed ^ _random.randint(1, 999_999)
+            gpt_fallback = _smart_compose_reply(
+                post_title, post_text, subreddit, author, aspects, examples, seed=seed_gpt
+            )
+            drafts.append({
+                "reply": gpt_fallback,
+                "model_used": self.config.wmt_gateway_model,
+                "source": "smart-template",
+                "label": f"GPT ({self.config.wmt_gateway_model}) [offline fallback]",
+            })
+
+        if mistral_text:
+            drafts.append({
+                "reply": mistral_text,
+                "model_used": self.config.ollama_model or "mistral:7b-instruct",
+                "source": "llm",
+                "label": f"Mistral ({self.config.ollama_model or 'mistral:7b-instruct'})",
+            })
+        else:
+            # Ollama unreachable — generate a simulated Mistral draft
+            seed_mis = seed ^ _random.randint(1_000_000, 2_000_000)
+            mistral_fallback = _smart_compose_reply(
+                post_title, post_text, subreddit, author, aspects, examples, seed=seed_mis
+            )
+            drafts.append({
+                "reply": mistral_fallback,
+                "model_used": self.config.ollama_model or "mistral:7b-instruct",
+                "source": "smart-template",
+                "label": f"Mistral ({self.config.ollama_model or 'mistral:7b-instruct'}) [offline fallback]",
+            })
+
+        drafts.append({
+            "reply": composer_text,
+            "model_used": "smart-composer",
+            "source": "smart-template",
+            "label": "Smart Composer (content-aware)",
+        })
+
+        return {"drafts": drafts}

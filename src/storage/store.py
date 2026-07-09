@@ -6,6 +6,7 @@ Supports SQLite (local dev) and Cosmos DB (production).
 import json
 import sqlite3
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -144,6 +145,33 @@ class SQLiteBackend(StorageBackend):
                 payload TEXT                   -- JSON blob
             );
             CREATE INDEX IF NOT EXISTS idx_insights_kind_gen ON insights(kind, generated_at DESC);
+
+            -- Notification groups: which subreddit groups get notified and how
+            CREATE TABLE IF NOT EXISTS notification_groups (
+                id TEXT PRIMARY KEY,
+                group_name TEXT NOT NULL,
+                subreddits TEXT NOT NULL,       -- JSON array of subreddit names
+                email_dl TEXT NOT NULL DEFAULT '[]', -- JSON array of email DLs
+                slack_channel TEXT,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                priority_filter TEXT NOT NULL DEFAULT '["P1","P2"]', -- JSON array
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            -- Notification log: track every notification sent
+            CREATE TABLE IF NOT EXISTS notification_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                post_id TEXT NOT NULL,
+                channel TEXT NOT NULL,          -- 'email' | 'slack'
+                status TEXT NOT NULL,           -- 'sent' | 'failed' | 'dry_run'
+                error TEXT,
+                sent_at TEXT NOT NULL,
+                FOREIGN KEY (group_id) REFERENCES notification_groups(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_notiflog_post ON notification_log(post_id);
+            CREATE INDEX IF NOT EXISTS idx_notiflog_group ON notification_log(group_id);
         """)
         self._conn.commit()
 
@@ -336,6 +364,82 @@ class SQLiteBackend(StorageBackend):
             (limit,),
         )
         return [dict(r) for r in cur.fetchall()]
+
+    # ─── Notification Groups ────────────────────────────────────────────
+    def notification_groups_list(self) -> list[dict]:
+        cur = self._conn.execute(
+            "SELECT * FROM notification_groups ORDER BY group_name"
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            r["subreddits"] = json.loads(r["subreddits"])
+            r["email_dl"] = json.loads(r["email_dl"])
+            r["priority_filter"] = json.loads(r["priority_filter"])
+            r["enabled"] = bool(r["enabled"])
+        return rows
+
+    def notification_group_get(self, group_id: str) -> Optional[dict]:
+        cur = self._conn.execute("SELECT * FROM notification_groups WHERE id = ?", (group_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        r = dict(row)
+        r["subreddits"] = json.loads(r["subreddits"])
+        r["email_dl"] = json.loads(r["email_dl"])
+        r["priority_filter"] = json.loads(r["priority_filter"])
+        r["enabled"] = bool(r["enabled"])
+        return r
+
+    def notification_group_upsert(self, group: dict) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self._conn.execute(
+            """INSERT OR REPLACE INTO notification_groups
+               (id, group_name, subreddits, email_dl, slack_channel, enabled, priority_filter, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM notification_groups WHERE id = ?), ?), ?)""",
+            (
+                group["id"], group["group_name"],
+                json.dumps(group.get("subreddits", [])),
+                json.dumps(group.get("email_dl", [])),
+                group.get("slack_channel", ""),
+                1 if group.get("enabled", True) else 0,
+                json.dumps(group.get("priority_filter", ["P1", "P2"])),
+                group["id"], now, now,
+            ),
+        )
+        self._conn.commit()
+
+    def notification_group_delete(self, group_id: str) -> bool:
+        cur = self._conn.execute("DELETE FROM notification_groups WHERE id = ?", (group_id,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def notification_log_insert(self, group_id: str, post_id: str, channel: str, status: str, error: str | None = None) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self._conn.execute(
+            "INSERT INTO notification_log (group_id, post_id, channel, status, error, sent_at) VALUES (?,?,?,?,?,?)",
+            (group_id, post_id, channel, status, error, now),
+        )
+        self._conn.commit()
+
+    def notification_log_for_post(self, post_id: str) -> list[dict]:
+        cur = self._conn.execute(
+            "SELECT * FROM notification_log WHERE post_id = ? ORDER BY sent_at DESC", (post_id,)
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def notification_log_recent(self, limit: int = 50) -> list[dict]:
+        cur = self._conn.execute(
+            """SELECT nl.*, ng.group_name FROM notification_log nl
+               LEFT JOIN notification_groups ng ON nl.group_id = ng.id
+               ORDER BY nl.sent_at DESC LIMIT ?""",
+            (limit,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def notification_groups_for_subreddit(self, subreddit: str) -> list[dict]:
+        """Find all enabled notification groups that include this subreddit."""
+        groups = self.notification_groups_list()
+        return [g for g in groups if g["enabled"] and subreddit in g["subreddits"]]
 
     def close(self):
         self._conn.close()

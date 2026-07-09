@@ -25,14 +25,18 @@ import {
 import {
   api, DateRange, FunnelData, IngestionSource, IngestProgress, PipelineCursor, PipelineJob, PipelineStatus,
   SubredditRegistryEntry,
+  AnalysisBacklog, GapReport, FillGapsPlanEntry,
+  ImageFailuresReport,
 } from '../api';
 
 const RANGE_OPTIONS: { value: DateRange; label: string }[] = [
-  { value: 'today',  label: 'Today' },
-  { value: 'week',   label: 'Last 7 days' },
-  { value: 'month',  label: 'Last 30 days' },
-  { value: '60d',    label: 'Last 60 days' },
-  { value: '90d',    label: 'Last 90 days' },
+  { value: '24h',       label: 'Last 24 hours' },
+  { value: 'today',     label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week',      label: 'Last 7 days' },
+  { value: 'month',     label: 'Last 30 days' },
+  { value: '60d',       label: 'Last 60 days' },
+  { value: '90d',       label: 'Last 90 days' },
 ];
 
 /** Lookback options for manual pipeline trigger (hours) */
@@ -93,6 +97,9 @@ export default function Pipeline() {
   const [jobs, setJobs] = useState<PipelineJob[]>([]);
   const [cursors, setCursors] = useState<PipelineCursor[]>([]);
   const [overlapSeconds, setOverlapSeconds] = useState<number>(300);
+  const [gaps, setGaps] = useState<GapReport | null>(null);
+  const [backlog, setBacklog] = useState<AnalysisBacklog | null>(null);
+  const [imageFailures, setImageFailures] = useState<ImageFailuresReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionInfo, setActionInfo] = useState<string | null>(null);
@@ -109,13 +116,16 @@ export default function Pipeline() {
   const loadAll = async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     try {
-      const [s, f, src, reg, j, c] = await Promise.all([
+      const [s, f, src, reg, j, c, g, bl, imgs] = await Promise.all([
         api.getPipelineStatus(),
         api.getIngestionFunnel(range),
         api.getIngestionSources(range),
         api.getSubredditRegistry(),
         api.getRecentJobs(20),
         api.getPipelineCursors(),
+        api.getPipelineGaps(6),
+        api.getAnalysisBacklog(),
+        api.getImageFailures(50),
       ]);
       setStatus(s);
       setFunnel(f);
@@ -124,6 +134,9 @@ export default function Pipeline() {
       setJobs(j.jobs);
       setCursors(c.cursors);
       setOverlapSeconds(c.overlap_seconds);
+      setGaps(g);
+      setBacklog(bl);
+      setImageFailures(imgs);
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : 'Failed to load pipeline data');
     } finally {
@@ -220,6 +233,19 @@ export default function Pipeline() {
 
       {/* A) Live status strip — Req 1: shows 6h interval; Req 2: timeframe dropdown + progress */}
       <StatusStrip status={status} onRun={runNow} onStop={stopNow} loading={loading} />
+
+      {/* A2) Data health — gaps + analysis backlog + one-click fill */}
+      <DataHealthPanel
+        gaps={gaps}
+        backlog={backlog}
+        pipelineRunning={status?.running ?? false}
+        onError={setActionError}
+        onInfo={(msg) => { setActionInfo(msg); loadAll(false); }}
+        onReload={() => loadAll(false)}
+      />
+
+      {/* A3) Image availability — outcome of every image fetch attempt */}
+      <ImageFailuresPanel report={imageFailures} />
 
       {/* B) Funnel + media breakdown — Req 4: clickable; Req 5: vision failure categories */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -816,16 +842,24 @@ function CoveragePanel({
     ? new Date(nextScheduledRunAt).getTime() - intervalMinutes * 60 * 1000 - overlapSeconds * 1000
     : null;
 
+  // Freshness = "how long since we ingested a real post for this sub", based
+  // on the actual MAX(created_timestamp), NOT the cursor. Cursor can be
+  // rewound behind the data (e.g. by --fill-gaps) which would make the
+  // sub look freshly-fetched even though no new posts have arrived.
+  const freshnessTs = (c: PipelineCursor): number | null =>
+    c.newest_post_utc ?? c.last_fetched_utc ?? null;
+
   const sorted = [...cursors].sort((a, b) => {
-    // worst-staleness first
-    const aLast = a.last_fetched_utc ?? 0;
-    const bLast = b.last_fetched_utc ?? 0;
-    return aLast - bLast;
+    // worst-staleness first — subs with no data at all sink to the top.
+    const aTs = freshnessTs(a) ?? 0;
+    const bTs = freshnessTs(b) ?? 0;
+    return aTs - bTs;
   });
 
   const stale = sorted.filter(c => {
-    if (!c.last_fetched_utc) return true;
-    return Date.now() - c.last_fetched_utc * 1000 > stalenessLimitMs;
+    const ts = freshnessTs(c);
+    if (!ts) return true;
+    return Date.now() - ts * 1000 > stalenessLimitMs;
   }).length;
 
   return (
@@ -873,7 +907,8 @@ function CoveragePanel({
                 <thead className="bg-walmart-navy/[0.03] text-gray-500 uppercase tracking-wider">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">Subreddit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Last post seen</th>
+                    <th className="px-3 py-2 text-left font-semibold" title="MAX(created_timestamp) from raw_posts — the newest post we've actually ingested">Last post seen</th>
+                    <th className="px-3 py-2 text-left font-semibold" title="The cursor value passed as `since` to the next fetcher call. Can differ from Last post seen if a lookback rewind put it behind.">Cursor</th>
                     <th className="px-3 py-2 text-left font-semibold">Last fetch window</th>
                     <th className="px-3 py-2 text-right font-semibold">Fetched</th>
                     <th className="px-3 py-2 text-left font-semibold">Next coverage</th>
@@ -881,17 +916,35 @@ function CoveragePanel({
                 </thead>
                 <tbody>
                   {sorted.map(c => {
-                    const lastUtc = c.last_fetched_utc ?? null;
-                    const isStale = !lastUtc || Date.now() - lastUtc * 1000 > stalenessLimitMs;
+                    const newestPost = c.newest_post_utc ?? null;
+                    const cursorUtc = c.last_fetched_utc ?? null;
+                    const freshness = newestPost ?? cursorUtc;
+                    const isStale = !freshness || Date.now() - freshness * 1000 > stalenessLimitMs;
+                    // Drift = cursor is ahead of the newest actual post by
+                    // more than 1 hour (a lookback rewind that upstream
+                    // returned 0 for, OR a bootstrap value never realized).
+                    const drift = (newestPost && cursorUtc)
+                      ? (cursorUtc - newestPost)
+                      : 0;
+                    const hasDrift = Math.abs(drift) > 3600;
                     const w = c.last_window;
                     return (
                       <tr key={c.subreddit} className="border-t border-walmart-navy/5">
                         <td className="px-3 py-2 font-mono text-walmart-navy">r/{c.subreddit}</td>
                         <td className="px-3 py-2">
-                          <div className="text-walmart-navy">{fmtAbs(lastUtc)}</div>
+                          <div className="text-walmart-navy">{fmtAbs(newestPost)}</div>
                           <div className={isStale ? 'text-sentiment-negative font-semibold' : 'text-gray-400'}>
-                            {ago(lastUtc)} {isStale && '⚠'}
+                            {ago(newestPost)} {isStale && '⚠'}
                           </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="text-gray-600 font-mono text-[11px]">{fmtAbs(cursorUtc)}</div>
+                          {hasDrift && (
+                            <div className="text-[10px] font-semibold text-walmart-blue mt-0.5"
+                                 title={`Cursor is ${(drift/3600).toFixed(1)}h ${drift > 0 ? 'ahead of' : 'behind'} newest post`}>
+                              drift {drift > 0 ? '+' : ''}{(drift/3600).toFixed(1)}h
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           {w ? (
@@ -918,9 +971,9 @@ function CoveragePanel({
                           ) : <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-3 py-2 font-mono text-[11px]">
-                          {nextSinceMs && lastUtc ? (
+                          {nextSinceMs && cursorUtc ? (
                             <>
-                              <span className="text-walmart-navy">{fmtAbs(lastUtc - overlapSeconds)}</span>
+                              <span className="text-walmart-navy">{fmtAbs(cursorUtc - overlapSeconds)}</span>
                               <span className="text-gray-400"> → </span>
                               <span className="text-walmart-navy">{fmtAbsIso(nextScheduledRunAt)}</span>
                             </>
@@ -961,10 +1014,10 @@ function FunnelChart({ data }: { data: FunnelData }) {
   const selected = data.funnel.find(f => f.stage === selectedStage);
 
   const stageExplanation: Record<string, string> = {
-    fetched: 'Total posts retrieved from Reddit in this window.',
+    fetched: 'Total posts retrieved from Reddit in this window. Matches Brand Health → Analyzed Posts card, "Fetched (ingested)" row.',
     english: 'Posts kept after language detection (non-English dropped).',
     long_enough: 'Posts with enough content for meaningful analysis (≥10 chars or has image).',
-    analyzed: 'Posts successfully processed by the LLM sentiment analyzer.',
+    analyzed: 'Posts successfully processed by the LLM sentiment analyzer. Matches Brand Health → Analyzed Posts headline number.',
     trusted: 'Posts passing trust scoring thresholds (not spam, not astroturf).',
   };
 
@@ -1104,17 +1157,7 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
         </div>
       ))}
       <div className="border-t pt-3 mt-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500 mb-1">Vision captions</div>
-          {totalFailures > 0 && (
-            <button
-              onClick={() => setShowVisionDetail(!showVisionDetail)}
-              className="text-xs text-blue-600 hover:text-blue-800"
-            >
-              {showVisionDetail ? 'Hide' : 'Failures'}
-            </button>
-          )}
-        </div>
+        <div className="text-xs text-gray-500 mb-1">Vision captions</div>
         <div className="flex items-center justify-between text-sm">
           <span>{m.captioned} / {m.images_total} captionable</span>
           <span className={`font-semibold ${
@@ -1130,15 +1173,25 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
           />
         </div>
 
-        {/* Req 5: Vision failure categorization */}
-        {showVisionDetail && failures && totalFailures > 0 && (
-          <div className="mt-3 space-y-1.5 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="text-gray-600 font-medium">
-                Caption failures ({totalFailures.toLocaleString()} images)
-              </div>
+        {/* Caption failures — visible summary line, drill-down below. */}
+        {totalFailures > 0 && (
+          <div className="mt-3">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowVisionDetail(!showVisionDetail)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowVisionDetail(!showVisionDetail); } }}
+              className="w-full flex items-center justify-between text-xs text-gray-700 hover:text-walmart-blue rounded-lg px-2 py-1.5 hover:bg-walmart-blue/5 cursor-pointer"
+              title="Show / hide per-category breakdown"
+            >
+              <span className="flex items-center gap-1.5">
+                {showVisionDetail ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                <span className="font-medium">Caption failures</span>
+                <span className="text-gray-500">({totalFailures.toLocaleString()} images)</span>
+              </span>
               <button
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation();
                   try {
                     const r = await api.retryVision();
                     if (!r.started) {
@@ -1146,8 +1199,8 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
                     } else {
                       alert('Vision retry started — watch the Live log on the Pipeline status strip.');
                     }
-                  } catch (e) {
-                    alert(`Retry failed: ${e instanceof Error ? e.message : String(e)}`);
+                  } catch (err) {
+                    alert(`Retry failed: ${err instanceof Error ? err.message : String(err)}`);
                   }
                 }}
                 className="px-2.5 py-1 text-[11px] rounded-pill bg-walmart-blue text-white hover:bg-walmart-blue/90 flex items-center gap-1 font-semibold"
@@ -1156,34 +1209,40 @@ function MediaBreakdown({ data }: { data: FunnelData }) {
                 <RefreshCw size={11} /> Retry vision
               </button>
             </div>
-            {[
-              { key: 'ollama_unavailable', label: 'Ollama unavailable', value: failures.ollama_unavailable, color: 'bg-red-200',
-                reason: 'Vision model server (Ollama) was not running or unreachable when caption was attempted' },
-              { key: 'timeout', label: 'Timeout', value: failures.timeout, color: 'bg-amber-200',
-                reason: 'Vision model took too long to respond — image may be too large or model overloaded' },
-              { key: 'fetch_failed', label: 'Image fetch failed', value: failures.fetch_failed, color: 'bg-orange-200',
-                reason: 'Could not download image from Reddit — URL expired, deleted, or blocked' },
-              { key: 'no_content', label: 'No content detected', value: failures.no_content, color: 'bg-gray-200',
-                reason: 'Vision model returned empty caption — image may be blank, blurry, or unrecognizable' },
-              { key: 'other', label: 'Other', value: failures.other, color: 'bg-gray-200',
-                reason: 'Miscellaneous failures — check API logs for details' },
-            ].filter(f => f.value > 0).map(f => (
-              <div key={f.key} className="flex items-center gap-2">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-gray-600">{f.label}</span>
-                    <span className="tabular-nums">{f.value.toLocaleString()}</span>
+
+            {/* Req 5: Vision failure categorization — appears BELOW the summary. */}
+            {showVisionDetail && failures && (
+              <div className="mt-2 space-y-1.5 text-xs">
+                {[
+                  { key: 'ollama_unavailable', label: 'Ollama unavailable', value: failures.ollama_unavailable, color: 'bg-red-200',
+                    reason: 'Vision model server (Ollama) was not running or unreachable when caption was attempted' },
+                  { key: 'timeout', label: 'Timeout', value: failures.timeout, color: 'bg-amber-200',
+                    reason: 'Vision model took too long to respond — image may be too large or model overloaded' },
+                  { key: 'fetch_failed', label: 'Image fetch failed', value: failures.fetch_failed, color: 'bg-orange-200',
+                    reason: 'Could not download image from Reddit — URL expired, deleted, or blocked' },
+                  { key: 'no_content', label: 'No content detected', value: failures.no_content, color: 'bg-gray-200',
+                    reason: 'Vision model returned empty caption — image may be blank, blurry, or unrecognizable' },
+                  { key: 'other', label: 'Other', value: failures.other, color: 'bg-gray-200',
+                    reason: 'Miscellaneous failures — check API logs for details' },
+                ].filter(f => f.value > 0).map(f => (
+                  <div key={f.key} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-gray-600">{f.label}</span>
+                        <span className="tabular-nums">{f.value.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded h-1.5">
+                        <div
+                          className={`${f.color} h-1.5 rounded`}
+                          style={{ width: `${Math.min(100, (f.value / totalFailures) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{f.reason}</div>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-100 rounded h-1.5">
-                    <div
-                      className={`${f.color} h-1.5 rounded`}
-                      style={{ width: `${Math.min(100, (f.value / totalFailures) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">{f.reason}</div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -2018,6 +2077,599 @@ function BackfillProgressPanel({ progress, open, onToggle }: {
           );
         })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section A2: Data Health Panel ─────────────────────────────────────────
+// Single "Catch up from last run" primary action + analyze-pending secondary.
+// Advanced controls (auto vs since-anchor modes, per-sub table, plan preview)
+// live behind a collapsed "Advanced" section so the default view stays simple.
+
+function DataHealthPanel({ gaps, backlog, pipelineRunning, onError, onInfo, onReload }: {
+  gaps: GapReport | null;
+  backlog: AnalysisBacklog | null;
+  pipelineRunning: boolean;
+  onError: (msg: string) => void;
+  onInfo: (msg: string) => void;
+  onReload: () => void;
+}) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [plan, setPlan] = useState<FillGapsPlanEntry[] | null>(null);
+  const [planMode, setPlanMode] = useState<'auto' | 'since'>('since');
+  const [gapHours, setGapHours] = useState<number>(6);
+
+  const lastRun = gaps?.last_successful_ingest ?? null;
+  const totals = gaps?.totals ?? { subreddits: 0, stale: 0, drifted: 0, fresh: 0 };
+  const pending = backlog?.pending ?? 0;
+
+  // Custom-since editor defaults to the last successful run's finish time so
+  // "Catch up from last run" and the Advanced picker start pointing at the
+  // same sensible timestamp.
+  const defaultSince = useMemo(() => {
+    const iso = lastRun?.finished_at;
+    if (iso) {
+      // Convert to local wall-clock for the <input type="datetime-local">.
+      const d = new Date(iso);
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 16);
+  }, [lastRun?.finished_at]);
+  const [since, setSince] = useState<string>(defaultSince);
+  // Reset the picker when a fresh lastRun arrives.
+  useEffect(() => { setSince(defaultSince); }, [defaultSince]);
+
+  const fmtRelative = (hoursAgo: number | null | undefined): string => {
+    if (hoursAgo == null) return '—';
+    if (hoursAgo < 1) return `${Math.round(hoursAgo * 60)} min ago`;
+    if (hoursAgo < 24) return `${hoursAgo.toFixed(1)} h ago`;
+    return `${(hoursAgo / 24).toFixed(1)} days ago`;
+  };
+  const fmtAbs = (iso: string | null | undefined): string => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  // ── Actions ────────────────────────────────────────────────────────────
+  const catchUp = async () => {
+    if (pipelineRunning) {
+      onError('A pipeline run is already in progress. Wait for it to finish or stop it first.');
+      return;
+    }
+    if (!lastRun?.finished_at) {
+      onError('No previous successful ingest found. Trigger a normal run first.');
+      return;
+    }
+    setApplying(true);
+    try {
+      const r = await api.fillGaps({ since: lastRun.finished_at });
+      if (r.started) {
+        onInfo(`Catch-up started — fetching everything after ${fmtAbs(lastRun.finished_at)} UTC.`);
+      } else {
+        onError(`Could not start: ${r.reason ?? 'unknown'}`);
+      }
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : 'Catch-up failed');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const dryRun = async () => {
+    setPlanning(true);
+    setPlan(null);
+    try {
+      const opts: { since?: string; gapHours?: number; dryRun: boolean } = { dryRun: true };
+      if (planMode === 'since' && since) opts.since = new Date(since).toISOString();
+      else opts.gapHours = gapHours;
+      const r = await api.fillGaps(opts);
+      if (r.plan) { setPlan(r.plan.plan); setShowPlan(true); }
+      else onError(`Dry-run failed: ${r.reason ?? r.detail ?? 'unknown'}`);
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : 'Dry-run failed');
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  const applyAdvanced = async () => {
+    if (pipelineRunning) {
+      onError('A pipeline run is already in progress. Wait for it to finish or stop it first.');
+      return;
+    }
+    setApplying(true);
+    try {
+      const opts: { since?: string; gapHours?: number } = {};
+      if (planMode === 'since' && since) opts.since = new Date(since).toISOString();
+      else opts.gapHours = gapHours;
+      const r = await api.fillGaps(opts);
+      if (r.started) {
+        onInfo(
+          planMode === 'since'
+            ? `Fill-gaps started (since ${since} local time).`
+            : `Fill-gaps started (auto mode, gap threshold ${gapHours}h).`
+        );
+        setShowPlan(false); setPlan(null);
+      } else onError(`Could not start: ${r.reason ?? 'unknown'}`);
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : 'Fill-gaps failed');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const runAnalyzePending = async () => {
+    if (pipelineRunning) {
+      onError('A pipeline run is already in progress. Wait for it to finish or stop it first.');
+      return;
+    }
+    setAnalyzing(true);
+    try {
+      const r = await api.analyzePending();
+      if (r.started) {
+        onInfo(`Analyze started — processing ${pending.toLocaleString()} un-analyzed posts. No upstream fetches.`);
+        onReload();
+      } else {
+        onError(`Could not start: ${r.reason ?? 'unknown'}`);
+      }
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : 'Analyze failed');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  const hoursSinceRun = lastRun?.hours_ago ?? null;
+  const isStale = hoursSinceRun == null || hoursSinceRun > 3; // more than 3h = "catch up" recommended
+  const statusIcon = pipelineRunning
+    ? <Loader2 size={16} className="text-walmart-blue animate-spin" />
+    : isStale
+      ? <AlertCircle size={16} className="text-sentiment-negative" />
+      : <CheckCircle2 size={16} className="text-sentiment-positive" />;
+
+  return (
+    <div className="bg-surface border border-walmart-navy/10 rounded-2xl shadow-card p-5 space-y-4">
+      {/* Header: what happened, when */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-base font-semibold text-walmart-navy flex items-center gap-2">
+            {statusIcon}
+            Data health
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Last successful ingest was <span className="font-semibold text-walmart-navy">{fmtRelative(hoursSinceRun)}</span>
+            {lastRun && <> at <span className="font-mono text-walmart-navy">{fmtAbs(lastRun.finished_at)}</span></>}
+            {lastRun && <> · pulled <span className="font-semibold text-walmart-navy">{lastRun.ingested.toLocaleString()}</span> new posts</>}.
+          </p>
+          {pending > 0 && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              <span className="font-semibold text-walmart-navy">{pending.toLocaleString()}</span> posts are ingested but not yet analyzed.
+            </p>
+          )}
+        </div>
+        {pipelineRunning && (
+          <span className="text-xs bg-walmart-blue/10 text-walmart-blue px-2.5 py-1 rounded-pill font-semibold">
+            Pipeline is running…
+          </span>
+        )}
+      </div>
+
+      {/* Primary actions — one clear "catch up" + one "analyze what's here" */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="border border-walmart-blue/25 rounded-xl p-4 bg-walmart-blue/[0.03]">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <div className="text-sm font-semibold text-walmart-navy flex items-center gap-1.5">
+                <RefreshCw size={14} className="text-walmart-blue" /> Catch up from last run
+              </div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Fetches every post created after
+                {' '}
+                <span className="font-mono text-walmart-navy">
+                  {lastRun ? fmtAbs(lastRun.finished_at) : '—'}
+                </span>
+                {lastRun && <> ({fmtRelative(hoursSinceRun)})</>} across all 25 subreddits.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={catchUp}
+            disabled={applying || pipelineRunning || !lastRun}
+            className="w-full px-3 py-2 text-sm rounded-pill bg-walmart-blue text-white hover:bg-walmart-blue/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 font-semibold shadow-sm"
+            title={!lastRun ? 'Need at least one successful ingest first' : pipelineRunning ? 'Wait for the current run to finish' : 'Fill everything since the last run'}
+          >
+            {applying ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            {!lastRun ? 'No previous run to catch up from' : `Catch up now (~${fmtRelative(hoursSinceRun)} of data)`}
+          </button>
+        </div>
+
+        <div className="border border-walmart-spark/40 rounded-xl p-4 bg-walmart-spark/[0.05]">
+          <div className="text-sm font-semibold text-walmart-navy flex items-center gap-1.5">
+            <Activity size={14} className="text-walmart-spark-dark" /> Analyze pending posts
+          </div>
+          <div className="text-xs text-gray-600 mt-0.5 mb-2">
+            Runs sentiment + aspect analysis on posts already ingested that never got a sentiment row. No upstream fetches.
+          </div>
+          <div className="mb-3">
+            <div className="text-xl font-bold text-walmart-navy">
+              {pending.toLocaleString()}
+              <span className="text-xs font-normal text-gray-500 ml-2">
+                of {backlog?.raw_posts.toLocaleString() ?? '—'} total posts
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={runAnalyzePending}
+            disabled={analyzing || pipelineRunning || pending === 0}
+            className="w-full px-3 py-2 text-sm rounded-pill bg-walmart-spark text-walmart-navy hover:bg-walmart-spark-dark disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 font-semibold shadow-sm"
+            title={pipelineRunning ? 'Wait for the current run to finish' : pending === 0 ? 'Nothing to analyze' : 'Process the backlog'}
+          >
+            {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            {pending === 0 ? 'Nothing to analyze' : `Analyze ${pending.toLocaleString()} posts`}
+          </button>
+        </div>
+      </div>
+
+      {/* Freshness summary strip */}
+      <div className="text-xs text-gray-500 flex items-center gap-3 flex-wrap px-1">
+        <span>
+          <span className="font-semibold text-sentiment-positive">{totals.fresh}</span> fresh
+          {' · '}
+          <span className="font-semibold text-walmart-navy">{totals.stale}</span> stale
+          {' · '}
+          <span className="font-semibold text-walmart-navy">{totals.drifted}</span> drifted
+          {' / '}
+          {totals.subreddits} subs tracked
+        </span>
+        {gaps?.generated_at && (
+          <>
+            <span>·</span>
+            <span className="font-mono">as of {new Date(gaps.generated_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+          </>
+        )}
+      </div>
+
+      {/* Advanced — everything power users need, hidden by default */}
+      <div className="border-t border-walmart-navy/5 pt-3">
+        <button
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+          className="text-xs text-gray-600 hover:text-walmart-blue flex items-center gap-1 font-medium"
+        >
+          {advancedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          Advanced &mdash; custom time range, per-sub gap detail, plan preview
+        </button>
+
+        {advancedOpen && (
+          <div className="mt-3 space-y-3">
+            {/* Mode selector */}
+            <div className="flex gap-1 p-0.5 bg-white border border-walmart-navy/10 rounded-pill w-fit">
+              {(['since', 'auto'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setPlanMode(m)}
+                  className={`px-3 py-1 text-xs rounded-pill font-medium transition-colors ${
+                    planMode === m ? 'bg-walmart-blue text-white shadow-sm' : 'text-gray-600 hover:bg-walmart-blue/5'
+                  }`}
+                >
+                  {m === 'since' ? 'Rewind since date' : 'Auto per-subreddit'}
+                </button>
+              ))}
+            </div>
+
+            {planMode === 'since' ? (
+              <div className="text-xs text-gray-600 flex items-center gap-2 flex-wrap">
+                <span>Rewind every subreddit whose cursor is more recent than</span>
+                <input
+                  type="datetime-local"
+                  value={since}
+                  onChange={(e) => setSince(e.target.value)}
+                  className="px-2 py-0.5 border border-walmart-navy/15 rounded font-mono text-walmart-navy"
+                />
+                <span className="text-gray-400">(local time)</span>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-600 flex items-center gap-2">
+                <span>Skip subreddits whose gap is smaller than</span>
+                <input
+                  type="number" min={0} max={720} step={1}
+                  value={gapHours}
+                  onChange={(e) => setGapHours(Number(e.target.value) || 0)}
+                  className="w-16 px-2 py-0.5 border border-walmart-navy/15 rounded text-center font-mono text-walmart-navy"
+                />
+                <span>hours</span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={dryRun}
+                disabled={planning}
+                className="px-3 py-1.5 text-xs rounded-pill border border-walmart-navy/15 bg-white hover:bg-walmart-blue/5 text-walmart-navy disabled:opacity-50 flex items-center gap-1"
+              >
+                {planning ? <Loader2 size={12} className="animate-spin" /> : <Info size={12} />}
+                Preview plan
+              </button>
+              <button
+                onClick={applyAdvanced}
+                disabled={applying || pipelineRunning}
+                className="px-3 py-1.5 text-xs rounded-pill bg-walmart-navy text-white hover:bg-walmart-navy/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+              >
+                {applying ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                Run with these options
+              </button>
+            </div>
+
+            {/* Plan preview */}
+            {showPlan && plan && (
+              <div className="border border-walmart-navy/10 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 bg-walmart-navy/[0.03] flex items-center justify-between">
+                  <div className="text-xs font-semibold text-walmart-navy">
+                    Plan &mdash; {plan.length} subreddit{plan.length === 1 ? '' : 's'} would be rewound
+                  </div>
+                  <button onClick={() => setShowPlan(false)} className="text-gray-400 hover:text-walmart-navy">
+                    <X size={13} />
+                  </button>
+                </div>
+                {plan.length === 0 ? (
+                  <div className="p-4 text-xs text-gray-500">Everything is already caught up for the selected criteria.</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-white sticky top-0 border-b border-walmart-navy/10">
+                        <tr className="text-gray-500 text-left">
+                          <th className="px-4 py-2 font-medium">Subreddit</th>
+                          <th className="px-4 py-2 font-medium text-right">Rewind (h)</th>
+                          <th className="px-4 py-2 font-medium">New cursor (UTC)</th>
+                          <th className="px-4 py-2 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...plan].sort((a, b) => (b.rewind_hours ?? 0) - (a.rewind_hours ?? 0)).map(e => {
+                          const rewind = e.rewind_hours ?? 0;
+                          const newIso = e.new_cursor_utc
+                            ? new Date(e.new_cursor_utc * 1000).toISOString().replace('T', ' ').slice(0, 16)
+                            : '—';
+                          return (
+                            <tr key={e.subreddit} className="border-t border-walmart-navy/5 hover:bg-walmart-blue/[0.02]">
+                              <td className="px-4 py-1.5 font-mono text-walmart-navy">{e.subreddit}</td>
+                              <td className={`px-4 py-1.5 text-right font-mono ${rewind < 0 ? 'text-walmart-blue' : 'text-walmart-navy'}`}>{rewind.toFixed(1)}</td>
+                              <td className="px-4 py-1.5 font-mono text-gray-600">{newIso}</td>
+                              <td className="px-4 py-1.5">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                  e.reason === 'cursor_ahead_of_data' ? 'bg-walmart-blue/10 text-walmart-blue'
+                                    : e.reason === 'never_fetched' ? 'bg-gray-100 text-gray-600'
+                                    : 'bg-sentiment-negative/10 text-sentiment-negative'
+                                }`}>{e.reason}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Per-sub gap detail */}
+            {gaps && gaps.subreddits.length > 0 && (
+              <details className="border border-walmart-navy/10 rounded-xl">
+                <summary className="px-4 py-2 cursor-pointer text-xs font-semibold text-walmart-navy bg-walmart-navy/[0.03] hover:bg-walmart-blue/[0.05] rounded-t-xl">
+                  Per-subreddit freshness ({gaps.subreddits.length} subs)
+                </summary>
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-white sticky top-0 border-b border-walmart-navy/10">
+                      <tr className="text-gray-500 text-left">
+                        <th className="px-4 py-2 font-medium">Subreddit</th>
+                        <th className="px-4 py-2 font-medium text-right">Posts</th>
+                        <th className="px-4 py-2 font-medium text-right">Gap (h)</th>
+                        <th className="px-4 py-2 font-medium text-right">Cursor drift (h)</th>
+                        <th className="px-4 py-2 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...gaps.subreddits].sort((a, b) => (b.gap_hours ?? 0) - (a.gap_hours ?? 0)).map(s => (
+                        <tr key={s.subreddit} className="border-t border-walmart-navy/5">
+                          <td className="px-4 py-1.5 font-mono text-walmart-navy">{s.subreddit}</td>
+                          <td className="px-4 py-1.5 text-right font-mono">{s.post_count.toLocaleString()}</td>
+                          <td className="px-4 py-1.5 text-right font-mono">{s.gap_hours == null ? '∞' : s.gap_hours.toFixed(1)}</td>
+                          <td className={`px-4 py-1.5 text-right font-mono ${s.cursor_drift_hours < -1 ? 'text-sentiment-negative' : 'text-gray-500'}`}>{s.cursor_drift_hours.toFixed(1)}</td>
+                          <td className="px-4 py-1.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                              s.reason === 'fresh' ? 'bg-sentiment-positive/10 text-sentiment-positive'
+                                : s.reason === 'cursor_ahead_of_data' ? 'bg-walmart-blue/10 text-walmart-blue'
+                                : s.reason === 'never_fetched' ? 'bg-gray-100 text-gray-600'
+                                : 'bg-sentiment-negative/10 text-sentiment-negative'
+                            }`}>{s.reason}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section A3: Image Availability Panel ─────────────────────────────────
+// Shows the outcome of every image fetch attempt: how many succeeded, how
+// many were dead (404 = user deleted the post, 429 = imgur throttled, 403 =
+// private, etc.). Lets analysts confirm they're not silently losing image
+// context from removed content.
+
+const IMG_STATUS_STYLE: Record<string, { label: string; className: string }> = {
+  fetched:          { label: 'Fetched',          className: 'bg-sentiment-positive/10 text-sentiment-positive' },
+  deleted:          { label: 'Deleted (404)',    className: 'bg-sentiment-negative/10 text-sentiment-negative' },
+  gone:             { label: 'Gone (410)',       className: 'bg-sentiment-negative/10 text-sentiment-negative' },
+  forbidden:        { label: 'Forbidden (403)',  className: 'bg-amber-100 text-amber-800' },
+  throttled:        { label: 'Throttled (429)',  className: 'bg-amber-100 text-amber-800' },
+  too_large:        { label: 'Too large',        className: 'bg-gray-100 text-gray-700' },
+  not_image:        { label: 'Not an image',     className: 'bg-gray-100 text-gray-700' },
+  server_error:     { label: 'Server error',     className: 'bg-sentiment-negative/10 text-sentiment-negative' },
+  connection_error: { label: 'Connection error', className: 'bg-amber-100 text-amber-800' },
+  decode_error:     { label: 'Decode error',     className: 'bg-gray-100 text-gray-700' },
+  client_error:     { label: 'Client error',     className: 'bg-sentiment-negative/10 text-sentiment-negative' },
+};
+
+function ImageFailuresPanel({ report }: { report: ImageFailuresReport | null }) {
+  const [open, setOpen] = useState(false);
+
+  if (!report || report.total_checked === 0) {
+    return null; // Nothing to show until at least one image has been checked.
+  }
+
+  const failedPct = report.total_checked > 0
+    ? (100 * report.total_failed / report.total_checked)
+    : 0;
+  const totals = report.totals_by_status || {};
+  const sortedStatuses = Object.entries(totals)
+    .filter(([k]) => k !== 'fetched')
+    .sort((a, b) => b[1] - a[1]);
+
+  const fmtWhen = (iso: string | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="bg-surface border border-walmart-navy/10 rounded-2xl shadow-card">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full p-5 flex items-center justify-between hover:bg-walmart-blue/5 rounded-2xl text-left"
+      >
+        <div className="flex items-center gap-3">
+          {open ? <ChevronDown size={16} className="text-walmart-navy" /> : <ChevronRight size={16} className="text-walmart-navy" />}
+          <div>
+            <h3 className="text-base font-semibold text-walmart-navy flex items-center gap-2">
+              <AlertCircle size={16} className={report.total_failed > 0 ? 'text-sentiment-negative' : 'text-sentiment-positive'} />
+              Image availability
+            </h3>
+            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
+              <span>
+                <span className="font-semibold text-walmart-navy">{report.total_fetched.toLocaleString()}</span> fetched
+                {' · '}
+                <span className="font-semibold text-sentiment-negative">{report.total_failed.toLocaleString()}</span> unavailable
+                {' · '}
+                <span className="font-mono">{failedPct.toFixed(1)}%</span> failure rate
+                {' / '}
+                {report.total_checked.toLocaleString()} attempts
+              </span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4">
+          {/* Status breakdown bar chart */}
+          <div>
+            <div className="text-xs font-semibold text-walmart-navy mb-2">Failure breakdown</div>
+            <div className="space-y-1.5">
+              {sortedStatuses.length === 0 ? (
+                <div className="text-xs text-gray-500">No failures recorded.</div>
+              ) : (
+                sortedStatuses.map(([status, count]) => {
+                  const style = IMG_STATUS_STYLE[status] ?? { label: status, className: 'bg-gray-100 text-gray-700' };
+                  const pct = report.total_checked > 0 ? (100 * count / report.total_checked) : 0;
+                  return (
+                    <div key={status} className="flex items-center gap-3 text-xs">
+                      <span className={`px-2 py-0.5 rounded font-medium min-w-[110px] text-center ${style.className}`}>
+                        {style.label}
+                      </span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full bg-sentiment-negative/60"
+                          style={{ width: `${Math.min(100, pct * 5)}%` }}
+                          title={`${count} of ${report.total_checked} attempts (${pct.toFixed(1)}%)`}
+                        />
+                      </div>
+                      <span className="font-mono text-walmart-navy min-w-[50px] text-right">
+                        {count.toLocaleString()}
+                      </span>
+                      <span className="text-gray-400 font-mono min-w-[45px] text-right">
+                        {pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Recent failures table */}
+          {report.samples.length > 0 && (
+            <div className="border border-walmart-navy/10 rounded-xl overflow-hidden">
+              <div className="px-4 py-2 bg-walmart-navy/[0.03] text-xs font-semibold text-walmart-navy">
+                Recent unavailable images ({report.samples.length} shown)
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-white sticky top-0 border-b border-walmart-navy/10">
+                    <tr className="text-gray-500 text-left">
+                      <th className="px-4 py-2 font-medium">Post</th>
+                      <th className="px-4 py-2 font-medium">Sub</th>
+                      <th className="px-4 py-2 font-medium">Status</th>
+                      <th className="px-4 py-2 font-medium">URL</th>
+                      <th className="px-4 py-2 font-medium">Checked</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.samples.map(s => {
+                      const style = IMG_STATUS_STYLE[s.status] ?? { label: s.status, className: 'bg-gray-100 text-gray-700' };
+                      const permalink = s.permalink ? `https://reddit.com${s.permalink}` : null;
+                      return (
+                        <tr key={s.post_id} className="border-t border-walmart-navy/5 hover:bg-walmart-blue/[0.02]">
+                          <td className="px-4 py-1.5 max-w-[280px]">
+                            {permalink ? (
+                              <a href={permalink} target="_blank" rel="noreferrer" className="text-walmart-blue hover:underline truncate block" title={s.title}>
+                                {s.title || s.post_id}
+                              </a>
+                            ) : (
+                              <span className="truncate block" title={s.title}>{s.title || s.post_id}</span>
+                            )}
+                            <span className="font-mono text-[10px] text-gray-400">{s.post_id}</span>
+                          </td>
+                          <td className="px-4 py-1.5 font-mono text-walmart-navy">{s.subreddit}</td>
+                          <td className="px-4 py-1.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${style.className}`}>
+                              {style.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-1.5 max-w-[280px]">
+                            <a href={s.url} target="_blank" rel="noreferrer" className="text-gray-500 hover:text-walmart-blue truncate block font-mono text-[10px]" title={s.url}>
+                              {s.url.replace(/^https?:\/\//, '')}
+                            </a>
+                          </td>
+                          <td className="px-4 py-1.5 font-mono text-gray-500">{fmtWhen(s.checked_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

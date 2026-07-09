@@ -1,0 +1,149 @@
+/* Global tweaks so wide mermaid diagrams, tables, and code blocks
+   fit inside Slidev's fixed slide canvas instead of being clipped. */
+
+/* Walmart brand palette */
+:root {
+  --wm-blue: #0071ce;
+  --wm-blue-dark: #041e42;
+  --wm-blue-tint: #e6f4fc;
+  --wm-blue-mid: #cce7f5;
+  --wm-yellow: #ffc220;
+  --wm-yellow-tint: #fff5cc;
+  --wm-grey: #f2f2f2;
+}
+
+/* Every content slide can scroll if it overflows vertically.
+   Applied via `defaults.class: overflow-content` in frontmatter. */
+.slidev-layout.overflow-content {
+  overflow-y: auto;
+  padding: 1.4rem 2.2rem;
+}
+
+/* Mermaid — never overflow the slide, keep aspect ratio */
+.slidev-layout .mermaid,
+.slidev-layout svg[id^="mermaid"] {
+  max-width: 100% !important;
+  max-height: 78vh !important;
+  height: auto !important;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Wide markdown tables — shrink font & allow horizontal scroll */
+.slidev-layout table {
+  font-size: 0.78em;
+  width: 100%;
+  border-collapse: collapse;
+}
+.slidev-layout table th,
+.slidev-layout table td {
+  padding: 4px 8px;
+  line-height: 1.25;
+}
+.slidev-layout thead tr {
+  background: var(--wm-blue-tint);
+  color: var(--wm-blue-dark);
+  border-bottom: 2px solid var(--wm-blue);
+}
+
+/* ASCII / code fences — shrink and allow scroll */
+.slidev-layout pre,
+.slidev-layout code {
+  font-size: 0.72em;
+  line-height: 1.25;
+}
+.slidev-layout pre {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* Bullet lists — a little tighter */
+.slidev-layout ul,
+.slidev-layout ol {
+  line-height: 1.35;
+}
+
+/* Slide headings — Walmart brand blue */
+.slidev-layout h1 {
+  font-size: 1.7em;
+  margin-top: 0;
+  color: var(--wm-blue-dark);
+  border-bottom: 4px solid var(--wm-yellow);
+  padding-bottom: 0.2em;
+  display: inline-block;
+}
+.slidev-layout h2 {
+  font-size: 1.35em;
+  margin-top: 0.2em;
+  color: var(--wm-blue);
+}
+.slidev-layout h3 { font-size: 1.1em; color: var(--wm-blue-dark); }
+
+/* Blockquotes — Walmart yellow accent */
+.slidev-layout blockquote {
+  font-size: 0.9em;
+  border-left: 4px solid var(--wm-yellow);
+  padding-left: 0.8em;
+  color: var(--wm-blue-dark);
+  background: var(--wm-yellow-tint);
+  padding: 0.5em 0.8em;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Links — Walmart blue */
+.slidev-layout a { color: var(--wm-blue); text-decoration: underline; }
+.slidev-layout a:hover { color: var(--wm-blue-dark); }
+
+/* Strong emphasis — Walmart dark blue */
+.slidev-layout strong { color: var(--wm-blue-dark); }
+
+/* ---------------------------------------------------------------------------
+   Contrast fixes — override the global strong/code color when the parent uses
+   a dark background (bg-[#041e42]) or forces white text (.text-white). Without
+   these, <strong>/<em>/<code> render as navy-on-navy or white-on-light-grey.
+   Selectors cover both `.text-white` as a descendant AND on the layout itself
+   (e.g., slide 1 cover uses `class: text-center text-white` on .slidev-layout). */
+
+.slidev-layout.text-white strong,
+.slidev-layout .text-white strong,
+.slidev-layout.text-white em,
+.slidev-layout .text-white em,
+.slidev-layout [class*="bg-[#041e42]"] strong,
+.slidev-layout [class*="bg-[#041e42]"] em {
+  color: inherit;
+}
+
+/* Keep the yellow accent when explicitly requested inside dark boxes. */
+.slidev-layout.text-white strong[class*="text-[#ffc220]"],
+.slidev-layout .text-white strong[class*="text-[#ffc220]"],
+.slidev-layout.text-white .text-\[\#ffc220\],
+.slidev-layout .text-white .text-\[\#ffc220\],
+.slidev-layout [class*="bg-[#041e42]"] strong[class*="text-[#ffc220]"],
+.slidev-layout [class*="bg-[#041e42]"] .text-\[\#ffc220\] {
+  color: var(--wm-yellow) !important;
+}
+
+/* Re-skin <code> inside dark boxes to a yellow-on-navy pill (opaque so contrast
+   scanners and screen readers see the true colour, not the alpha-blended one). */
+.slidev-layout.text-white code,
+.slidev-layout .text-white code,
+.slidev-layout [class*="bg-[#041e42]"] code {
+  background: #0d2d5c !important;
+  color: var(--wm-yellow) !important;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* h3 also inherits the global brand colour; on dark covers we want white. */
+.slidev-layout.text-white h1,
+.slidev-layout.text-white h2,
+.slidev-layout.text-white h3 {
+  color: inherit;
+  border-bottom-color: var(--wm-yellow);
+}
+
+/* #b8860b (goldenrod) on #fff5cc (pale yellow) = 2.97:1, below WCAG AA 3:1.
+   Darken to #8a6508 (5.3:1) wherever the text uses the arbitrary-value class. */
+.slidev-layout .text-\[\#b8860b\] {
+  color: #8a6508 !important;
+}

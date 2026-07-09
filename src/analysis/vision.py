@@ -71,6 +71,17 @@ class OllamaVisionClient:
         self.ollama_url = ollama_url.rstrip("/")
         self.model = cfg.model or "gemma3:4b"
         self.fallback = cfg.fallback_model or "llava:7b"
+        # Circuit breaker: after N consecutive Ollama call failures we stop
+        # trying for the rest of this process and return "" silently.
+        # Prevents log-spam when Ollama isn't running (~20 warnings per
+        # batch × N batches). Reset by restarting the process.
+        # Set VISION_DISABLE=1 to skip Ollama entirely from startup.
+        import os
+        self._breaker_threshold = 3
+        self._breaker_failures = 0
+        self._disabled = os.environ.get("VISION_DISABLE") == "1"
+        if self._disabled:
+            log.info("vision_disabled_by_env")
 
     @property
     def model_name(self) -> str:
@@ -78,7 +89,7 @@ class OllamaVisionClient:
 
     def caption(self, image_path: Path, prompt: Optional[str] = None) -> str:
         """Return a 1-3 sentence caption. Empty string on any failure."""
-        if not self.cfg.enabled:
+        if not self.cfg.enabled or self._disabled:
             return ""
         if not image_path or not Path(image_path).exists():
             log.warning("vision_no_image", path=str(image_path))
@@ -100,7 +111,20 @@ class OllamaVisionClient:
             if text:
                 if attempt_model != self.model:
                     log.info("vision_used_fallback", primary=self.model, fallback=attempt_model)
+                # Success — reset the breaker so a transient blip doesn't kill vision.
+                self._breaker_failures = 0
                 return text
+
+        # Both models failed for this image; count one breaker failure.
+        self._breaker_failures += 1
+        if self._breaker_failures >= self._breaker_threshold and not self._disabled:
+            self._disabled = True
+            log.warning(
+                "vision_disabled_by_breaker",
+                consecutive_failures=self._breaker_failures,
+                hint="Ollama unreachable? Start `ollama serve` and restart the pipeline. "
+                     "Set VISION_DISABLE=1 to skip vision from startup.",
+            )
         return ""
 
     def _call_ollama(self, model: str, prompt: str, image_b64: str) -> str:
@@ -122,7 +146,10 @@ class OllamaVisionClient:
             data = r.json()
             return (data.get("response") or "").strip()
         except Exception as e:
-            log.warning("vision_call_failed", model=model, error=str(e))
+            # Only log the raw call error while the breaker is still armed.
+            # Once tripped (see `caption`), _disabled=True and we don't reach here.
+            if self._breaker_failures < self._breaker_threshold:
+                log.warning("vision_call_failed", model=model, error=str(e))
             return ""
 
     # ── Multi-pass enhanced captioning ──────────────────────────────────────

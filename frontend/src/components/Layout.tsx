@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { BarChart3, Bell, Search, CheckSquare, Activity, LogIn, LogOut, Layers, Lightbulb } from 'lucide-react';
+import { BarChart3, Bell, Search, CheckSquare, Activity, LogIn, LogOut, Layers, Lightbulb, Mail } from 'lucide-react';
 import SparkIcon from './SparkIcon';
 import { api } from '../api';
 
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/alerts', label: 'Alerts', icon: Bell },
   { path: '/posts', label: 'Posts', icon: Search },
   { path: '/pipeline', label: 'Pipeline', icon: Activity },
+  { path: '/notifications', label: 'Notifications', icon: Mail },
 ];
 
 interface AuthStatus {

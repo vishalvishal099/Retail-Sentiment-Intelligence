@@ -8,6 +8,7 @@ import PostExplorer from './pages/PostExplorer';
 import Pipeline from './pages/Pipeline';
 import PostLifecycle from './pages/PostLifecycle';
 import CompetitorInsights from './pages/CompetitorInsights';
+import Notifications from './pages/Notifications';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/posts" element={<PostExplorer />} />
         <Route path="/pipeline" element={<Pipeline />} />
+        <Route path="/notifications" element={<Notifications />} />
       </Route>
     </Routes>
   );

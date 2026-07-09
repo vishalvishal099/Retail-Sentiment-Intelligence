@@ -25,6 +25,7 @@ const RANGE_LABELS: Record<DateRange | '', string> = {
 export default function PostExplorer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [posts, setPosts] = useState<ExplorerPost[]>([]);
+  const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
     subreddit: searchParams.get('subreddit') || '',
@@ -46,6 +47,7 @@ export default function PostExplorer() {
       if (f.range) params.range = f.range;
       const result = await api.getPosts(params);
       setPosts(result.posts);
+      setTotal(result.total ?? result.posts.length);
     } catch (e) {
       console.error(e);
     } finally {
@@ -114,7 +116,11 @@ export default function PostExplorer() {
       </Card>
 
       <div className="text-xs text-gray-500">
-        {loading ? 'Loading…' : `${posts.length} result${posts.length === 1 ? '' : 's'}`}
+        {loading ? 'Loading…' : (
+          total > posts.length
+            ? `Showing ${posts.length.toLocaleString()} of ${total.toLocaleString()} matches (raise the Limit to see more)`
+            : `${posts.length.toLocaleString()} result${posts.length === 1 ? '' : 's'}`
+        )}
       </div>
       <div className="space-y-2">
         {posts.length === 0 && !loading && (

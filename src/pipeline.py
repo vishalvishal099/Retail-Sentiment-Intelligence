@@ -10,6 +10,20 @@ import uuid
 from enum import Enum
 from pathlib import Path
 
+# ─── transformers 4.57.3 offline-mode workaround ─────────────────────────────
+# PreTrainedTokenizerBase._patch_mistral_regex (added in 4.55+) unconditionally
+# calls huggingface_hub.model_info() to check "is this a mistral tokenizer?".
+# With HF_HUB_OFFLINE=1 that raises OfflineModeIsEnabled and crashes tokenizer
+# loading. None of our models are Mistral variants (ModernBERT, DeBERTa, BART,
+# RoBERTa, FLAN-T5, MiniLM), so replacing this classmethod with an identity
+# passthrough is always the correct answer for this project. Must run before
+# ANY code path that loads a tokenizer.
+try:
+    from transformers.tokenization_utils_base import PreTrainedTokenizerBase as _PTTB
+    _PTTB._patch_mistral_regex = classmethod(lambda cls, tokenizer, *a, **k: tokenizer)
+except Exception:
+    pass
+
 from src.utils.config import load_config, AppConfig
 from src.utils.logger import setup_logging, get_logger
 from src.utils.cost_tracker import CostTracker
@@ -207,6 +221,24 @@ class RetailSentimentPipeline:
         total_flagged = 0
         batches = 0
         log.info("analyze_pending_start", batch_size=size)
+
+        # Pre-flight: bulk-mark posts that already have an analyses row as
+        # 'analyzed'. Without this, get_pending_posts (ORDER BY oldest first)
+        # would iterate through every already-analyzed post and INSERT OR
+        # REPLACE the same analysis row for hours before reaching truly
+        # un-analyzed posts. This scans once and skips them all.
+        try:
+            skipped = self.storage._conn.execute(
+                "UPDATE raw_posts SET processing_status = 'analyzed' "
+                "WHERE processing_status = 'pending' "
+                "  AND id IN (SELECT post_id FROM analyses)"
+            ).rowcount
+            self.storage._conn.commit()
+            if skipped:
+                log.info("analyze_pending_preflight", already_analyzed=skipped)
+        except Exception as e:  # noqa: BLE001
+            log.warning("analyze_pending_preflight_failed", error=str(e))
+
         while True:
             if max_batches is not None and batches >= max_batches:
                 break
@@ -219,8 +251,6 @@ class RetailSentimentPipeline:
 
             # Trust scoring (may flip status to flagged_low_trust)
             scored = self.trust_scorer.score_batch(pending)
-            for unit in scored:
-                self.storage.upsert("raw_posts", unit)
             trusted = [u for u in scored if u.get("is_trusted")]
             flagged = [u for u in scored if not u.get("is_trusted")]
             total_trusted += len(trusted)
@@ -228,7 +258,16 @@ class RetailSentimentPipeline:
 
             # Vision enrichment: caption image-bearing posts so the
             # downstream sentiment + aspect models see image content too.
+            # Mutates `scored` with image_fetch metadata + image_caption.
             self._enrich_with_vision(scored)
+
+            # Persist raw_posts now — after both trust AND vision have mutated
+            # the unit — so the DB carries trust_score, is_trusted, and the
+            # image_fetch outcome (status/http_code/checked_at) needed by
+            # /api/ingestion/image-failures. Previous ordering upserted before
+            # vision and dropped the image metadata.
+            for unit in scored:
+                self.storage.upsert("raw_posts", unit)
 
             # Analyse everything (trusted + flagged); flagged stays out of trend metrics via trust_score
             analyses = self.analyzer.analyze_batch(scored)
@@ -236,6 +275,16 @@ class RetailSentimentPipeline:
                 self.storage.upsert_batch("analyses", analyses)
                 self._maybe_create_lifecycle(analyses, scored)
             total_analyzed += len(analyses)
+            # Mark every post in this batch as analyzed so the next iteration
+            # of get_pending_posts moves forward. Without this the loop would
+            # re-process the oldest 200 pending rows forever (they'd all be
+            # INSERT-OR-REPLACE no-ops in analyses, so total_analyzed grows
+            # but the DB doesn't change and newer posts never get reached).
+            for unit in scored:
+                uid = unit.get("id")
+                if uid:
+                    new_status = "flagged_low_trust" if not unit.get("is_trusted") else "analyzed"
+                    self.storage.update_status(uid, new_status)
             batches += 1
             log.info(
                 "analyze_pending_batch",
@@ -261,6 +310,194 @@ class RetailSentimentPipeline:
         }
         log.info("analyze_pending_complete", **result)
         return result
+
+    # ─── Gap Analysis + Surgical Backfill ─────────────────────────────────
+
+    def compute_gaps(self, gap_threshold_hours: float = 1.0) -> dict:
+        """Report per-subreddit freshness.
+
+        For every configured subreddit, returns the newest raw_post timestamp,
+        the current cursor, the gap vs now, and whether the cursor drifted
+        behind the data (which happens after a lookback-hours rewind that
+        the upstream API subsequently returned zero results for).
+
+        Pure read: does not modify cursors.
+        """
+        import sqlite3
+        from datetime import datetime, timezone
+
+        now_utc = datetime.now(timezone.utc).timestamp()
+        db_path = self.config.storage.sqlite_path
+        conn = sqlite3.connect(db_path)
+        try:
+            subs = []
+            for sub in self._subreddits:
+                row = conn.execute(
+                    "SELECT MAX(created_timestamp), COUNT(*) FROM raw_posts "
+                    "WHERE lower(subreddit) = lower(?)",
+                    (sub,),
+                ).fetchone()
+                newest_post = row[0] or 0.0
+                post_count = row[1] or 0
+                cursor_utc = self.cursor.get_cursor(sub)
+                # "true resume point" = furthest-ahead timestamp we can be
+                # confident about, minus overlap. If we've never fetched or
+                # both are 0, treat as needing full backfill.
+                resume_ref = max(newest_post, cursor_utc)
+                if resume_ref > 0:
+                    resume_from = max(0.0, resume_ref - INGEST_OVERLAP_SECONDS)
+                    gap_hours = (now_utc - resume_ref) / 3600.0
+                else:
+                    resume_from = 0.0
+                    gap_hours = float("inf")
+                cursor_drift_hours = (cursor_utc - newest_post) / 3600.0 if newest_post else 0.0
+                needs_fetch = gap_hours > gap_threshold_hours
+                subs.append({
+                    "subreddit": sub,
+                    "post_count": post_count,
+                    "newest_post_utc": newest_post or None,
+                    "cursor_utc": cursor_utc or None,
+                    "gap_hours": None if gap_hours == float("inf") else round(gap_hours, 2),
+                    "cursor_drift_hours": round(cursor_drift_hours, 2),
+                    "resume_from_utc": resume_from,
+                    "needs_fetch": needs_fetch,
+                    "reason": (
+                        "never_fetched" if resume_ref == 0
+                        else "cursor_ahead_of_data" if cursor_drift_hours > 1
+                        else "stale" if needs_fetch
+                        else "fresh"
+                    ),
+                })
+        finally:
+            conn.close()
+
+        stale = [s for s in subs if s["needs_fetch"]]
+        drifted = [s for s in subs if s["cursor_drift_hours"] > 1]
+
+        # Last successful ingest run — an ingest that actually pulled posts.
+        # Excludes analyze-pending / retry-vision runs (they don't move
+        # cursors) and stopped/failed runs. Populates the primary "Catch up
+        # since…" button on the Data Health panel.
+        last_run: dict | None = None
+        try:
+            import json as _json
+            import sqlite3 as _sqlite3
+            conn2 = _sqlite3.connect(db_path)
+            row = conn2.execute(
+                "SELECT id, started_at, finished_at, trigger, counters_json "
+                "FROM pipeline_runs "
+                "WHERE status = 'success' AND counters_json IS NOT NULL AND counters_json != '{}' "
+                "  AND trigger IN ('scheduled', 'manual', 'backfill', 'fill-gaps') "
+                "ORDER BY finished_at DESC LIMIT 1"
+            ).fetchone()
+            conn2.close()
+            if row:
+                counters = {}
+                try:
+                    counters = _json.loads(row[4] or "{}")
+                except Exception:  # noqa: BLE001
+                    pass
+                ingested = int(counters.get("ingested", 0) or 0)
+                # Skip "ingested=0" runs — they weren't real successful ingests
+                # for the "catch up from" semantic.
+                if ingested > 0:
+                    finished_iso = row[2]
+                    try:
+                        finished_dt = datetime.fromisoformat(finished_iso.replace("Z", "+00:00"))
+                        hours_ago = (now_utc - finished_dt.timestamp()) / 3600.0
+                    except Exception:  # noqa: BLE001
+                        hours_ago = None
+                    last_run = {
+                        "id": row[0],
+                        "started_at": row[1],
+                        "finished_at": finished_iso,
+                        "trigger": row[3],
+                        "ingested": ingested,
+                        "analyzed": int(counters.get("analyzed", 0) or 0),
+                        "hours_ago": round(hours_ago, 1) if hours_ago is not None else None,
+                    }
+        except Exception as e:  # noqa: BLE001
+            log.warning("gaps_last_run_lookup_failed", error=str(e))
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "gap_threshold_hours": gap_threshold_hours,
+            "totals": {
+                "subreddits": len(subs),
+                "stale": len(stale),
+                "drifted": len(drifted),
+                "fresh": len(subs) - len(stale),
+            },
+            "last_successful_ingest": last_run,
+            "subreddits": subs,
+        }
+
+    def fill_gaps(
+        self,
+        since_utc: float | None = None,
+        gap_threshold_hours: float = 1.0,
+        dry_run: bool = False,
+    ) -> dict:
+        """Surgically rewind cursors for subs with a data gap, then optionally
+        run one full cycle.
+
+        Two modes:
+          - `since_utc` given → rewind every sub whose cursor is more recent
+            than `since_utc` back to `since_utc`. Matches the "since last
+            successful run" mental model.
+          - `since_utc` None  → per-sub: rewind to `max(newest_raw_post, cursor)
+            - overlap_seconds`, but only if `gap_hours > gap_threshold_hours`.
+
+        Never rewinds fresh subs (avoids wasted refetch). Always leaves cursor
+        no earlier than what the data already shows.
+
+        Returns the plan (what would be rewound); actual writes only happen
+        when `dry_run` is False.
+        """
+        report = self.compute_gaps(gap_threshold_hours=gap_threshold_hours)
+        plan = []
+        for entry in report["subreddits"]:
+            sub = entry["subreddit"]
+            cursor = entry["cursor_utc"] or 0.0
+
+            if since_utc is not None:
+                # Anchor mode: rewind subs that are ahead of `since_utc`.
+                # Never move cursor forward here.
+                if cursor > since_utc:
+                    new_cursor = since_utc
+                else:
+                    continue
+            else:
+                # Auto mode: only touch subs flagged as stale.
+                if not entry["needs_fetch"]:
+                    continue
+                new_cursor = entry["resume_from_utc"]
+
+            plan.append({
+                "subreddit": sub,
+                "old_cursor_utc": cursor,
+                "new_cursor_utc": new_cursor,
+                "rewind_hours": round((cursor - new_cursor) / 3600.0, 2) if cursor else None,
+                "reason": entry["reason"],
+            })
+            if not dry_run:
+                self.cursor.update_cursor(sub, new_cursor, "")
+
+        log.info(
+            "fill_gaps_plan",
+            since_utc=since_utc,
+            gap_threshold_hours=gap_threshold_hours,
+            dry_run=dry_run,
+            rewound=len(plan),
+        )
+        return {
+            "dry_run": dry_run,
+            "since_utc": since_utc,
+            "gap_threshold_hours": gap_threshold_hours,
+            "rewound_subreddits": len(plan),
+            "plan": plan,
+            "gap_report": report,
+        }
 
     # ─── Stage Implementations ────────────────────────────────────────────
 
@@ -481,7 +718,7 @@ class RetailSentimentPipeline:
         unit_by_id = {u.get("id"): u for u in scored_units}
 
         from datetime import datetime, timezone
-        from src.notifications.dispatcher import dispatch_negative_post
+        from src.notifications.dispatcher import dispatch_negative_post, dispatch_for_groups
 
         created = 0
         for a in analyses:
@@ -493,40 +730,32 @@ class RetailSentimentPipeline:
             post_id = a.get("post_id") or a.get("id")
             if not post_id:
                 continue
-            existing = self.storage.lifecycle_get(post_id)
-            if existing:
-                continue
 
             unit = unit_by_id.get(post_id) or {}
             now = datetime.now(timezone.utc).isoformat()
-            aspects = a.get("aspects") or []
-            top_aspect = aspects[0] if aspects else ""
             title = unit.get("title") or unit.get("text", "")[:200]
             sub = a.get("subreddit") or unit.get("subreddit", "")
             score = float(a.get("sentiment_score") or 0.0)
+            trust = float(unit.get("trust_score") or a.get("trust_score") or 0.0)
 
-            row = {
-                "post_id": post_id,
-                "subreddit": sub,
-                "state": "new",
-                "priority": "high" if conf >= 0.85 else "medium",
-                "title": title,
-                "top_aspect": top_aspect,
-                "sentiment_score": score,
-                "sentiment_confidence": conf,
-                "created_at": now,
-                "updated_at": now,
-                "history": [{"at": now, "from_state": None, "to_state": "new", "by": "auto", "note": "auto-created from pipeline"}],
-                "reddit_url": unit.get("url") or unit.get("permalink", ""),
-            }
             try:
-                self.storage.lifecycle_upsert(row)
-                created += 1
+                # Group-based dispatch (P1/P2 only, per configured groups)
+                dispatch_for_groups(
+                    self.storage,
+                    post_id=post_id,
+                    title=title,
+                    subreddit=sub,
+                    sentiment_score=score,
+                    confidence=conf,
+                    trust_score=trust,
+                    body_excerpt=(unit.get("text") or "")[:600],
+                    reddit_url=unit.get("url") or unit.get("permalink", ""),
+                )
             except Exception as e:  # noqa: BLE001
-                log.warning("lifecycle_upsert_failed", post_id=post_id, error=str(e))
-                continue
+                log.warning("notif_group_dispatch_error", post_id=post_id, error=str(e))
 
             try:
+                # Legacy channel dispatch (if configured in YAML)
                 dispatch_negative_post(
                     notif_cfg,
                     post_id=post_id,
@@ -535,13 +764,10 @@ class RetailSentimentPipeline:
                     sentiment_score=score,
                     confidence=conf,
                     body_excerpt=(unit.get("text") or "")[:600],
-                    reddit_url=row["reddit_url"],
+                    reddit_url=unit.get("url") or unit.get("permalink", ""),
                 )
             except Exception as e:  # noqa: BLE001
                 log.warning("notif_dispatch_error", post_id=post_id, error=str(e))
-
-        if created:
-            log.info("lifecycle_auto_created", count=created)
 
     def _enrich_with_vision(self, units: list[dict]) -> None:
         """Caption image-bearing posts in place via the vision model.
@@ -564,7 +790,12 @@ class RetailSentimentPipeline:
             if not url:
                 continue
             post_id = unit.get("id", "").replace("reddit_", "")
-            cached = image_preprocess.fetch_and_normalize(post_id, url, vcfg)
+            cached, meta = image_preprocess.fetch_with_status(post_id, url, vcfg)
+            # Persist the fetch outcome on the unit so the Pipeline UI can
+            # surface which posts had their images deleted / throttled /
+            # taken down. Kept as a compact dict — {status, http_code, error,
+            # checked_at, cached?}.
+            unit["image_fetch"] = {**meta, "url": url}
             if not cached:
                 continue
             caption = vision.caption(cached)
@@ -679,6 +910,18 @@ def main():
                            (e.g. when Ollama was down during ingest).
       --max-batches N      Cap how many batches --analyze-pending will process.
       --lookback-hours N   Override the default lookback window (hours).
+      --fill-gaps          Surgical backfill: for every sub with a data gap,
+                           rewind cursor to just after the newest raw_post it
+                           already has, then run one cycle. Fresh subs are left
+                           alone. Combine with --since to anchor at a specific
+                           timestamp (e.g. the last successful run).
+      --since ISO8601      Anchor timestamp for --fill-gaps (ISO 8601 UTC).
+                           Any sub whose cursor is more recent than this gets
+                           rewound to this timestamp.
+      --gap-hours N        With --fill-gaps: only touch subs whose gap is
+                           larger than N hours (default 1.0).
+      --dry-run            With --fill-gaps: print the plan and exit without
+                           modifying cursors or running the pipeline.
     """
     import sys
 
@@ -702,6 +945,59 @@ def main():
     if "--retry-vision" in sys.argv:
         result = pipeline.retry_vision()
         print(f"Retry-vision result: {result}")
+        return
+
+    if "--fill-gaps" in sys.argv:
+        # Parse optional --since (ISO 8601 UTC) and --gap-hours
+        from datetime import datetime, timezone
+        since_utc: float | None = None
+        gap_hours = 1.0
+        dry_run = "--dry-run" in sys.argv
+        if "--since" in sys.argv:
+            idx = sys.argv.index("--since")
+            if idx + 1 < len(sys.argv):
+                raw = sys.argv[idx + 1]
+                try:
+                    # Accept both "2026-06-29" and full ISO. Default UTC.
+                    dtv = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if dtv.tzinfo is None:
+                        dtv = dtv.replace(tzinfo=timezone.utc)
+                    since_utc = dtv.timestamp()
+                except ValueError:
+                    log.error("fill_gaps_bad_since", raw=raw)
+                    print(f"ERROR: --since must be ISO 8601 UTC (got: {raw!r})")
+                    sys.exit(2)
+        if "--gap-hours" in sys.argv:
+            idx = sys.argv.index("--gap-hours")
+            if idx + 1 < len(sys.argv):
+                try:
+                    gap_hours = float(sys.argv[idx + 1])
+                except ValueError:
+                    pass
+
+        plan = pipeline.fill_gaps(
+            since_utc=since_utc,
+            gap_threshold_hours=gap_hours,
+            dry_run=dry_run,
+        )
+
+        # Human-readable summary for the CLI.
+        print(f"\nFill-gaps plan ({'DRY RUN' if dry_run else 'APPLIED'})")
+        print(f"  since_utc = {since_utc} ({datetime.fromtimestamp(since_utc, tz=timezone.utc).isoformat() if since_utc else 'auto'})")
+        print(f"  gap_threshold_hours = {gap_hours}")
+        print(f"  rewound {plan['rewound_subreddits']} subreddits:")
+        for entry in plan["plan"]:
+            new_iso = datetime.fromtimestamp(entry["new_cursor_utc"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if entry["new_cursor_utc"] else "—"
+            print(f"    - {entry['subreddit']:22s} rewind {entry['rewind_hours']}h  → {new_iso}  ({entry['reason']})")
+        print(f"  fresh (skipped): {plan['gap_report']['totals']['fresh']}")
+
+        if dry_run:
+            print("\nDry-run: no cursors modified, no cycle run. Re-run without --dry-run to apply.")
+            return
+
+        # After rewinding, run one normal cycle so the gap actually gets filled.
+        result = pipeline.run_cycle()
+        print(f"\nFill-gaps cycle result: {result}")
         return
 
     if "--once" in sys.argv:

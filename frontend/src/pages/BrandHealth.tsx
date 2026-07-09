@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { api, BrandHealthData, DateRange, SegmentInfo, MacroSegment, PriorityNegativePost } from '../api';
+import { api, BrandHealthData, DateRange, SegmentInfo, MacroSegment, PriorityNegativePost, AspectPost } from '../api';
 import Card, { CardHeader } from '../components/Card';
 import Button from '../components/Button';
 
@@ -31,13 +31,13 @@ export default function BrandHealth() {
   const [segment, setSegment] = useState<string>(''); // '' = all segments
   const [segments, setSegments] = useState<SegmentInfo[]>([]);
   const [macroSegment, setMacroSegment] = useState<MacroSegment | ''>('');
-  const [priorityLimit, setPriorityLimit] = useState<number>(20);
   const [priorityData, setPriorityData] = useState<{
     posts: PriorityNegativePost[];
     tiers: { P1: number; P2: number };
     loading: boolean;
     error: string | null;
   }>({ posts: [], tiers: { P1: 0, P2: 0 }, loading: false, error: null });
+  const [lifecycleCounts, setLifecycleCounts] = useState<Record<string, number>>({});
   const navigate = useNavigate();
 
   const loadData = () => {
@@ -50,11 +50,14 @@ export default function BrandHealth() {
   useEffect(() => {
     api.getSegments().then(r => setSegments(r.segments)).catch(console.error);
   }, []);
+  useEffect(() => {
+    api.getLifecycle().then(r => setLifecycleCounts(r.counts || {})).catch(console.error);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setPriorityData(p => ({ ...p, loading: true, error: null }));
-    api.getPriorityNegatives(range, priorityLimit, segment || null, macroSegment || null)
+    api.getPriorityNegatives(range, 20, segment || null, macroSegment || null)
       .then((res) => {
         if (cancelled) return;
         if (res.error) {
@@ -70,7 +73,7 @@ export default function BrandHealth() {
       })
       .catch((e) => { if (!cancelled) setPriorityData({ posts: [], tiers: { P1: 0, P2: 0 }, loading: false, error: String(e) }); });
     return () => { cancelled = true; };
-  }, [range, segment, macroSegment, priorityLimit]);
+  }, [range, segment, macroSegment]);
 
   const sd = data?.sentiment_distribution;
   const sPos = sd?.positive ?? 0;
@@ -86,11 +89,6 @@ export default function BrandHealth() {
     if (sentiment) qs.set('sentiment', sentiment);
     qs.set('range', range);
     navigate(`/posts?${qs.toString()}`);
-  };
-
-  const scrollToPriority = () => {
-    const el = document.getElementById('priority-negatives');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const sentimentPie = sd ? [
@@ -192,52 +190,95 @@ export default function BrandHealth() {
       )}
       {!loading && data && data.sentiment_distribution && (
       <>
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KPICard label="Total Posts" value={data.total_posts} onClick={() => goToPosts()} hint="View all posts" />
-        <KPICard
-          label="Trusted"
-          value={data.trusted_posts}
-          sub={
-            data.trust_gate?.formula === 'score_x_confidence' && data.trust_gate?.tau != null
-              ? `trust × confidence ≥ ${data.trust_gate.tau}`
-              : `trust_score ≥ ${data.trust_gate?.threshold ?? 0.5}`
-          }
-          hint="Posts that passed the trust gate"
-        />
-        <KPICard
-          label="Positive"
-          value={`${pctPositive}%`}
-          sub={`${sPos} posts`}
-          tone="positive"
-          onClick={() => goToPosts('positive')}
-          hint="Click to see positive posts"
-        />
-        <KPICard
-          label="Negative"
-          value={`${pctNegative}%`}
-          sub={`${sNeg} posts`}
-          tone="negative"
-          onClick={() => goToPosts('negative')}
-          hint="Click to see negative posts"
-        />
-        <KPICard
-          label="P1 Negatives"
-          value={priorityData.tiers.P1}
-          sub="trust ≥ 0.70 · conf ≥ 0.80"
-          tone="negative"
-          onClick={scrollToPriority}
-          hint="Jump to the priority negatives list (P1)"
-        />
-        <KPICard
-          label="P2 Negatives"
-          value={priorityData.tiers.P2}
-          sub="trust ≥ 0.50 · conf ≥ 0.60"
-          tone="neutral"
-          onClick={scrollToPriority}
-          hint="Jump to the priority negatives list (P2)"
-        />
-      </div>
+      {/* KPI Cards — each shows total + replied + pending breakdown */}
+      {(() => {
+        const lcTotal = Object.values(lifecycleCounts).reduce((a, b) => a + b, 0);
+        const lcReplied = (lifecycleCounts.reply_sent || 0) + (lifecycleCounts.issue_fixed || 0) + (lifecycleCounts.resolved || 0);
+        const lcPending = (lifecycleCounts.reply_sent || 0) + (lifecycleCounts.issue_fixed || 0);
+        const lcResolved = lifecycleCounts.resolved || 0;
+        // Ingested-vs-analyzed reconciliation. `data.total_posts` is the
+        // number with sentiment (matches downstream %s); `fetched_count` is
+        // the number the ingestion pipeline pulled in. They differ by the
+        // per-window analysis backlog and this used to look like a bug when
+        // compared against the Pipeline page's "Fetched" number.
+        const fetched = data.fetched_count ?? data.total_posts;
+        const pendingAnalysis = data.pending_analysis ?? Math.max(0, fetched - data.total_posts);
+        const analyzedRows: Array<{ label: string; value: number | string; color?: string }> = [
+          { label: 'Fetched (ingested)', value: fetched, color: 'text-walmart-navy' },
+        ];
+        if (pendingAnalysis > 0) {
+          analyzedRows.push({ label: 'Pending analysis', value: pendingAnalysis, color: 'text-walmart-spark-dark' });
+        }
+        analyzedRows.push(
+          { label: 'Tracked in lifecycle', value: lcTotal, color: 'text-walmart-navy' },
+          { label: 'Addressed & replied', value: lcReplied, color: 'text-sentiment-positive' },
+          { label: 'Awaiting action', value: lcPending, color: 'text-walmart-spark-dark' },
+        );
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <KPICardRich
+              label="Analyzed Posts"
+              value={data.total_posts}
+              rows={analyzedRows}
+              onExplore={() => goToPosts()}
+              onReview={() => navigate(`/review?range=${range}`)}
+              hint={pendingAnalysis > 0
+                ? `Posts with sentiment analysis · ${pendingAnalysis.toLocaleString()} still pending (matches Pipeline → Fetched of ${fetched.toLocaleString()})`
+                : "Posts with sentiment analysis (matches Pipeline → Fetched)"}
+            />
+            <KPICardRich
+              label="Negative"
+              value={`${pctNegative}%`}
+              valueSub={`${sNeg} posts`}
+              tone="negative"
+              rows={[
+                { label: 'Reviewed & replied', value: lcReplied, color: 'text-sentiment-positive' },
+                { label: 'Pending reply', value: sNeg - lcTotal > 0 ? sNeg - lcTotal : 0, color: 'text-walmart-spark-dark' },
+                { label: 'Resolved', value: lcResolved, color: 'text-walmart-blue' },
+              ]}
+              onExplore={() => goToPosts('negative')}
+              onReview={() => navigate(`/review?sentiment=negative&range=${range}`)}
+              hint="Negative sentiment posts"
+            />
+            <KPICardRich
+              label="Priority (P1+P2)"
+              value={priorityData.tiers.P1 + priorityData.tiers.P2}
+              tone="negative"
+              rows={[
+                { label: 'P1 — urgent', value: priorityData.tiers.P1, color: 'text-sentiment-negative' },
+                { label: 'P2 — moderate', value: priorityData.tiers.P2, color: 'text-walmart-spark-dark' },
+                { label: 'Resolved', value: lcResolved, color: 'text-sentiment-positive' },
+              ]}
+              onExplore={() => goToPosts('negative')}
+              onReview={() => navigate(`/review?sentiment=negative&range=${range}`)}
+              hint="Priority negative posts"
+            />
+            <KPICardRich
+              label="Positive"
+              value={`${pctPositive}%`}
+              valueSub={`${sPos} posts`}
+              tone="positive"
+              rows={[
+                { label: 'Trusted', value: data.trusted_posts, color: 'text-walmart-navy' },
+              ]}
+              onExplore={() => goToPosts('positive')}
+              onReview={() => navigate(`/review?sentiment=positive&range=${range}`)}
+              hint="Positive sentiment posts"
+            />
+            <KPICardRich
+              label="Lifecycle"
+              value={lcTotal}
+              rows={[
+                { label: 'Replied & in progress', value: lcPending, color: 'text-walmart-spark-dark' },
+                { label: 'Resolved & closed', value: lcResolved, color: 'text-sentiment-positive' },
+                { label: 'Remaining', value: lcTotal - lcResolved > 0 ? lcTotal - lcResolved : 0, color: 'text-walmart-blue' },
+              ]}
+              onClick={() => navigate('/lifecycle')}
+              hint="Open Post Lifecycle"
+            />
+          </div>
+        );
+      })()}
       <button
         onClick={() => goToPosts('neutral')}
         className="text-xs text-gray-500 hover:text-walmart-navy hover:underline text-left"
@@ -253,16 +294,22 @@ export default function BrandHealth() {
             subtitle="Click a slice to drill into the post list"
             accent
           />
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
                 data={sentimentPie}
                 cx="50%"
                 cy="50%"
-                outerRadius={85}
+                outerRadius={80}
+                innerRadius={35}
                 dataKey="value"
                 onClick={(e: { key?: 'positive' | 'negative' | 'neutral' }) => e?.key && goToPosts(e.key)}
-                label={({ name, value }) => `${name}: ${value} (${total > 0 ? ((value / total) * 100).toFixed(0) : 0}%)`}
+                label={({ name, value, x, y, textAnchor }) => (
+                  <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="central" fontSize={12} fill="#041E42">
+                    {`${name} ${value} (${total > 0 ? ((value / total) * 100).toFixed(0) : 0}%)`}
+                  </text>
+                )}
+                labelLine={{ strokeWidth: 1, stroke: '#74767C' }}
                 style={{ cursor: 'pointer' }}
               >
                 {sentimentPie.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -375,245 +422,226 @@ export default function BrandHealth() {
 
       {data.top_issues.length > 0 && (
         <Card>
-          <CardHeader title="Top Issues" accent />
+          <CardHeader
+            title="Top Issues"
+            subtitle="ranked by number of negative posts — click a row to expand"
+            accent
+          />
           <div className="space-y-2">
             {data.top_issues.map((issue) => (
-              <div key={issue.aspect} className="flex items-center justify-between p-3 bg-sentiment-negative/5 border border-sentiment-negative/15 rounded-xl">
-                <span className="text-sm font-semibold text-walmart-navy capitalize">{issue.aspect.replace(/_/g, ' ')}</span>
-                <div className="flex items-center gap-4 text-xs text-gray-600">
-                  <span>{issue.count} mentions</span>
-                  <span className="text-sentiment-negative font-medium">{(issue.negative_ratio * 100).toFixed(0)}% negative</span>
-                  <span className="font-mono bg-sentiment-negative/10 text-sentiment-negative px-2 py-0.5 rounded-pill">severity: {issue.severity_score}</span>
-                </div>
-              </div>
+              <TopIssueRow key={issue.aspect} issue={issue} range={range} macroSegment={macroSegment || null} />
             ))}
           </div>
         </Card>
       )}
 
-      <PriorityNegativesSection
-        posts={priorityData.posts}
-        tiers={priorityData.tiers}
-        loading={priorityData.loading}
-        error={priorityData.error}
-        limit={priorityLimit}
-        onLimitChange={setPriorityLimit}
-      />
       </>
       )}
     </div>
   );
 }
 
-function KPICard({
+/** KPI Card with mini breakdown rows — shows total + sub-stats in one tile */
+function KPICardRich({
   label,
   value,
-  sub,
+  valueSub,
   tone,
+  rows,
   onClick,
+  onExplore,
+  onReview,
   hint,
 }: {
   label: string;
   value: string | number;
-  sub?: string;
+  valueSub?: string;
   tone?: 'positive' | 'negative' | 'neutral';
+  rows: Array<{ label: string; value: string | number; color?: string }>;
   onClick?: () => void;
+  onExplore?: () => void;
+  onReview?: () => void;
   hint?: string;
 }) {
-  const interactive = !!onClick;
+  const [open, setOpen] = useState(false);
+  const hasDual = !!onExplore && !!onReview;
   const toneColor =
     tone === 'positive' ? 'text-sentiment-positive'
     : tone === 'negative' ? 'text-sentiment-negative'
     : 'text-walmart-navy';
-  const Component = interactive ? 'button' : 'div';
   return (
-    <Component
-      onClick={onClick}
-      title={hint}
-      className={`bg-surface rounded-2xl p-4 border border-walmart-navy/10 shadow-card text-left w-full ${
-        interactive ? 'hover:border-walmart-blue hover:shadow-card-hover cursor-pointer transition-all' : ''
-      }`}
-    >
-      <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold flex items-center justify-between">
-        <span>{label}</span>
-        {interactive && <span className="text-walmart-blue/60">→</span>}
-      </div>
-      <div className={`text-2xl font-bold mt-1 ${toneColor}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
-    </Component>
+    <div className="relative">
+      <button
+        onClick={() => hasDual ? setOpen(!open) : onClick?.()}
+        title={hint}
+        className="bg-surface rounded-2xl p-4 border border-walmart-navy/10 shadow-card text-left w-full hover:border-walmart-blue hover:shadow-card-hover cursor-pointer transition-all"
+      >
+        <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold flex items-center justify-between">
+          <span>{label}</span>
+          <span className="text-walmart-blue/60">{hasDual ? '⋮' : '→'}</span>
+        </div>
+        <div className={`text-2xl font-bold mt-1 ${toneColor}`}>{value}</div>
+        {valueSub && <div className="text-xs text-gray-500 mt-0.5">{valueSub}</div>}
+        {rows.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-dashed border-walmart-navy/10 space-y-1">
+            {rows.map((r) => (
+              <div key={r.label} className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-500">{r.label}</span>
+                <span className={`font-bold ${r.color || 'text-walmart-navy'}`}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </button>
+      {hasDual && open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-walmart-navy/15 rounded-xl shadow-lg overflow-hidden min-w-[160px]">
+            <button
+              onClick={() => { setOpen(false); onExplore!(); }}
+              className="w-full text-left px-4 py-2.5 text-sm text-walmart-navy hover:bg-walmart-blue/5 flex items-center gap-2"
+            >
+              <span className="text-xs">📊</span> Post Explorer
+            </button>
+            <button
+              onClick={() => { setOpen(false); onReview!(); }}
+              className="w-full text-left px-4 py-2.5 text-sm text-walmart-navy hover:bg-walmart-blue/5 border-t border-walmart-navy/5 flex items-center gap-2"
+            >
+              <span className="text-xs">💬</span> Review & Reply
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-/**
- * PriorityNegativesSection — top-N negative posts ranked by trust × confidence.
- *
- * P1 = trusted + high-confidence (urgent action needed)
- * P2 = medium-trust + medium-confidence
- *
- * Click any row → navigates to /review with a focus param so the social
- * team lands directly on the card they need to action.
- */
-const TOP_N_OPTIONS = [10, 15, 20, 30, 50, 100] as const;
+/* ── Expandable Top Issue row ─────────────────────────────────────────────── */
 
-function PriorityNegativesSection({
-  posts,
-  tiers,
-  loading,
-  error: err,
-  limit,
-  onLimitChange,
+const SENTIMENT_DOT: Record<string, string> = {
+  positive: 'bg-sentiment-positive',
+  negative: 'bg-sentiment-negative',
+  neutral: 'bg-gray-400',
+};
+
+function TopIssueRow({
+  issue,
+  range,
+  macroSegment,
 }: {
-  posts: PriorityNegativePost[];
-  tiers: { P1: number; P2: number };
-  loading: boolean;
-  error: string | null;
-  limit: number;
-  onLimitChange: (n: number) => void;
+  issue: { aspect: string; count: number; negative_ratio: number; severity_score: number };
+  range: DateRange;
+  macroSegment: MacroSegment | null;
 }) {
-  const navigate = useNavigate();
+  const [expanded, setExpanded] = useState(false);
+  const [posts, setPosts] = useState<AspectPost[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
 
-  const openPost = (p: PriorityNegativePost) => {
-    if (p.reddit_url) {
-      window.open(p.reddit_url, '_blank', 'noopener,noreferrer');
-      return;
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !fetched) {
+      setLoading(true);
+      api.getAspectDetail(issue.aspect, 14, 10, range, macroSegment)
+        .then((res) => {
+          setPosts(res.posts || []);
+          setFetched(true);
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
     }
-    const qs = new URLSearchParams({ focus: p.post_id });
-    navigate(`/review?${qs.toString()}`);
   };
 
   const fmtTime = (ts: number) => {
     if (!ts) return '—';
     const d = new Date(ts * 1000);
-    return d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const truncate = (s: string, n = 180) =>
-    s.length > n ? s.slice(0, n) + '…' : s;
+  const negCount = Math.round(issue.count * issue.negative_ratio);
 
   return (
-    <Card id="priority-negatives">
-      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-        <div>
-          <CardHeader
-            title="Priority negative posts (P1 / P2)"
-            subtitle="Ranked by trust × confidence — click to open on Reddit"
-            accent
-          />
-          <div className="flex items-center gap-2 text-xs mt-1 flex-wrap">
-            <span
-              className="px-2 py-0.5 rounded-pill bg-sentiment-negative/10 text-sentiment-negative font-semibold"
-              title="P1: trust score ≥ 0.70 AND sentiment confidence ≥ 0.80"
-            >
-              P1 {tiers.P1}
-            </span>
-            <span
-              className="px-2 py-0.5 rounded-pill bg-walmart-spark/20 text-walmart-navy font-semibold"
-              title="P2: trust score ≥ 0.50 AND sentiment confidence ≥ 0.60 (and not P1)"
-            >
-              P2 {tiers.P2}
-            </span>
-            <span className="text-gray-500">in current window</span>
-          </div>
-          <div className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
-            <span className="font-semibold text-sentiment-negative">P1</span>
-            <span> = trust ≥ 0.70 &amp; confidence ≥ 0.80 · </span>
-            <span className="font-semibold text-walmart-navy">P2</span>
-            <span> = trust ≥ 0.50 &amp; confidence ≥ 0.60</span>
-          </div>
+    <div className="border border-sentiment-negative/15 rounded-xl overflow-hidden">
+      <button
+        onClick={toggle}
+        className="w-full text-left p-3 bg-sentiment-negative/5 hover:bg-sentiment-negative/10 transition-colors flex items-center justify-between gap-3"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={`text-base transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>▸</span>
+          <span className="text-sm font-semibold text-walmart-navy capitalize">{issue.aspect.replace(/_/g, ' ')}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-600 font-semibold uppercase tracking-wider">
-            Top
-          </label>
-          <select
-            value={limit}
-            onChange={(e) => onLimitChange(Number(e.target.value))}
-            className={selectClass}
+        <div className="flex items-center gap-4 text-xs text-gray-600 shrink-0 flex-wrap justify-end">
+          <span>{issue.count} mentions</span>
+          <span className="text-sentiment-negative font-medium">{(issue.negative_ratio * 100).toFixed(0)}% negative</span>
+          <span
+            className="font-mono bg-sentiment-negative/10 text-sentiment-negative px-2 py-0.5 rounded-pill cursor-help"
+            title={`${issue.count} mentions × ${(issue.negative_ratio * 100).toFixed(0)}% negative = ${issue.severity_score} negative posts about "${issue.aspect}"`}
           >
-            {TOP_N_OPTIONS.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
+            {issue.severity_score} negative
+          </span>
         </div>
-      </div>
+      </button>
 
-      {err && (
-        <div className="text-sm text-sentiment-negative bg-sentiment-negative/5 border border-sentiment-negative/20 rounded-xl px-3 py-2">
-          {err}
-        </div>
-      )}
-      {loading && posts.length === 0 && (
-        <div className="text-sm text-gray-400 py-4 text-center">Loading…</div>
-      )}
-      {!loading && !err && posts.length === 0 && (
-        <div className="text-sm text-gray-500 py-6 text-center">
-          No P1/P2 negative posts in this window.
-        </div>
-      )}
+      {expanded && (
+        <div className="border-t border-sentiment-negative/10 bg-white">
+          {/* Formula explanation */}
+          <div className="px-4 py-2 bg-walmart-navy/[0.02] border-b border-walmart-navy/5 text-[11px] text-gray-500">
+            <span className="font-semibold text-sentiment-negative">{negCount}</span> of {issue.count} posts mentioning
+            <span className="font-mono mx-1">{issue.aspect}</span>
+            are negative
+            <span className="mx-2">·</span>
+            <span className="text-gray-400">rank = negative posts ({issue.count} × {(issue.negative_ratio * 100).toFixed(0)}%)</span>
+          </div>
 
-      <div className="space-y-2 max-h-[600px] overflow-y-auto">
-        {posts.map((p, idx) => {
-          const tierClass = p.priority_tier === 'P1'
-            ? 'bg-sentiment-negative text-white'
-            : 'bg-walmart-spark text-walmart-navy';
-          return (
-            <button
-              key={p.post_id || idx}
-              onClick={() => openPost(p)}
-              className="w-full text-left p-3 rounded-xl border border-walmart-navy/10 bg-white hover:border-walmart-blue hover:shadow-card-hover transition-all"
-              title="Click to open the original post on Reddit"
-            >
-              <div className="flex items-start justify-between gap-3 mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`px-2 py-0.5 rounded-pill text-[11px] font-bold shrink-0 ${tierClass}`}>
-                    {p.priority_tier}
-                  </span>
-                  <span className="text-xs text-gray-500 font-mono shrink-0">
-                    r/{p.subreddit}
-                  </span>
-                  <span className="text-xs text-gray-400 shrink-0">
-                    {fmtTime(p.created_timestamp)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-[11px] text-gray-500 shrink-0">
-                  <span title="Trust score">T {p.trust_score.toFixed(2)}</span>
-                  <span title="Sentiment confidence">C {p.sentiment_confidence.toFixed(2)}</span>
-                  <span
-                    className="font-mono bg-walmart-navy/5 text-walmart-navy px-1.5 py-0.5 rounded"
-                    title="priority_score = trust × confidence"
-                  >
-                    {p.priority_score.toFixed(3)}
-                  </span>
-                </div>
-              </div>
-              {p.title && (
-                <div className="text-sm font-semibold text-walmart-navy line-clamp-2 mb-0.5">
-                  {p.title}
-                </div>
-              )}
-              {p.text && p.text !== p.title && (
-                <div className="text-xs text-gray-600 line-clamp-2">
-                  {truncate(p.text)}
-                </div>
-              )}
-              {Array.isArray(p.aspects) && p.aspects.length > 0 && (
-                <div className="flex gap-1 flex-wrap mt-1.5">
-                  {(p.aspects as string[]).slice(0, 4).map((a) => (
-                    <span
-                      key={a}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-walmart-blue/10 text-walmart-blue capitalize"
-                    >
-                      {String(a).replace(/_/g, ' ')}
+          {loading && (
+            <div className="text-xs text-gray-400 py-4 text-center">Loading posts…</div>
+          )}
+          {!loading && posts.length === 0 && fetched && (
+            <div className="text-xs text-gray-400 py-4 text-center">No posts found for this aspect in the current window.</div>
+          )}
+          {posts.length > 0 && (
+            <div className="divide-y divide-walmart-navy/5 max-h-[400px] overflow-y-auto">
+              {posts.map((p) => (
+                <a
+                  key={p.post_id}
+                  href={p.reddit_url || '#'}
+                  target={p.reddit_url ? '_blank' : undefined}
+                  rel="noopener noreferrer"
+                  className="block px-4 py-2.5 hover:bg-walmart-blue/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${SENTIMENT_DOT[p.sentiment] || SENTIMENT_DOT.neutral}`} title={p.sentiment} />
+                    <span className="text-xs text-gray-500 font-mono">r/{p.subreddit}</span>
+                    <span className="text-xs text-gray-400">{fmtTime(p.created_timestamp)}</span>
+                    <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                      T {p.trust_score.toFixed(2)} · C {p.sentiment_confidence.toFixed(2)}
                     </span>
-                  ))}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </Card>
+                  </div>
+                  {p.title && (
+                    <div className="text-sm font-medium text-walmart-navy line-clamp-1">{p.title}</div>
+                  )}
+                  {p.text && p.text !== p.title && (
+                    <div className="text-xs text-gray-600 line-clamp-2 mt-0.5">
+                      {p.text.length > 200 ? p.text.slice(0, 200) + '…' : p.text}
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          )}
+          {fetched && posts.length > 0 && (
+            <div className="px-4 py-2 border-t border-walmart-navy/5 text-center">
+              <Link
+                to={`/aspects/${encodeURIComponent(issue.aspect)}?range=${range}`}
+                className="text-xs text-walmart-blue hover:underline font-medium"
+              >
+                View all {issue.aspect.replace(/_/g, ' ')} posts →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
