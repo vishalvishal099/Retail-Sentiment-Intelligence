@@ -1680,6 +1680,93 @@ def insights_generate(payload: dict | None = None):
     return result
 
 
+@app.get("/api/competitor-trend")
+def competitor_trend(days: int = Query(14, ge=3, le=90), top_n: int = Query(4, ge=1, le=8)):
+    """Daily sentiment score per top competitor subreddit, plus a Walmart
+    baseline for comparison. Powers the multi-line competitor trend chart
+    and the share-of-voice bar chart on the Competitor Insights page.
+
+    Sentiment score per day per subreddit = (positive - negative) / total,
+    clamped to [-1, +1]. Days with no posts return null so recharts leaves
+    a gap instead of drawing a spurious zero.
+    """
+    _ensure_initialized()
+    import json as _json
+    from src.ingestion.subreddit_registry import load_all as _load_all_registry
+
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Which subreddits count as Walmart vs Competitor, from the registry.
+    registry = _load_all_registry()
+    walmart_subs = {e.subreddit for e in registry if e.macro_group == "walmart"}
+    competitor_subs = {e.subreddit for e in registry if e.macro_group == "competitor"}
+
+    sql = (
+        "SELECT a.subreddit AS sub, a.data AS adata, "
+        "       CAST(json_extract(r.data, '$.created_timestamp') AS REAL) AS cts "
+        "FROM analyses a "
+        "JOIN raw_posts r ON r.id = json_extract(a.data, '$.post_id') "
+        "WHERE CAST(json_extract(r.data, '$.created_timestamp') AS REAL) >= ? "
+        "  AND CAST(json_extract(r.data, '$.created_timestamp') AS REAL) < ?"
+    )
+    rows = _storage._conn.execute(sql, [start.timestamp(), now.timestamp()]).fetchall()
+
+    # Aggregate: per subreddit, per day, count sentiment.
+    per_sub: dict[str, dict[str, Counter]] = {}
+    sub_totals: Counter = Counter()
+    for row in rows:
+        sub = row["sub"] or ""
+        try:
+            a = _json.loads(row["adata"])
+        except Exception:
+            continue
+        d = datetime.fromtimestamp(row["cts"], tz=timezone.utc).strftime("%Y-%m-%d")
+        per_sub.setdefault(sub, {}).setdefault(d, Counter())[a.get("sentiment", "neutral")] += 1
+        sub_totals[sub] += 1
+
+    day_keys = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+
+    # Pick the top-N competitors by volume.
+    top_competitors = [
+        s for s, _ in sub_totals.most_common()
+        if s in competitor_subs
+    ][:top_n]
+
+    def _series_for(subs: set[str], name: str) -> dict:
+        """Build a per-day sentiment score for the union of the given subs."""
+        per_day = []
+        for d in day_keys:
+            pos = neg = tot = 0
+            for s in subs:
+                c = per_sub.get(s, {}).get(d)
+                if not c:
+                    continue
+                p = c.get("positive", 0); n = c.get("negative", 0)
+                pos += p; neg += n; tot += p + n + c.get("neutral", 0)
+            score = round((pos - neg) / tot, 4) if tot else None
+            per_day.append({"date": d, "score": score, "posts": tot})
+        return {"label": name, "subreddits": sorted(subs), "total_posts": sum(sub_totals[s] for s in subs), "points": per_day}
+
+    series: list[dict] = []
+    # Walmart baseline first so it renders behind competitors in the chart.
+    if walmart_subs:
+        series.append(_series_for(walmart_subs, "Walmart"))
+    for comp in top_competitors:
+        series.append(_series_for({comp}, f"r/{comp}"))
+
+    # Share-of-voice: total post volume per series, over the whole window.
+    share_of_voice = [{"label": s["label"], "posts": s["total_posts"]} for s in series]
+
+    return {
+        "days": day_keys,
+        "series": series,
+        "share_of_voice": share_of_voice,
+        "walmart_subreddits": sorted(walmart_subs),
+        "top_competitors": top_competitors,
+    }
+
+
 @app.get("/api/jobs/recent")
 def jobs_recent(limit: int = Query(25, ge=1, le=200), status: str | None = None):
     """Recent pipeline runs — manual + scheduled + backfill. Powers the
@@ -2072,6 +2159,77 @@ def _compute_top_issues_from_window(window_stats: dict) -> list[dict]:
         })
     issues.sort(key=lambda x: x["severity_score"], reverse=True)
     return issues[:5]
+
+
+@app.get("/api/aspect-heatmap")
+def get_aspect_heatmap(
+    days: int = Query(7, ge=1, le=30),
+    top_n: int = Query(6, ge=1, le=12),
+):
+    """Aspect × Day heatmap for BrandHealth. Returns the top-N aspects by
+    total mentions over the window, along with per-day sentiment counts for
+    each aspect. Each cell reports negative_ratio in [0..1] which the UI maps
+    to a colour scale (green → yellow → red).
+    """
+    _ensure_initialized()
+    import json as _json
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    sql = (
+        "SELECT a.data AS adata, "
+        "       CAST(json_extract(r.data, '$.created_timestamp') AS REAL) AS cts "
+        "FROM analyses a "
+        "JOIN raw_posts r ON r.id = json_extract(a.data, '$.post_id') "
+        "WHERE CAST(json_extract(r.data, '$.created_timestamp') AS REAL) >= ? "
+        "  AND CAST(json_extract(r.data, '$.created_timestamp') AS REAL) < ?"
+    )
+    rows = _storage._conn.execute(sql, [start.timestamp(), now.timestamp()]).fetchall()
+
+    # Roll up aspect × day sentiment counts.
+    # matrix[aspect][day] = Counter({positive, negative, neutral})
+    matrix: dict[str, dict[str, Counter]] = {}
+    aspect_totals: Counter = Counter()
+    for row in rows:
+        try:
+            a = _json.loads(row["adata"])
+        except Exception:
+            continue
+        sentiment = a.get("sentiment", "neutral")
+        d = datetime.fromtimestamp(row["cts"], tz=timezone.utc).strftime("%Y-%m-%d")
+        for asp in _aspect_names(a.get("aspects") or []):
+            aspect_totals[asp] += 1
+            per_day = matrix.setdefault(asp, {})
+            per_day.setdefault(d, Counter())[sentiment] += 1
+
+    top_aspects = [name for name, _ in aspect_totals.most_common(top_n)]
+
+    # Build a continuous list of day buckets for the x-axis.
+    day_keys = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+
+    cells = []
+    for asp in top_aspects:
+        per_day = matrix.get(asp, {})
+        for d in day_keys:
+            counts = per_day.get(d, Counter())
+            total = sum(counts.values())
+            neg = counts.get("negative", 0)
+            cells.append({
+                "aspect": asp,
+                "date": d,
+                "count": total,
+                "positive": counts.get("positive", 0),
+                "negative": neg,
+                "neutral": counts.get("neutral", 0),
+                "negative_ratio": round(neg / total, 3) if total else 0.0,
+            })
+
+    return {
+        "aspects": top_aspects,
+        "days": day_keys,
+        "cells": cells,
+        "totals": {a: aspect_totals[a] for a in top_aspects},
+    }
 
 
 @app.get("/api/brand-health")
@@ -2561,6 +2719,14 @@ def _ensure_lifecycle_reply_sent(post_id: str, analysis: dict | None, now: str):
                 "updated_at": now,
                 "reply_sent_at": now,
                 "partition_key": subreddit,
+                # Carry the Ollama caption + source image URL forward so the
+                # lifecycle board can render "what the model saw" alongside
+                # the post title.
+                "image_caption": (raw or {}).get("image_caption", ""),
+                "image_url": (raw or {}).get("thumbnail")
+                    or (raw or {}).get("url_overridden_by_dest")
+                    or (raw or {}).get("preview_url")
+                    or "",
             }
             if analysis:
                 aspects = analysis.get("aspects", [])
@@ -2574,7 +2740,8 @@ def _ensure_lifecycle_reply_sent(post_id: str, analysis: dict | None, now: str):
 
 @app.get("/api/review")
 def get_review_queue(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     sentiment: str = Query(None),
     range: str = Query(None, alias="range"),
 ):
@@ -2583,15 +2750,11 @@ def get_review_queue(
     review and reply to any post that matches the criteria."""
     _ensure_initialized()
 
-    # When explicit filters are provided, drop the needs_review requirement so
-    # the page behaves like Post Explorer but for the reply workflow.
-    has_filters = bool(sentiment or range)
-
     conditions: list[str] = []
     params: list = []
 
-    if not has_filters:
-        conditions.append("json_extract(data, '$.needs_review') = 1")
+    # Always only show posts that still need review — never show already-reviewed posts
+    conditions.append("json_extract(data, '$.needs_review') = 1")
 
     if sentiment:
         conditions.append("json_extract(data, '$.sentiment') = ?")
@@ -2604,12 +2767,16 @@ def get_review_queue(
             params.append(cutoff)
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
-    params.append(limit)
+    # Total count for pagination
+    total = _storage._conn.execute(
+        f"SELECT COUNT(*) FROM analyses WHERE {where_clause}", params
+    ).fetchone()[0]
+    params.extend([limit, offset])
     query = (
         f"SELECT data FROM analyses "
         f"WHERE {where_clause} "
         f"ORDER BY json_extract(data, '$.analyzed_at') DESC "
-        f"LIMIT ?"
+        f"LIMIT ? OFFSET ?"
     )
     analyses = _storage.query("analyses", query, params)
 
@@ -2656,7 +2823,12 @@ def get_review_queue(
         }
         enriched.append(enriched_item)
 
-    return {"queue": enriched, "total": len(enriched)}
+    return {
+        "queue": enriched,
+        "total": total,
+        "offset": offset,
+        "has_more": (offset + len(enriched)) < total,
+    }
 
 
 @app.post("/api/review/{post_id}")
@@ -2694,6 +2866,25 @@ def submit_review(post_id: str, correction: dict):
         if corrected:
             analysis["sentiment"] = corrected
             analysis["sentiment_confidence"] = 1.0  # Human-validated
+        # Aspect override (#5): if the analyst passed a corrected_aspects list,
+        # replace the model-inferred aspects. Empty list == "no aspects".
+        corrected_aspects = correction.get("corrected_aspects")
+        if isinstance(corrected_aspects, list):
+            # Store as list of dicts matching the analyzer output shape so the
+            # rest of the dashboard doesn't need special-case handling.
+            analysis["aspects"] = [
+                {"aspect": a, "confidence": 1.0} if isinstance(a, str) else a
+                for a in corrected_aspects
+            ]
+        # Trust override (#6): analyst can force trust to any value in [0, 1].
+        trust_override = correction.get("trust_override")
+        if trust_override is not None:
+            try:
+                to_val = max(0.0, min(1.0, float(trust_override)))
+                analysis["trust_score"] = to_val
+                analysis["trust_override"] = True
+            except (TypeError, ValueError):
+                pass
         analysis["needs_review"] = False
         analysis["human_validated"] = True
         analysis["validated_at"] = now
@@ -2704,6 +2895,8 @@ def submit_review(post_id: str, correction: dict):
             post_id=post_id,
             from_sentiment=correction.get("original_sentiment"),
             to_sentiment=corrected,
+            aspects_changed=isinstance(corrected_aspects, list),
+            trust_changed=trust_override is not None,
         )
     else:
         log.warning("review_analysis_not_found", post_id=post_id, analysis_id=analysis_id)
@@ -2774,6 +2967,140 @@ def draft_reply(post_id: str, payload: dict | None = None):
         "model_used": primary.get("model_used", ""),
         "source": primary.get("source", ""),
         "examples_used": len(examples),
+        "gateway_available": result.get("gateway_available", None),
+        "ollama_available": result.get("ollama_available", None),
+        "gateway_reason": result.get("gateway_reason", None),
+    }
+
+
+@app.post("/api/review/{post_id}/draft-all")
+def draft_all(post_id: str, payload: dict | None = None):
+    """Generate both a customer reply draft AND an internal action note in one call.
+    Returns the same structure as draft-reply plus an `action_draft` field."""
+    _ensure_initialized()
+    payload = payload or {}
+    subreddit = payload.get("subreddit", "")
+
+    analysis_id = f"analysis_{post_id}"
+    analysis = _storage.get_item("analyses", analysis_id, subreddit)
+    if not analysis:
+        return {"status": "error", "reason": "analysis_not_found"}
+
+    raw = _storage.get_item("raw_posts", post_id, subreddit) or {}
+    aspects = _aspect_names(analysis.get("aspects", []))
+    examples = _collect_reply_examples(limit=5)
+
+    # ── Customer reply drafts ──────────────────────────────────────────────────
+    try:
+        llm = _get_reply_llm()
+        result = llm.generate_reply_pair(
+            post_title=raw.get("title", ""),
+            post_text=raw.get("body", "") or raw.get("title", ""),
+            subreddit=analysis.get("subreddit", ""),
+            author=raw.get("author", ""),
+            aspects=aspects,
+            examples=examples,
+        )
+    except Exception as e:
+        log.error("draft_all_reply_failed", post_id=post_id, error=str(e))
+        return {"status": "error", "reason": str(e)}
+
+    drafts = result.get("drafts", [])
+
+    # ── Internal action note ────────────────────────────────────────────────────
+    # Cascade: 1) Walmart LLM Gateway (GPT-4o)  2) Mistral via Ollama
+    #          3) Smart Composer template  4) bare template fallback
+    action_draft = ""
+    action_model = "template"
+    asp = aspects[0] if aspects else "this issue"
+    complaint_text = (raw.get('title', '') + ' ' + raw.get('body', '')).strip()[:600]
+    action_prompt = (
+        "You are a Walmart customer-care operations analyst.\n"
+        "Based on this customer complaint, suggest ONE concrete internal action "
+        "in 2-3 complete sentences that the ops team should take to prevent this "
+        "issue recurring. Name the specific process, system, or team involved.\n\n"
+        f"Customer complaint: {complaint_text}\n"
+        f"Aspects affected: {', '.join(aspects) or 'general'}\n\n"
+        "Internal action recommendation (2-3 complete sentences):"
+    )
+    try:
+        llm2 = _get_reply_llm()
+
+        # ── Step 1: Walmart LLM Gateway (GPT-4o) ──────────────────────────────
+        if hasattr(llm2, '_gateway_generate_reply') and not action_draft:
+            try:
+                import requests as _req
+                url = llm2.config.wmt_gateway_url.rstrip("/") + "/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {llm2.config.wmt_gateway_key}",
+                    "WM_CONSUMER.ID": getattr(llm2.config, "wmt_consumer_id", ""),
+                    "WM_SVC.NAME": getattr(llm2.config, "wmt_svc_name", "isl-ai-engine"),
+                    "WM_SVC.ENV": getattr(llm2.config, "wmt_svc_env", "stage"),
+                }
+                resp = _req.post(url, json={
+                    "model": llm2.config.wmt_gateway_model,
+                    "messages": [{"role": "user", "content": action_prompt}],
+                    "temperature": 0.4,
+                    "max_tokens": 200,
+                }, headers=headers, timeout=30, verify=False)
+                if resp.status_code == 200:
+                    action_draft = resp.json()["choices"][0]["message"]["content"].strip()
+                    action_model = f"GPT-4o ({llm2.config.wmt_gateway_model})"
+                    log.info("action_note_generated", model="gateway_gpt4o")
+            except Exception as eg:
+                log.warning("action_note_gateway_failed", error=str(eg))
+
+        # ── Step 2: Mistral via Ollama ─────────────────────────────────────────
+        if not action_draft and hasattr(llm2, '_ollama_generate_reply'):
+            try:
+                ollama_text = llm2._ollama_generate_reply(action_prompt)
+                if ollama_text:
+                    action_draft = ollama_text
+                    action_model = f"Mistral ({getattr(llm2.config, 'ollama_model', 'mistral:7b-instruct')})"
+                    log.info("action_note_generated", model="ollama_mistral")
+            except Exception as eo:
+                log.warning("action_note_ollama_failed", error=str(eo))
+
+        # ── Step 3: Smart Composer template (always available) ─────────────────
+        if not action_draft:
+            from src.analysis.llm_client import _smart_compose_reply as _sc
+            # Re-purpose the smart composer with an action-note seed phrasing
+            asp_str = ', '.join(aspects[:2]) if aspects else "general service"
+            subreddit = analysis.get("subreddit", "walmart")
+            action_draft = (
+                f"Escalate to the {asp_str} operations team: review the root cause of "
+                f"this complaint from r/{subreddit} and update the relevant SOP within 5 business days. "
+                f"Flag for the weekly customer-feedback triage meeting."
+            )
+            action_model = "smart-composer"
+            log.info("action_note_generated", model="smart_composer_template")
+
+        # Trim to sentence boundary if over 600 chars
+        if len(action_draft) > 600:
+            last_end = max(action_draft.rfind('. ', 0, 600),
+                          action_draft.rfind('! ', 0, 600),
+                          action_draft.rfind('? ', 0, 600))
+            action_draft = action_draft[:last_end + 1] if last_end > 0 else action_draft[:600]
+
+    except Exception as e:
+        log.warning("action_draft_failed", post_id=post_id, error=str(e))
+        action_draft = f"Review and improve the {asp} process. Escalate to the relevant team for root cause analysis."
+        action_model = "template"
+
+    primary = drafts[0] if drafts else {}
+    return {
+        "status": "ok",
+        "drafts": drafts,
+        "reply": primary.get("reply", ""),
+        "model_used": primary.get("model_used", ""),
+        "source": primary.get("source", ""),
+        "examples_used": len(examples),
+        "action_draft": action_draft,
+        "action_model": action_model,
+        "gateway_available": result.get("gateway_available", None),
+        "ollama_available": result.get("ollama_available", None),
+        "gateway_reason": result.get("gateway_reason", None),
     }
 
 
@@ -2840,27 +3167,358 @@ def save_reply(post_id: str, payload: dict, request: Request):
     return response
 
 
+def _needs_follow_up(post_id: str, analysis: dict, threshold_days: int = 3) -> bool:
+    """Return True when a reply was sent 3+ days ago but lifecycle is still reply_sent."""
+    reply_at = analysis.get("reply_posted_at")
+    if not reply_at:
+        return False
+    try:
+        sent = datetime.fromisoformat(reply_at.replace("Z", "+00:00"))
+        age_days = (datetime.now(timezone.utc) - sent).days
+        if age_days < threshold_days:
+            return False
+        lc = _storage.lifecycle_get(post_id)
+        return bool(lc and lc.get("state") == "reply_sent")
+    except Exception:
+        return False
+
+
+@app.get("/api/review/reviewed")
+def get_reviewed(
+    limit: int = Query(50, ge=1, le=200),
+    sentiment: str = Query(None),
+    range: str = Query(None, alias="range"),
+):
+    """Return posts that have already been human-validated (left the review queue)."""
+    _ensure_initialized()
+    conditions = ["json_extract(data, '$.human_validated') = 1"]
+    params: list = []
+    if sentiment:
+        conditions.append("json_extract(data, '$.sentiment') = ?")
+        params.append(sentiment)
+    if range:
+        cutoff = _range_to_cutoff(range)
+        if cutoff:
+            conditions.append("json_extract(data, '$.analyzed_at') >= ?")
+            params.append(cutoff)
+    params.append(limit)
+    query = (
+        f"SELECT data FROM analyses WHERE {' AND '.join(conditions)} "
+        f"ORDER BY json_extract(data, '$.validated_at') DESC LIMIT ?"
+    )
+    analyses = _storage.query("analyses", query, params)
+    enriched = []
+    for item in analyses:
+        post_id = item.get("post_id", "")
+        post = _storage.get_item("raw_posts", post_id, item.get("subreddit", ""))
+        reddit_url = ""
+        if post and post.get("url"):
+            reddit_url = post["url"]
+        elif post_id.startswith("reddit_"):
+            bare = post_id[len("reddit_"):]
+            reddit_url = f"https://www.reddit.com/r/{item.get('subreddit', '')}/comments/{bare}/"
+        enriched.append({
+            "id": item.get("id", ""),
+            "post_id": post_id,
+            "sentiment": item.get("sentiment", "unknown"),
+            "sentiment_confidence": item.get("sentiment_confidence", 0),
+            "trust_score": item.get("trust_score", 0),
+            "aspects": item.get("aspects", []),
+            "needs_review": False,
+            "subreddit": item.get("subreddit", ""),
+            "analyzed_at": item.get("analyzed_at", ""),
+            "validated_at": item.get("validated_at", ""),
+            "validated_by": item.get("validated_by", ""),
+            "close_reason": item.get("close_reason", ""),
+            "model": item.get("model_used", ""),
+            "text": post.get("body", post.get("title", "")) if post else "",
+            "title": post.get("title", "") if post else "",
+            "author": post.get("author", "") if post else "",
+            "score": post.get("score", 0) if post else 0,
+            "created_timestamp": post.get("created_timestamp", 0) if post else 0,
+            "reddit_url": reddit_url,
+            "can_generate_reply": item.get("sentiment") == "negative",
+            "reply_posted_at": item.get("reply_posted_at"),
+            "reply_text": item.get("reply_text", ""),
+            # Follow-up flag: reply was sent 3+ days ago but lifecycle not resolved
+            "follow_up_needed": _needs_follow_up(post_id, item),
+        })
+    return {"queue": enriched, "total": len(enriched)}
+
+
+@app.post("/api/review/{post_id}/confirm")
+def confirm_review(post_id: str, payload: dict | None = None):
+    """Record a human confirmation of the model's sentiment label.
+    Moves the post out of the review queue (needs_review=False) and into Reviewed tab."""
+    _ensure_initialized()
+    payload = payload or {}
+    now = datetime.now(timezone.utc).isoformat()
+    subreddit = payload.get("subreddit", "")
+
+    analysis_id = f"analysis_{post_id}"
+    analysis = _storage.get_item("analyses", analysis_id, subreddit)
+    if not analysis:
+        return {"status": "error", "reason": "analysis_not_found"}
+
+    sentiment = analysis.get("sentiment", "neutral")
+
+    # Mark as reviewed (same as a correction that agrees with the model)
+    analysis["needs_review"] = False
+    analysis["human_validated"] = True
+    analysis["validated_at"] = now
+    analysis["validated_by"] = payload.get("analyst_id", "default")
+    _storage.upsert("analyses", analysis)
+
+    _storage.upsert("feedback", {
+        "id": f"confirm_{post_id}_{int(datetime.now(timezone.utc).timestamp())}",
+        "post_id": post_id,
+        "analyst_id": payload.get("analyst_id", "default"),
+        "kind": "confirmation",
+        "original_sentiment": sentiment,
+        "corrected_sentiment": sentiment,  # same — counts as agreement in accuracy tracker
+        "notes": "Human confirmed model label",
+        "created_at": now,
+        "partition_key": payload.get("analyst_id", "default"),
+    })
+    log.info("review_confirmed", post_id=post_id, sentiment=sentiment)
+    return {"status": "confirmed", "post_id": post_id}
+
+
+@app.post("/api/review/{post_id}/close")
+def close_review(post_id: str, payload: dict | None = None):
+    """Close a review with one of three lifecycle paths:
+      close_type='no_reply'    → resolved (no action taken)
+      close_type='issue_fixed' → issue_fixed (action identified, reply was sent)
+      close_type='reply_sent'  → reply_sent (monitoring, reply was sent, no action yet)
+    """
+    _ensure_initialized()
+    payload = payload or {}
+    now = datetime.now(timezone.utc).isoformat()
+    subreddit = payload.get("subreddit", "")
+    close_type = payload.get("close_type", "no_reply")  # no_reply | issue_fixed | reply_sent
+    action_note = payload.get("action_note", "")  # GPT-generated action for issue_fixed
+
+    analysis_id = f"analysis_{post_id}"
+    analysis = _storage.get_item("analyses", analysis_id, subreddit)
+    if not analysis:
+        return {"status": "error", "reason": "analysis_not_found"}
+
+    analysis["needs_review"] = False
+    analysis["human_validated"] = True
+    analysis["validated_at"] = now
+    analysis["validated_by"] = payload.get("analyst_id", "default")
+    analysis["close_reason"] = close_type
+    if action_note:
+        analysis["action_note"] = action_note
+    _storage.upsert("analyses", analysis)
+
+    _storage.upsert("feedback", {
+        "id": f"close_{post_id}_{int(datetime.now(timezone.utc).timestamp())}",
+        "post_id": post_id,
+        "analyst_id": payload.get("analyst_id", "default"),
+        "kind": f"closed_{close_type}",
+        "close_reason": close_type,
+        "action_note": action_note,
+        "created_at": now,
+        "partition_key": payload.get("analyst_id", "default"),
+    })
+
+    # Map close_type to lifecycle state
+    target_state = {
+        "no_reply":    "resolved",
+        "issue_fixed": "issue_fixed",
+        "reply_sent":  "reply_sent",
+    }.get(close_type, "resolved")
+
+    try:
+        existing = _storage.lifecycle_get(post_id)
+        if existing:
+            existing["state"] = target_state
+            existing["updated_at"] = now
+            if action_note:
+                existing["action_note"] = action_note
+            _storage.lifecycle_upsert(existing)
+        else:
+            raw = _storage.get_item("raw_posts", post_id, subreddit)
+            _storage.lifecycle_upsert({
+                "id": f"lc_{post_id}",
+                "post_id": post_id,
+                "state": target_state,
+                "priority": "medium" if close_type == "issue_fixed" else "low",
+                "subreddit": subreddit,
+                "title": (raw or {}).get("title", ""),
+                "top_aspect": "",
+                "action_note": action_note,
+                "sentiment_score": analysis.get("sentiment_confidence", 0),
+                "sentiment_confidence": analysis.get("sentiment_confidence", 0),
+                "created_at": now,
+                "updated_at": now,
+            })
+    except Exception as e:
+        log.warning("close_lifecycle_update_failed", post_id=post_id, error=str(e))
+
+    log.info("review_closed", post_id=post_id, close_type=close_type)
+    return {"status": "closed", "post_id": post_id, "lifecycle_state": target_state}
+
+
+@app.post("/api/review/{post_id}/generate-action")
+def generate_action(post_id: str, payload: dict | None = None):
+    """Use the LLM to draft a short recommended action for a post that had a
+    reply sent. The action is shown in the Lifecycle 'Actionable Items' column."""
+    _ensure_initialized()
+    payload = payload or {}
+    subreddit = payload.get("subreddit", "")
+
+    analysis_id = f"analysis_{post_id}"
+    analysis = _storage.get_item("analyses", analysis_id, subreddit)
+    if not analysis:
+        return {"status": "error", "reason": "analysis_not_found"}
+
+    raw = _storage.get_item("raw_posts", post_id, subreddit) or {}
+    aspects = _aspect_names(analysis.get("aspects", []))
+    reply_text = analysis.get("reply_text", "")
+
+    prompt = (
+        "You are a Walmart customer-care operations analyst.\n"
+        "A customer posted a complaint and an analyst sent a reply.\n"
+        "Based on the complaint and the reply, suggest ONE concrete internal action "
+        "(1-2 sentences max) that the ops team should take to prevent this issue in future.\n"
+        "Be specific — name the process, system, or team involved.\n\n"
+        f"Customer complaint: {(raw.get('title','') + ' ' + raw.get('body','')).strip()[:800]}\n"
+        f"Aspects: {', '.join(aspects) or 'general'}\n"
+        f"Reply sent: {reply_text[:400]}\n\n"
+        "Recommended action:"
+    )
+
+    try:
+        llm = _get_reply_llm()
+        # Reuse gateway infrastructure — call _gateway_generate_reply if available
+        if hasattr(llm, '_gateway_generate_reply'):
+            action = llm._gateway_generate_reply(prompt)
+            if not action or action == "__consumer_id_error__":
+                raise ValueError("gateway unavailable")
+        else:
+            result = llm.generate_reply(
+                raw.get("title", ""), raw.get("body", "") or raw.get("title", ""),
+                subreddit, raw.get("author", ""), aspects,
+            )
+            action = result.get("reply", "")
+        action = action.strip()[:400]
+        log.info("action_generated", post_id=post_id, length=len(action))
+        return {"status": "ok", "action": action}
+    except Exception as e:
+        log.warning("action_generation_failed", post_id=post_id, error=str(e))
+        return {"status": "ok", "action": ""}  # graceful fallback — analyst enters manually
+
+
 @app.get("/api/review/stats")
 def review_stats():
     """Counts of how many corrections have been applied — proof that the
-    feedback loop is working. Used for the 'LLM is learning' indicator.
+    feedback loop is working. Used for the 'LLM is learning' indicator and the
+    Model Accuracy Tracker chart.
+
+    Returns:
+        total_feedback       — every feedback row (corrections + replies)
+        total_reviewed       — reviews with both original + corrected sentiment
+        total_corrections    — reviews where corrected != original (model was wrong)
+        total_confirmations  — reviews where corrected == original (model was right)
+        total_replies_posted — analyst-posted reply count
+        agreement_rate       — confirmations / total_reviewed (0..1)
+        correction_matrix    — dict of "from->to": count
+        daily_accuracy       — [{date, reviewed, confirmed, agreement_rate}] for chart
     """
     _ensure_initialized()
     rows = _storage.query("feedback", "SELECT data FROM feedback", [])
-    corrections = [
+    reviewed = [
         r for r in rows
         if r.get("corrected_sentiment") and r.get("original_sentiment")
-        and r["corrected_sentiment"] != r["original_sentiment"]
     ]
+    corrections = [r for r in reviewed if r["corrected_sentiment"] != r["original_sentiment"]]
+    confirmations = [r for r in reviewed if r["corrected_sentiment"] == r["original_sentiment"]]
     by_pair: Counter = Counter()
     for r in corrections:
         by_pair[(r["original_sentiment"], r["corrected_sentiment"])] += 1
     replies = [r for r in rows if r.get("kind") == "auto_reply_posted"]
+
+    # Daily accuracy time-series for the tracker chart (#4).
+    # Bucket every review row by its calendar date (UTC) and compute the
+    # confirmation rate. This is what the model would have gotten right had
+    # the analyst not been in the loop.
+    daily: dict[str, dict] = {}
+    for r in reviewed:
+        ts = r.get("created_at", "")[:10]  # YYYY-MM-DD prefix
+        if not ts:
+            continue
+        d = daily.setdefault(ts, {"reviewed": 0, "confirmed": 0})
+        d["reviewed"] += 1
+        if r["corrected_sentiment"] == r["original_sentiment"]:
+            d["confirmed"] += 1
+    daily_accuracy = [
+        {
+            "date": date,
+            "reviewed": v["reviewed"],
+            "confirmed": v["confirmed"],
+            "agreement_rate": round(v["confirmed"] / v["reviewed"], 4) if v["reviewed"] else 0.0,
+        }
+        for date, v in sorted(daily.items())
+    ]
+
+    total_reviewed = len(reviewed)
+    agreement_rate = round(len(confirmations) / total_reviewed, 4) if total_reviewed else 0.0
+
     return {
         "total_feedback": len(rows),
+        "total_reviewed": total_reviewed,
         "total_corrections": len(corrections),
+        "total_confirmations": len(confirmations),
         "total_replies_posted": len(replies),
+        "agreement_rate": agreement_rate,
         "correction_matrix": {f"{k[0]}->{k[1]}": v for k, v in by_pair.items()},
+        "daily_accuracy": daily_accuracy,
+    }
+
+
+@app.get("/api/review/feedback-history")
+def feedback_history(limit: int = Query(50, ge=1, le=500)):
+    """Full audit log of past corrections (most recent first). Powers the
+    Feedback History table on the Review page (#7).
+
+    Each row includes the post id, original and corrected labels, aspects that
+    changed, any trust override, and the analyst who did it.
+    """
+    _ensure_initialized()
+    rows = _storage.query("feedback", "SELECT data FROM feedback", [])
+    # Only include actual review corrections, skip auto-reply logs.
+    reviewed = [
+        r for r in rows
+        if r.get("corrected_sentiment") and r.get("original_sentiment")
+    ]
+    # Sort by created_at descending; feedback rows without a timestamp bubble down.
+    reviewed.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    reviewed = reviewed[:limit]
+
+    def _aspect_diff(before: list, after: list) -> list[str]:
+        b = set(_aspect_names(before))
+        a = set(_aspect_names(after))
+        return sorted(list((b - a) | (a - b)))
+
+    return {
+        "items": [
+            {
+                "id": r.get("id"),
+                "post_id": r.get("post_id"),
+                "analyst_id": r.get("analyst_id", "default"),
+                "original_sentiment": r.get("original_sentiment"),
+                "corrected_sentiment": r.get("corrected_sentiment"),
+                "changed": r.get("corrected_sentiment") != r.get("original_sentiment"),
+                "aspects_changed": _aspect_diff(r.get("original_aspects", []), r.get("corrected_aspects", [])),
+                "trust_override": r.get("trust_override"),
+                "notes": r.get("notes", ""),
+                "created_at": r.get("created_at"),
+            }
+            for r in reviewed
+        ],
+        "total": len(reviewed),
     }
 
 
@@ -2871,12 +3529,15 @@ def review_stats():
 def get_alerts(
     range: str = Query("week", description="Time window filter on detected_at (ISO). Default: week."),
     severity: str | None = Query(None, description="Optional filter: high | medium | low"),
+    alert_type: str | None = Query(None, alias="type", description="Optional filter: volume_spike | sentiment_crash | emerging_topic | competitor_negative"),
+    state: str | None = Query(None, description="Optional filter: new | acknowledged | investigating | resolved"),
     live: bool = Query(False, description="If true, run detectors right now instead of reading stored alerts."),
     limit: int = Query(100, ge=1, le=1000),
 ):
     """Alerts feed. Reads from the `alerts` table by default (populated by
     every pipeline cycle) so history is preserved. Filters by `detected_at`
-    matching the requested range; supports optional severity filter.
+    matching the requested range; supports optional severity, type, and
+    workflow-state filters.
 
     Set `live=true` to bypass storage and re-run the detectors against
     current aggregates — useful for on-demand "check now" without waiting
@@ -2887,6 +3548,8 @@ def get_alerts(
         alerts = _alert_engine.detect_all()
         if severity:
             alerts = [a for a in alerts if a.get("severity") == severity]
+        if alert_type:
+            alerts = [a for a in alerts if a.get("type") == alert_type]
         return {"alerts": alerts[:limit], "count": len(alerts[:limit]), "total": len(alerts), "source": "live"}
 
     if range not in _VALID_RANGES:
@@ -2909,6 +3572,16 @@ def get_alerts(
     if severity:
         where.append("json_extract(data, '$.severity') = ?")
         params.append(severity)
+    if alert_type:
+        where.append("json_extract(data, '$.type') = ?")
+        params.append(alert_type)
+    if state:
+        # Alerts without an explicit state count as "new" for filtering.
+        if state == "new":
+            where.append("COALESCE(json_extract(data, '$.state'), 'new') = 'new'")
+        else:
+            where.append("json_extract(data, '$.state') = ?")
+            params.append(state)
     where_sql = " AND ".join(where)
 
     try:
@@ -2927,7 +3600,184 @@ def get_alerts(
 
     import json as _json
     alerts = [_json.loads(r["data"]) for r in rows]
+    # Normalise state field so the UI never has to deal with missing keys.
+    for a in alerts:
+        a.setdefault("state", "new")
     return {"alerts": alerts, "count": len(alerts), "total": total, "source": "stored", "range": range}
+
+
+# ─── Alert workflow: state transitions + timeline + rules ─────────────────────
+
+_VALID_ALERT_STATES = {"new", "acknowledged", "investigating", "resolved"}
+
+
+@app.post("/api/alerts/{alert_id}/state")
+def update_alert_state(alert_id: str, payload: dict):
+    """Transition an alert to a new workflow state (acknowledged / investigating / resolved).
+
+    Adds `state`, `state_updated_at`, `state_updated_by`, and appends the
+    transition to a `state_history` list so we keep a full audit trail on
+    the alert record itself.
+    """
+    _ensure_initialized()
+    new_state = (payload.get("state") or "").strip().lower()
+    if new_state not in _VALID_ALERT_STATES:
+        return {"status": "error", "reason": f"invalid state; expected one of {sorted(_VALID_ALERT_STATES)}"}
+
+    import json as _json
+    try:
+        row = _storage._conn.execute(  # type: ignore[attr-defined]
+            "SELECT data FROM alerts WHERE id = ? LIMIT 1", [alert_id]
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "reason": str(e)}
+    if not row:
+        return {"status": "error", "reason": "alert_not_found"}
+
+    alert = _json.loads(row["data"])
+    now_iso = datetime.now(timezone.utc).isoformat()
+    prev_state = alert.get("state", "new")
+    who = (payload.get("analyst_id") or "default").strip()
+    note = (payload.get("note") or "").strip()
+
+    alert["state"] = new_state
+    alert["state_updated_at"] = now_iso
+    alert["state_updated_by"] = who
+    history = alert.setdefault("state_history", [])
+    history.append({
+        "from": prev_state,
+        "to": new_state,
+        "at": now_iso,
+        "by": who,
+        "note": note,
+    })
+    _storage.upsert("alerts", alert)
+    log.info("alert_state_updated", alert_id=alert_id, from_state=prev_state, to_state=new_state, by=who)
+    return {"status": "saved", "alert": alert}
+
+
+@app.get("/api/alerts/timeline")
+def alerts_timeline(days: int = Query(30, ge=1, le=90)):
+    """Daily alert counts for the last N days, broken down by severity.
+    Powers the Alert Feed timeline chart.
+    """
+    _ensure_initialized()
+    import json as _json
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff_iso = start.isoformat()
+
+    try:
+        rows = _storage._conn.execute(  # type: ignore[attr-defined]
+            "SELECT data FROM alerts WHERE json_extract(data, '$.detected_at') >= ?",
+            [cutoff_iso],
+        ).fetchall()
+    except Exception as e:  # noqa: BLE001
+        return {"buckets": [], "error": str(e)}
+
+    day_keys = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+    buckets = {d: {"date": d, "high": 0, "medium": 0, "low": 0, "total": 0} for d in day_keys}
+    for r in rows:
+        try:
+            a = _json.loads(r["data"])
+        except Exception:
+            continue
+        det = a.get("detected_at", "")[:10]
+        if det not in buckets:
+            continue
+        sev = a.get("severity", "low")
+        if sev not in ("high", "medium", "low"):
+            sev = "low"
+        buckets[det][sev] += 1
+        buckets[det]["total"] += 1
+    return {"buckets": [buckets[d] for d in day_keys]}
+
+
+# ─── Alert rules (thresholds) ────────────────────────────────────────────────
+# Persisted to disk as a tiny JSON file so demo edits survive restarts. When
+# empty the alert engine falls back to its hard-coded defaults.
+
+_ALERT_RULES_PATH = "data/alert_rules.json"
+
+_DEFAULT_ALERT_RULES = {
+    "volume_spike": {
+        "enabled": True,
+        "sigma_threshold": 2.0,
+        "description": "Alert when today's post count exceeds N sigma above the 7-day mean.",
+    },
+    "sentiment_crash": {
+        "enabled": True,
+        "drop_threshold": 0.3,
+        "description": "Alert when negative-sentiment ratio jumps by this much vs yesterday.",
+    },
+    "emerging_topic": {
+        "enabled": True,
+        "min_posts": 5,
+        "window_hours": 2,
+        "description": "Alert when a new phrase cluster appears (>= N posts in the window).",
+    },
+    "competitor_negative": {
+        "enabled": True,
+        "sigma_threshold": 2.0,
+        "description": "Alert when competitor negative-sentiment volume spikes.",
+    },
+}
+
+
+def _load_alert_rules() -> dict:
+    import json as _json
+    from pathlib import Path
+    p = Path(_ALERT_RULES_PATH)
+    if not p.exists():
+        return dict(_DEFAULT_ALERT_RULES)
+    try:
+        data = _json.loads(p.read_text())
+        # Merge saved values over defaults so newly-added rule types show up.
+        merged = {k: dict(v) for k, v in _DEFAULT_ALERT_RULES.items()}
+        for k, v in (data or {}).items():
+            if k in merged and isinstance(v, dict):
+                merged[k].update(v)
+        return merged
+    except Exception as e:  # noqa: BLE001
+        log.warning("alert_rules_load_failed", error=str(e))
+        return dict(_DEFAULT_ALERT_RULES)
+
+
+def _save_alert_rules(rules: dict) -> None:
+    import json as _json
+    from pathlib import Path
+    p = Path(_ALERT_RULES_PATH)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_json.dumps(rules, indent=2))
+
+
+@app.get("/api/alerts/rules")
+def get_alert_rules():
+    """Return the current user-editable thresholds. Falls back to defaults
+    when nothing has been saved yet.
+    """
+    _ensure_initialized()
+    return {"rules": _load_alert_rules()}
+
+
+@app.post("/api/alerts/rules")
+def update_alert_rules(payload: dict):
+    """Save updated thresholds. Body: {rules: {rule_key: {field: value, ...}}}
+    Only fields present in the default schema are applied; unknown keys are
+    ignored so a malformed request can't corrupt the store.
+    """
+    _ensure_initialized()
+    incoming = payload.get("rules") or {}
+    current = _load_alert_rules()
+    for rule_key, updates in incoming.items():
+        if rule_key not in current or not isinstance(updates, dict):
+            continue
+        for field, value in updates.items():
+            if field in current[rule_key]:
+                current[rule_key][field] = value
+    _save_alert_rules(current)
+    log.info("alert_rules_updated", changed=list(incoming.keys()))
+    return {"status": "saved", "rules": current}
 
 
 # ─── P1: Post Explorer ─────────────────────────────────────────────────────────
@@ -3066,6 +3916,10 @@ def search_posts(
             "analyzed_at": a.get("analyzed_at", ""),
             "aspects": a.get("aspects", []),
             "reddit_url": reddit_url,
+            # Vision output: caption from Ollama gemma3:4b and the source
+            # image URL so the UI can render both together.
+            "image_caption": p.get("image_caption", ""),
+            "image_url": p.get("thumbnail") or p.get("url_overridden_by_dest") or p.get("preview_url") or "",
         })
 
     # `count` is the returned page size (always == len(out)); `total` is the
@@ -3089,19 +3943,31 @@ def search_posts(
 # ─── P2: Trust Analytics ───────────────────────────────────────────────────────
 
 @app.get("/api/trust-stats")
-def get_trust_stats():
-    """Trust filter analytics: distribution, filter rate, flag breakdown."""
+def get_trust_stats(limit: int = Query(2000, ge=100, le=10000), examples: int = Query(15, ge=0, le=100)):
+    """Trust filter analytics: distribution, filter rate, flag breakdown,
+    component averages, and low-trust examples for the Trust Analytics page.
+
+    Args:
+        limit: how many recent raw_posts to sample (default 2000, max 10000).
+        examples: how many low-trust example posts to return for the analyst
+                  review table (default 15).
+    """
     _ensure_initialized()
-    query = "SELECT data FROM raw_posts ORDER BY created_timestamp DESC LIMIT 500"
+    query = f"SELECT data FROM raw_posts ORDER BY created_timestamp DESC LIMIT {int(limit)}"
     recent = _storage.query("raw_posts", query, [])
 
     if not recent:
-        return {"total": 0, "trusted": 0, "flagged": 0}
+        return {
+            "total": 0, "trusted": 0, "flagged": 0, "trust_rate": 0.0,
+            "distribution": {}, "flag_breakdown": {}, "component_avg": {},
+            "low_trust_examples": [], "threshold": _config.trust.threshold,
+        }
 
-    trusted = sum(1 for p in recent if p.get("trust_score", 0) >= _config.trust.threshold)
-    flagged = len(recent) - trusted
+    threshold = _config.trust.threshold
+    trusted_posts = [p for p in recent if p.get("trust_score", 0) >= threshold]
+    flagged_posts = [p for p in recent if p.get("trust_score", 0) < threshold]
 
-    # Trust score distribution (buckets)
+    # Distribution histogram (5 buckets, 0.2 wide).
     buckets = {"0.0-0.2": 0, "0.2-0.4": 0, "0.4-0.6": 0, "0.6-0.8": 0, "0.8-1.0": 0}
     for p in recent:
         score = p.get("trust_score", 0) or 0
@@ -3116,12 +3982,67 @@ def get_trust_stats():
         else:
             buckets["0.8-1.0"] += 1
 
+    # Flag breakdown — reasons the LLM credibility check flagged posts as low
+    # quality (e.g. "new_account", "repeated_text", "spam_pattern"). Each post
+    # can have 0..N flags. Missing → counted as "no_flags".
+    flag_counter: Counter = Counter()
+    for p in flagged_posts:
+        flags = p.get("trust_flags") or []
+        if not flags:
+            flag_counter["no_llm_flags"] += 1
+        else:
+            for f in flags:
+                flag_counter[str(f)] += 1
+
+    # Component averages across the sample — shows which sub-scorer is
+    # driving trust the most. Uses `trust_components` written by scorer.py.
+    comp_sum = {"metadata": 0.0, "dedup": 0.0, "llm": 0.0}
+    comp_count = 0
+    for p in recent:
+        comps = p.get("trust_components") or {}
+        if not comps:
+            continue
+        comp_count += 1
+        for k in comp_sum:
+            v = comps.get(k)
+            if isinstance(v, (int, float)):
+                comp_sum[k] += float(v)
+    component_avg = (
+        {k: round(v / comp_count, 3) for k, v in comp_sum.items()}
+        if comp_count else {k: None for k in comp_sum}
+    )
+
+    # Low-trust examples for the analyst review table.
+    flagged_sorted = sorted(flagged_posts, key=lambda p: p.get("trust_score", 0))
+    examples_out = []
+    for p in flagged_sorted[:examples]:
+        text = (p.get("body") or p.get("title") or "").strip()
+        if len(text) > 240:
+            text = text[:237] + "…"
+        examples_out.append({
+            "id": p.get("id"),
+            "subreddit": p.get("subreddit"),
+            "author": p.get("author"),
+            "title": p.get("title"),
+            "text": text,
+            "trust_score": p.get("trust_score", 0),
+            "trust_components": p.get("trust_components", {}),
+            "trust_flags": p.get("trust_flags", []),
+            "score": p.get("score", 0),
+            "url": p.get("url", ""),
+            "created_timestamp": p.get("created_timestamp"),
+        })
+
     return {
         "total": len(recent),
-        "trusted": trusted,
-        "flagged": flagged,
-        "trust_rate": round(trusted / max(len(recent), 1), 3),
+        "trusted": len(trusted_posts),
+        "flagged": len(flagged_posts),
+        "trust_rate": round(len(trusted_posts) / max(len(recent), 1), 3),
         "distribution": buckets,
+        "flag_breakdown": dict(flag_counter.most_common()),
+        "component_avg": component_avg,
+        "low_trust_examples": examples_out,
+        "threshold": threshold,
     }
 
 

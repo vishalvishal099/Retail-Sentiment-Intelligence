@@ -36,8 +36,8 @@ llm:
   # Walmart LLM Gateway — used when provider: "llm_gateway"
   # Sentiment stays on local HF model; gateway is used only for trust credibility scoring.
   # Key supplied via WMT_LLM_GATEWAY_KEY env var (never committed to YAML).
-  wmt_gateway_url: "https://llmgateway-stg.walmart.com/v1"
-  wmt_gateway_model: "gpt-4o-mini"
+  wmt_gateway_url: "https://wmtllmgateway.stage.walmart.com/wmtllmgateway/v1"
+  wmt_gateway_model: "gpt-4o"
   # Ollama settings — used when provider: "ollama" (mater spec calls for llama3.1:8b;
   # mistral:7b-instruct works out of the box if you only have that pulled).
   ollama_url: "http://localhost:11434"

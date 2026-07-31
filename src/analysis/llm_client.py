@@ -98,17 +98,27 @@ class BaseLLMClient(ABC):
 
 # Module-level template used as a safety net when no generative LLM is available
 _ASPECT_LABELS = {
-    "delivery": "your delivery / pickup experience",
+    # Customer aspects (new names)
+    "store_experience": "your in-store experience",
+    "online_app": "the app or website issue you ran into",
+    "delivery_pickup": "your delivery / pickup experience",
     "product_quality": "the quality of what you received",
     "returns": "your return or refund issue",
     "customer_support": "the support you got",
     "pricing": "the pricing concern you raised",
+    # Employee aspects
+    "workforce_hr": "the HR or scheduling issue you raised",
+    "pay_benefits": "the pay or benefits concern you raised",
+    "management": "the management issue you described",
+    "safety_policy": "the safety or policy concern you raised",
+    "workload": "the workload issue you described",
+    # Legacy aliases (posts analyzed before taxonomy update)
+    "delivery": "your delivery / pickup experience",
     "app_website": "the app or website issue you ran into",
     "store experience": "your in-store experience",
     "online/app": "the online / app issue",
     "delivery/pickup": "your delivery / pickup experience",
     "customer service": "the support you got",
-    "product quality": "the quality of what you received",
 }
 
 # Words/phrases we look for in the post body to make replies more specific.
@@ -1251,6 +1261,11 @@ class WalmartLLMGatewayClient(BaseLLMClient):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.config.wmt_gateway_key}",
+            "WM_CONSUMER.ID": getattr(self.config, "wmt_consumer_id", ""),
+            "WM_SVC.NAME": getattr(self.config, "wmt_svc_name", "WMTLLMGATEWAY"),
+            "WM_SVC.ENV": getattr(self.config, "wmt_svc_env", "stage"),
+            
+            
         }
         payload = {
             "model": self.config.wmt_gateway_model,
@@ -1264,10 +1279,10 @@ class WalmartLLMGatewayClient(BaseLLMClient):
             resp = requests.post(
                 url, json=payload, headers=headers,
                 timeout=self.config.timeout_seconds,
+                verify=False,  # internal Walmart gateway uses self-signed cert
             )
             resp.raise_for_status()
             data = resp.json()
-
             result_text = data["choices"][0]["message"]["content"]
             usage = data.get("usage", {})
 
@@ -1312,6 +1327,11 @@ class WalmartLLMGatewayClient(BaseLLMClient):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.config.wmt_gateway_key}",
+            "WM_CONSUMER.ID": getattr(self.config, "wmt_consumer_id", ""),
+            "WM_SVC.NAME": getattr(self.config, "wmt_svc_name", "WMTLLMGATEWAY"),
+            "WM_SVC.ENV": getattr(self.config, "wmt_svc_env", "stage"),
+            
+            
         }
         payload = {
             "model": self.config.wmt_gateway_model,
@@ -1325,7 +1345,13 @@ class WalmartLLMGatewayClient(BaseLLMClient):
             resp = requests.post(
                 url, json=payload, headers=headers,
                 timeout=self.config.timeout_seconds,
+                verify=False,  # internal Walmart gateway uses self-signed cert
             )
+            if resp.status_code == 502:
+                body = resp.text[:300]
+                if "consumer" in body.lower():
+                    log.warning("gateway_reply_consumer_id_rejected", body=body)
+                    return "__consumer_id_error__"
             resp.raise_for_status()
             data = resp.json()
             text = data["choices"][0]["message"]["content"].strip()
@@ -1346,7 +1372,37 @@ class WalmartLLMGatewayClient(BaseLLMClient):
             return text
         except Exception as e:
             log.warning("gateway_reply_draft_failed", error=str(e))
-            return ""
+        openai_key = getattr(self.config, "openai_api_key", "")
+        if openai_key:
+            try:
+                from openai import OpenAI as _OpenAI
+                oc = _OpenAI(api_key=openai_key)
+                model = getattr(self.config, "openai_model", None) or "gpt-4o-mini"
+                resp2 = oc.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=300,
+                )
+                text2 = resp2.choices[0].message.content.strip()
+                for prefix in ("Reply:", "reply:", "REPLY:"):
+                    if text2.startswith(prefix):
+                        text2 = text2[len(prefix):].strip()
+                if self.cost_tracker:
+                    usage2 = resp2.usage
+                    self.cost_tracker.record(
+                        provider="openai",
+                        model=model,
+                        input_tokens=usage2.prompt_tokens,
+                        output_tokens=usage2.completion_tokens,
+                        stage="reply_draft",
+                    )
+                log.info("gateway_fallback_openai_used", model=model)
+                return text2
+            except Exception as e2:
+                log.warning("openai_fallback_reply_failed", error=str(e2))
+
+        return ""
 
     def _ollama_generate_reply(self, prompt: str) -> str:
         """Call local Ollama (Mistral) to generate a reply draft."""
@@ -1418,7 +1474,9 @@ class WalmartLLMGatewayClient(BaseLLMClient):
         prompt = self._build_reply_prompt(post_title, post_text, subreddit, author, aspects, examples)
         seed = int(_time.time() * 1000) ^ _random.randint(0, 1_000_000)
 
-        # Draft A — GPT-4o-mini via Walmart LLM Gateway
+        openai_key_set = bool(getattr(self.config, "openai_api_key", ""))
+
+        # Draft A — GPT-4o-mini via Walmart LLM Gateway (with OpenAI fallback)
         gpt_text = self._gateway_generate_reply(prompt)
         # Draft B — Mistral via Ollama
         mistral_text = self._ollama_generate_reply(prompt)
@@ -1426,6 +1484,20 @@ class WalmartLLMGatewayClient(BaseLLMClient):
         composer_text = _smart_compose_reply(
             post_title, post_text, subreddit, author, aspects, examples, seed=seed
         )
+
+        # Determine reason for gateway unavailability so the UI shows a precise message
+        if not gpt_text or gpt_text == "__consumer_id_error__":
+            if gpt_text == "__consumer_id_error__":
+                gateway_reason = "no_consumer_id"
+            elif not self.config.wmt_gateway_key:
+                gateway_reason = "no_gateway_key"
+            elif not getattr(self.config, "wmt_consumer_id", ""):
+                gateway_reason = "no_consumer_id"
+            else:
+                gateway_reason = "network_unreachable"
+            gpt_text = ""   # clear sentinel so fallback drafts are used
+        else:
+            gateway_reason = None
 
         drafts = []
 
@@ -1437,8 +1509,6 @@ class WalmartLLMGatewayClient(BaseLLMClient):
                 "label": f"GPT ({self.config.wmt_gateway_model})",
             })
         else:
-            # Gateway unreachable (off-VPN) — generate a simulated GPT draft
-            # using a differently-seeded composer so the UI always shows 3 options.
             seed_gpt = seed ^ _random.randint(1, 999_999)
             gpt_fallback = _smart_compose_reply(
                 post_title, post_text, subreddit, author, aspects, examples, seed=seed_gpt
@@ -1458,7 +1528,6 @@ class WalmartLLMGatewayClient(BaseLLMClient):
                 "label": f"Mistral ({self.config.ollama_model or 'mistral:7b-instruct'})",
             })
         else:
-            # Ollama unreachable — generate a simulated Mistral draft
             seed_mis = seed ^ _random.randint(1_000_000, 2_000_000)
             mistral_fallback = _smart_compose_reply(
                 post_title, post_text, subreddit, author, aspects, examples, seed=seed_mis
@@ -1477,4 +1546,9 @@ class WalmartLLMGatewayClient(BaseLLMClient):
             "label": "Smart Composer (content-aware)",
         })
 
-        return {"drafts": drafts}
+        return {
+            "drafts": drafts,
+            "gateway_available": bool(gpt_text),
+            "ollama_available": bool(mistral_text),
+            "gateway_reason": gateway_reason,
+        }

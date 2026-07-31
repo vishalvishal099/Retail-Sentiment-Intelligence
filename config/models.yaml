@@ -64,6 +64,10 @@ models:
     provider: ollama
     model: gemma3:4b
     fallback_model: llava:7b    # if gemma3:4b is not pulled, try llava
+    # When true, use the multi-pass caption_enhanced() (structure → tile → merge).
+    # Slower (~4-8x) but much better on complex screenshots with small text.
+    # Recommended for post-hoc runs via retry-vision, not the hot ingestion path.
+    enhanced_captioning: false
     max_image_bytes: 5242880    # 5 MB cap on download
     max_image_dimension: 768    # resize so longest edge ≤ this (Pillow)
     fetch_timeout: 10           # seconds for the HTTP GET

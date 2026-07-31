@@ -46,9 +46,17 @@ class LLMConfig:
     ollama_request_timeout: int = 60
 
     # Walmart LLM Gateway (STG/Sandbox)
-    wmt_gateway_url: str = "https://llmgateway-stg.walmart.com/v1"
+    wmt_gateway_url: str = "https://wmtllmgateway.stage.walmart.com/wmtllmgateway/v1"
     wmt_gateway_key: str = ""
-    wmt_gateway_model: str = "gpt-4o-mini"
+    wmt_gateway_model: str = "gpt-4o"
+    # Required Walmart API routing headers
+    wmt_consumer_id: str = "UC09153"
+    wmt_svc_name: str = "isl-ai-engine"
+    wmt_svc_env: str = "stage"
+
+    # Direct OpenAI fallback — used for reply drafts when the gateway is unreachable
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
 
 @dataclass
@@ -202,6 +210,11 @@ class ModelStageConfig:
     fetch_timeout: int = 10
     cache_dir: str = "data/image_cache"
     prompt: str = ""
+    # When true, the pipeline calls OllamaVisionClient.caption_enhanced()
+    # (multi-pass: structure → tile → merge) instead of the single-shot
+    # caption(). Slower but produces higher-quality captions for
+    # complex screenshots with lots of small text.
+    enhanced_captioning: bool = False
     # Reply / generation knobs
     temperature: float = 0.55
     max_tokens: int = 220
@@ -291,9 +304,14 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
             azure_api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
             azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             hf_token=os.getenv("HF_TOKEN", ""),
-            wmt_gateway_url=os.getenv("WMT_LLM_GATEWAY_URL", "https://llmgateway-stg.walmart.com/v1"),
+            wmt_gateway_url=os.getenv("WMT_LLM_GATEWAY_URL", "https://wmtllmgateway.stage.walmart.com/v1"),
             wmt_gateway_key=os.getenv("WMT_LLM_GATEWAY_KEY", ""),
             wmt_gateway_model=os.getenv("WMT_LLM_GATEWAY_MODEL", "gpt-4o-mini"),
+            wmt_consumer_id=os.getenv("WMT_CONSUMER_ID", ""),
+            wmt_svc_name=os.getenv("WMT_SVC_NAME", "WMTLLMGATEWAY"),
+            wmt_svc_env=os.getenv("WMT_SVC_ENV", "stage"),
+            openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         ),
         ingestion=IngestionConfig(
             interval_minutes=int(os.getenv("INGESTION_INTERVAL_MINUTES", yaml_data.get("ingestion", {}).get("interval_minutes", 60))),

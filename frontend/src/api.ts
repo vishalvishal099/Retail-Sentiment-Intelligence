@@ -26,6 +26,8 @@ export interface LifecycleRow {
   resolved_at?: string | null;
   reddit_posted_id?: string | null;
   reddit_url?: string;
+  image_caption?: string;
+  image_url?: string;
   history: LifecycleHistoryEvent[];
 }
 
@@ -73,6 +75,25 @@ export interface InsightsResponse {
   window_days?: number;
   generated_at?: string;
   payload?: InsightsPayload;
+}
+
+export interface CompetitorTrendPoint {
+  date: string;
+  score: number | null;
+  posts: number;
+}
+export interface CompetitorSeries {
+  label: string;
+  subreddits: string[];
+  total_posts: number;
+  points: CompetitorTrendPoint[];
+}
+export interface CompetitorTrend {
+  days: string[];
+  series: CompetitorSeries[];
+  share_of_voice: Array<{ label: string; posts: number }>;
+  walmart_subreddits: string[];
+  top_competitors: string[];
 }
 
 export interface NotificationGroup {
@@ -149,15 +170,53 @@ export interface MacroSegmentInfo {
 }
 export type MacroSegment = 'walmart' | 'competitor';
 
+export interface AspectHeatmap {
+  aspects: string[];
+  days: string[];
+  cells: Array<{
+    aspect: string;
+    date: string;
+    count: number;
+    positive: number;
+    negative: number;
+    neutral: number;
+    negative_ratio: number;
+  }>;
+  totals: Record<string, number>;
+}
+
 export interface Alert {
   id: string;
   type: string;
   severity: string;
-  message: string;
+  title?: string;
+  message?: string;
   details: Record<string, unknown>;
   detected_at: string;
   time_window: string;
+  state?: 'new' | 'acknowledged' | 'investigating' | 'resolved';
+  state_updated_at?: string;
+  state_updated_by?: string;
+  state_history?: Array<{ from: string; to: string; at: string; by: string; note: string }>;
 }
+
+export interface AlertTimelineBucket {
+  date: string;
+  high: number;
+  medium: number;
+  low: number;
+  total: number;
+}
+
+export interface AlertRule {
+  enabled: boolean;
+  description: string;
+  sigma_threshold?: number;
+  drop_threshold?: number;
+  min_posts?: number;
+  window_hours?: number;
+}
+export type AlertRules = Record<string, AlertRule>;
 
 export interface ReviewItem {
   id: string;
@@ -174,19 +233,66 @@ export interface ReviewItem {
   needs_review: boolean;
   subreddit: string;
   analyzed_at: string;
+  validated_at?: string;
+  validated_by?: string;
+  close_reason?: string;
   model: string;
   reddit_url: string;
   created_timestamp: number;
   can_generate_reply: boolean;
   reply_posted_at: string | null;
   reply_text: string;
+  follow_up_needed?: boolean;
 }
 
 export interface ReviewStats {
   total_feedback: number;
+  total_reviewed: number;
   total_corrections: number;
+  total_confirmations: number;
   total_replies_posted: number;
+  agreement_rate: number;
   correction_matrix: Record<string, number>;
+  daily_accuracy: Array<{ date: string; reviewed: number; confirmed: number; agreement_rate: number }>;
+}
+
+export interface FeedbackHistoryItem {
+  id: string;
+  post_id: string;
+  analyst_id: string;
+  original_sentiment: string;
+  corrected_sentiment: string;
+  changed: boolean;
+  aspects_changed: string[];
+  trust_override: number | null;
+  notes: string;
+  created_at: string;
+}
+
+export interface TrustExample {
+  id: string;
+  subreddit: string;
+  author: string;
+  title: string;
+  text: string;
+  trust_score: number;
+  trust_components: { metadata?: number; dedup?: number; llm?: number };
+  trust_flags: string[];
+  score: number;
+  url: string;
+  created_timestamp: number;
+}
+
+export interface TrustStats {
+  total: number;
+  trusted: number;
+  flagged: number;
+  trust_rate: number;
+  distribution: Record<string, number>;
+  flag_breakdown: Record<string, number>;
+  component_avg: { metadata: number | null; dedup: number | null; llm: number | null };
+  low_trust_examples: TrustExample[];
+  threshold: number;
 }
 
 export interface ExplorerPost {
@@ -205,6 +311,8 @@ export interface ExplorerPost {
   analyzed_at: string;
   aspects: unknown[];
   reddit_url: string;
+  image_caption?: string;
+  image_url?: string;
 }
 
 /** Negative post ranked by trust × confidence for the Brand Health priority panel. */
@@ -261,7 +369,7 @@ export interface PipelineStatus {
   last_run_id: string | null;
   last_started_at: string | null;
   last_finished_at: string | null;
-  last_status: 'success' | 'failed' | null;
+  last_status: 'success' | 'failed' | 'stopped' | null;
   last_exit_code: number | null;
   last_trigger: 'manual' | 'scheduled' | 'backfill' | null;
   last_log_tail: string[];
@@ -521,6 +629,8 @@ export const api = {
     if (macroSegment) qs.set('macro_segment', macroSegment);
     return fetchJSON<BrandHealthData>(`/brand-health?${qs.toString()}`);
   },
+  getAspectHeatmap: (days = 7, topN = 6) =>
+    fetchJSON<AspectHeatmap>(`/aspect-heatmap?days=${days}&top_n=${topN}`),
   getPriorityNegatives: (
     range: DateRange = 'today',
     limit = 20,
@@ -550,14 +660,67 @@ export const api = {
       returned: number;
     }>(`/aspects/${encodeURIComponent(aspect)}?${qs.toString()}`);
   },
-  getAlerts: () => fetchJSON<{ alerts: Alert[]; count: number }>('/alerts'),
-  getReviewQueue: (limit = 20, sentiment?: string, range?: string) => {
+  getAlerts: (opts: { range?: string; severity?: string; type?: string; state?: string; limit?: number; live?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.range) qs.set('range', opts.range);
+    if (opts.severity) qs.set('severity', opts.severity);
+    if (opts.type) qs.set('type', opts.type);
+    if (opts.state) qs.set('state', opts.state);
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    if (opts.live) qs.set('live', 'true');
+    const query = qs.toString();
+    return fetchJSON<{ alerts: Alert[]; count: number; total?: number; source?: string; range?: string }>(
+      query ? `/alerts?${query}` : '/alerts',
+    );
+  },
+  updateAlertState: (alertId: string, state: 'new' | 'acknowledged' | 'investigating' | 'resolved', note?: string) =>
+    fetch(`${API_BASE}/alerts/${encodeURIComponent(alertId)}/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state, note }),
+    }).then(r => r.json()) as Promise<{ status: string; alert?: Alert; reason?: string }>,
+  getAlertsTimeline: (days = 30) =>
+    fetchJSON<{ buckets: AlertTimelineBucket[] }>(`/alerts/timeline?days=${days}`),
+  getAlertRules: () => fetchJSON<{ rules: AlertRules }>('/alerts/rules'),
+  updateAlertRules: (rules: Partial<AlertRules>) =>
+    fetch(`${API_BASE}/alerts/rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules }),
+    }).then(r => r.json()) as Promise<{ status: string; rules: AlertRules }>,
+  getReviewQueue: (limit = 50, sentiment?: string, range?: string, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (sentiment) params.set('sentiment', sentiment);
+    if (range) params.set('range', range);
+    return fetchJSON<{ queue: ReviewItem[]; total: number; offset: number; has_more: boolean }>(`/review?${params}`);
+  },
+  getReviewed: (limit = 50, sentiment?: string, range?: string) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (sentiment) params.set('sentiment', sentiment);
     if (range) params.set('range', range);
-    return fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review?${params}`);
+    return fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review/reviewed?${params}`);
   },
+  closeReview: (postId: string, subreddit?: string, closeType?: 'no_reply' | 'issue_fixed' | 'reply_sent', actionNote?: string) =>
+    fetch(`${API_BASE}/review/${encodeURIComponent(postId)}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit, close_type: closeType || 'no_reply', action_note: actionNote || '' }),
+    }).then(r => r.json()) as Promise<{ status: string; post_id?: string; lifecycle_state?: string; reason?: string }>,
+  confirmReview: (postId: string, subreddit?: string) =>
+    fetch(`${API_BASE}/review/${encodeURIComponent(postId)}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit }),
+    }).then(r => r.json()) as Promise<{ status: string; post_id?: string }>,
+  generateAction: (postId: string, subreddit?: string) =>
+    fetch(`${API_BASE}/review/${encodeURIComponent(postId)}/generate-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit }),
+    }).then(r => r.json()) as Promise<{ status: string; action: string }>,
   getReviewStats: () => fetchJSON<ReviewStats>('/review/stats'),
+  getFeedbackHistory: (limit = 50) =>
+    fetchJSON<{ items: FeedbackHistoryItem[]; total: number }>(`/review/feedback-history?limit=${limit}`),
   submitReview: (postId: string, correction: Record<string, unknown>) =>
     fetch(`${API_BASE}/review/${postId}`, {
       method: 'POST',
@@ -604,7 +767,33 @@ export const api = {
       source?: 'llm' | 'template' | 'template_fallback' | 'smart-template';
       examples_used?: number;
       reason?: string;
+      gateway_available?: boolean | null;
+      ollama_available?: boolean | null;
+      gateway_reason?: 'no_gateway_key' | 'no_consumer_id' | 'no_openai_key' | 'network_unreachable' | null;
+      action_draft?: string;
     }>,
+  draftAll: (postId: string, subreddit?: string) => {
+    return fetch(`${API_BASE}/review/${encodeURIComponent(postId)}/draft-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit }),
+    }).then(r => r.json()) as Promise<{
+      status: string;
+      drafts?: Array<{
+        reply: string;
+        model_used: string;
+        source: 'llm' | 'template' | 'template_fallback' | 'smart-template';
+        label?: string;
+      }>;
+      reply?: string;
+      action_draft?: string;
+      action_model?: string;
+      examples_used?: number;
+      reason?: string;
+      gateway_available?: boolean | null;
+      gateway_reason?: string | null;
+    }>;
+  },
   getPosts: (params: Record<string, string | number | undefined>) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
@@ -613,7 +802,8 @@ export const api = {
     // `count` = returned page size, `total` = true match count in the window.
     return fetchJSON<{ posts: ExplorerPost[]; count: number; total: number }>(`/posts?${qs}`);
   },
-  getTrustStats: () => fetchJSON<Record<string, unknown>>('/trust-stats'),
+  getTrustStats: (limit = 2000, examples = 15) =>
+    fetchJSON<TrustStats>(`/trust-stats?limit=${limit}&examples=${examples}`),
   getPipelineStatus: () => fetchJSON<PipelineStatus>('/pipeline/status'),
   runPipeline: (lookbackHours?: number) => {
     const qs = lookbackHours ? `?lookback_hours=${lookbackHours}` : '';
@@ -781,6 +971,8 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ window_days: windowDays }),
     }).then(r => r.json()) as Promise<{ id: string; kind: string; generated_at: string; payload: InsightsPayload }>,
+  getCompetitorTrend: (days = 14, topN = 4) =>
+    fetchJSON<CompetitorTrend>(`/competitor-trend?days=${days}&top_n=${topN}`),
 
   // ─── Notification Groups ─────────────────────────────────────────────
   getNotificationConfig: () =>

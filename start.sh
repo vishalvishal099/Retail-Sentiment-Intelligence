@@ -179,7 +179,9 @@ check_port() {
 log "Starting API server on port $API_PORT..."
 if ! check_port "$API_PORT"; then
   warn "Port $API_PORT already in use — checking if it's our API..."
-  if curl -s "http://localhost:$API_PORT/" | grep -q "retail_sentiment"; then
+  # Match the actual JSON returned by GET / which is "Retail Sentiment Intelligence API"
+  # (case-insensitive so both spellings work).
+  if curl -s "http://localhost:$API_PORT/" | grep -qi "retail sentiment"; then
     ok "API already running on port $API_PORT (reusing)"
     if lsof -ti:"$API_PORT" >/dev/null 2>&1; then
       lsof -ti:"$API_PORT" | head -1 > "$PID_DIR/api.pid"

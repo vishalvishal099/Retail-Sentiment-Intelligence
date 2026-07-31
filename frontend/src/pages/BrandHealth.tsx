@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
+import {
+  PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, Legend, CartesianGrid, BarChart, Bar,
+  RadialBarChart, RadialBar, PolarAngleAxis,
+} from 'recharts';
 import { api, BrandHealthData, DateRange, SegmentInfo, MacroSegment, PriorityNegativePost, AspectPost } from '../api';
 import Card, { CardHeader } from '../components/Card';
 import Button from '../components/Button';
@@ -287,14 +291,16 @@ export default function BrandHealth() {
         ↳ Neutral: {pctNeutral}% · {sNeu} posts
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <SentimentGauge positive={sPos} negative={sNeg} neutral={sNeu} total={total} />
+
         <Card>
           <CardHeader
             title="Sentiment Distribution"
             subtitle="Click a slice to drill into the post list"
             accent
           />
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
                 data={sentimentPie}
@@ -378,17 +384,30 @@ export default function BrandHealth() {
       </Card>
 
       <Card>
-        <CardHeader title="Subreddit Distribution" accent />
-        <div className="flex gap-2 flex-wrap">
-          {Object.entries(data.subreddit_distribution)
+        <CardHeader title="Subreddit Distribution" subtitle="Top 10 communities by post volume" accent />
+        {(() => {
+          const rows = Object.entries(data.subreddit_distribution)
             .sort(([, a], [, b]) => b - a)
-            .map(([name, count]) => (
-              <div key={name} className="px-3 py-1.5 bg-walmart-navy/5 border border-walmart-navy/10 rounded-pill text-sm">
-                <span className="font-semibold text-walmart-navy">r/{name}</span>
-                <span className="ml-2 text-gray-600">{count}</span>
-              </div>
-            ))}
-        </div>
+            .slice(0, 10)
+            .map(([name, count]) => ({ name: `r/${name}`, count }));
+          if (rows.length === 0) return <p className="text-xs text-gray-500">No subreddit data.</p>;
+          return (
+            <ResponsiveContainer width="100%" height={Math.max(220, rows.length * 28)}>
+              <BarChart data={rows} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5EDF7" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#74767C' }} />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  tick={{ fontSize: 11, fill: '#74767C' }}
+                  width={140}
+                />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5EDF7' }} />
+                <Bar dataKey="count" fill="#0071DC" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          );
+        })()}
       </Card>
 
       {data.segment_distribution && Object.keys(data.segment_distribution).length > 0 && (
@@ -441,6 +460,67 @@ export default function BrandHealth() {
   );
 }
 
+// ─── Sentiment Gauge ──────────────────────────────────────────────────────
+// Radial gauge showing the composite sentiment score in [-100, +100]:
+//   score = (positive - negative) / total * 100
+// Recharts RadialBar renders on a semicircle scaled to [0, 100] percent-filled.
+function SentimentGauge({
+  positive, negative, neutral, total,
+}: { positive: number; negative: number; neutral: number; total: number }) {
+  if (total === 0) {
+    return (
+      <Card>
+        <CardHeader title="Sentiment Score" subtitle="No data in window" accent />
+        <div className="flex items-center justify-center h-[220px] text-gray-400 text-sm">—</div>
+      </Card>
+    );
+  }
+  // Score in -100..+100.
+  const raw = ((positive - negative) / total) * 100;
+  const score = Math.round(raw * 10) / 10;
+  // Map to 0..100 for the RadialBar fill.
+  const filled = Math.round(((score + 100) / 2));
+  const color = score > 20 ? '#00865A' : score < -20 ? '#DE1C24' : '#F0932B';
+  const label = score > 20 ? 'Healthy' : score < -20 ? 'At risk' : 'Neutral';
+  const gaugeData = [{ name: 'score', value: filled, fill: color }];
+  return (
+    <Card>
+      <CardHeader
+        title="Sentiment Score"
+        subtitle={`Weighted −100…+100 across ${total.toLocaleString()} posts`}
+        accent
+      />
+      <div style={{ width: '100%', height: 220 }} className="relative">
+        <ResponsiveContainer>
+          <RadialBarChart
+            cx="50%"
+            cy="70%"
+            innerRadius="80%"
+            outerRadius="130%"
+            startAngle={180}
+            endAngle={0}
+            barSize={22}
+            data={gaugeData}
+          >
+            <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+            <RadialBar background={{ fill: '#E5EDF7' }} dataKey="value" cornerRadius={12} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <div className="text-4xl font-bold" style={{ color }}>{score > 0 ? '+' : ''}{score.toFixed(1)}</div>
+          <div className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
+        </div>
+      </div>
+      <div className="flex items-center justify-around text-[11px] text-gray-600 mt-1">
+        <span><span className="inline-block w-2 h-2 rounded-full bg-sentiment-negative mr-1" />Neg {negative}</span>
+        <span><span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-1" />Neu {neutral}</span>
+        <span><span className="inline-block w-2 h-2 rounded-full bg-sentiment-positive mr-1" />Pos {positive}</span>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Aspect × Day Heatmap ─────────────────────────────────────────────────
 /** KPI Card with mini breakdown rows — shows total + sub-stats in one tile */
 function KPICardRich({
   label,

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Loader2, RefreshCw, TrendingUp, Lightbulb, Users } from 'lucide-react';
-import { api, InsightsPayload } from '../api';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+} from 'recharts';
+import { api, InsightsPayload, CompetitorTrend } from '../api';
 
 const PRIORITY_STYLE: Record<string, string> = {
   high:   'bg-walmart-spark text-walmart-navy border-walmart-spark-dark',
@@ -13,6 +17,7 @@ export default function CompetitorInsights() {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [windowDays, setWindowDays] = useState(7);
+  const [trend, setTrend] = useState<CompetitorTrend | null>(null);
 
   const loadLatest = async () => {
     setLoading(true);
@@ -46,6 +51,9 @@ export default function CompetitorInsights() {
   };
 
   useEffect(() => { loadLatest(); }, []);
+  useEffect(() => {
+    api.getCompetitorTrend(Math.max(7, windowDays), 4).then(setTrend).catch(console.error);
+  }, [windowDays]);
 
   return (
     <div className="space-y-6">
@@ -92,6 +100,21 @@ export default function CompetitorInsights() {
             <SummaryCard label="Pain points found" value={String(payload.pain_points.length)} />
             <SummaryCard label="Recommendations" value={String(payload.recommendations.length)} />
           </div>
+
+          {/* Multi-line sentiment trend: Walmart vs top competitors */}
+          {trend && trend.series.length > 0 && (
+            <CompetitorTrendChart trend={trend} />
+          )}
+
+          {/* Radar: aspect-level negative-ratio Walmart vs competitors */}
+          {payload.walmart_comparison && payload.walmart_comparison.length > 0 && (
+            <CompetitorRadar comparison={payload.walmart_comparison} />
+          )}
+
+          {/* Share of voice */}
+          {trend && trend.share_of_voice.length > 0 && (
+            <ShareOfVoice data={trend.share_of_voice} />
+          )}
 
           <div className="bg-surface rounded-2xl shadow-card p-6">
             <h2 className="text-lg font-semibold text-walmart-navy mb-4 flex items-center gap-2">
@@ -180,6 +203,113 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     <div className="bg-surface rounded-2xl shadow-card px-5 py-4 border border-walmart-navy/5">
       <div className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
       <div className="text-2xl font-bold text-walmart-navy mt-1">{value}</div>
+    </div>
+  );
+}
+
+// ─── Multi-line competitor trend ─────────────────────────────────────────
+// One line per series (Walmart baseline + top-N competitors), daily
+// sentiment score in [-1, +1].
+const SERIES_COLORS = ['#0071DC', '#DE1C24', '#00865A', '#F0932B', '#A020F0', '#4B7BEC'];
+
+function CompetitorTrendChart({ trend }: { trend: CompetitorTrend }) {
+  // Recharts wants a single flat array keyed by date, with one column per
+  // series. Reshape from series[].points[] into rows[].
+  const rows = trend.days.map(date => {
+    const row: Record<string, string | number | null> = { date };
+    trend.series.forEach(s => {
+      const p = s.points.find(pt => pt.date === date);
+      row[s.label] = p ? p.score : null;
+    });
+    return row;
+  });
+  return (
+    <div className="bg-surface rounded-2xl shadow-card p-6">
+      <h2 className="text-lg font-semibold text-walmart-navy mb-1 flex items-center gap-2">
+        <TrendingUp size={18} className="text-walmart-blue" /> Sentiment trend — Walmart vs top competitors
+      </h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Daily score = (positive − negative) / total, in [−1, +1]. Days with no posts are gapped.
+      </p>
+      <div style={{ width: '100%', height: 260 }}>
+        <ResponsiveContainer>
+          <LineChart data={rows} margin={{ top: 5, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <YAxis domain={[-1, 1]} tick={{ fontSize: 11, fill: '#6b7280' }} />
+            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {trend.series.map((s, i) => (
+              <Line
+                key={s.label}
+                type="monotone"
+                dataKey={s.label}
+                stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
+                strokeWidth={s.label === 'Walmart' ? 2.5 : 1.6}
+                dot={{ r: 2 }}
+                connectNulls={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ─── Aspect radar: Walmart vs Competitor negative-ratio per aspect ─────────
+function CompetitorRadar({ comparison }: { comparison: InsightsPayload['walmart_comparison'] }) {
+  const data = comparison.map(c => ({
+    aspect: c.aspect,
+    Walmart: Math.round(c.walmart_negative_ratio * 100),
+    Competitors: Math.round(c.competitor_negative_ratio * 100),
+  }));
+  return (
+    <div className="bg-surface rounded-2xl shadow-card p-6">
+      <h2 className="text-lg font-semibold text-walmart-navy mb-1 flex items-center gap-2">
+        <Users size={18} className="text-walmart-blue" /> Aspect radar — negative-ratio comparison
+      </h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Higher = more negative sentiment on that aspect. Lower is better.
+      </p>
+      <div style={{ width: '100%', height: 320 }}>
+        <ResponsiveContainer>
+          <RadarChart data={data} outerRadius="75%">
+            <PolarGrid stroke="#e5e7eb" />
+            <PolarAngleAxis dataKey="aspect" tick={{ fontSize: 11, fill: '#041E42' }} />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <Radar name="Walmart" dataKey="Walmart" stroke="#0071DC" fill="#0071DC" fillOpacity={0.35} />
+            <Radar name="Competitors" dataKey="Competitors" stroke="#DE1C24" fill="#DE1C24" fillOpacity={0.28} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ─── Share of voice: post volume Walmart vs each competitor ─────────────
+function ShareOfVoice({ data }: { data: Array<{ label: string; posts: number }> }) {
+  return (
+    <div className="bg-surface rounded-2xl shadow-card p-6">
+      <h2 className="text-lg font-semibold text-walmart-navy mb-1 flex items-center gap-2">
+        <Users size={18} className="text-walmart-blue" /> Share of voice — post volume
+      </h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Total post count across the selected window (Walmart aggregate vs each competitor subreddit).
+      </p>
+      <div style={{ width: '100%', height: Math.max(200, data.length * 34) }}>
+        <ResponsiveContainer>
+          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 11, fill: '#6b7280' }} />
+            <YAxis dataKey="label" type="category" tick={{ fontSize: 11, fill: '#041E42' }} width={120} />
+            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+            <Bar dataKey="posts" fill="#0071DC" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

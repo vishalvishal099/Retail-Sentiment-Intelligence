@@ -1,8 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, ReviewItem, ReviewStats, DateRange } from '../api';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { api, ReviewItem, ReviewStats, DateRange, FeedbackHistoryItem } from '../api';
 import Card from '../components/Card';
 import Button from '../components/Button';
+
+const ASPECT_OPTIONS_CUSTOMER = [
+  'store_experience',
+  'online_app',
+  'delivery_pickup',
+  'product_quality',
+  'returns',
+  'customer_support',
+  'pricing',
+] as const;
+
+const ASPECT_OPTIONS_EMPLOYEE = [
+  'workforce_hr',
+  'pay_benefits',
+  'management',
+  'safety_policy',
+  'workload',
+] as const;
+
+// Combined list kept for reference
+const _ASPECT_OPTIONS_ALL = [...ASPECT_OPTIONS_CUSTOMER, ...ASPECT_OPTIONS_EMPLOYEE] as const;
+void _ASPECT_OPTIONS_ALL;
 
 const SENTIMENTS = ['', 'positive', 'negative', 'neutral'] as const;
 const RANGE_OPTIONS: { value: DateRange | ''; label: string }[] = [
@@ -22,10 +45,16 @@ export default function ReviewQueue() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSentiment = searchParams.get('sentiment') || '';
   const urlRange = searchParams.get('range') || '';
+  const [tab, setTab] = useState<'pending' | 'reviewed'>('pending');
   const [sentiment, setSentiment] = useState(urlSentiment);
   const [range, setRange] = useState(urlRange);
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [reviewedItems, setReviewedItems] = useState<ReviewItem[]>([]);
+  const [totalPending, setTotalPending] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reviewedLoading, setReviewedLoading] = useState(false);
   const [stats, setStats] = useState<ReviewStats | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -35,12 +64,39 @@ export default function ReviewQueue() {
     const ran = r ?? urlRange;
     setLoading(true);
     Promise.all([
-      api.getReviewQueue(50, sen || undefined, ran || undefined),
+      api.getReviewQueue(50, sen || undefined, ran || undefined, 0),
       api.getReviewStats().catch(() => null),
+      api.getReviewed(50, sen || undefined, ran || undefined), // always load reviewed on mount
     ])
-      .then(([q, st]) => { setItems(q.queue); if (st) setStats(st); })
+      .then(([q, st, rv]) => {
+        setItems(q.queue);
+        setTotalPending(q.total);
+        setHasMore(q.has_more);
+        setReviewedItems(rv.queue);
+        if (st) setStats(st);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    api.getReviewQueue(50, sentiment || undefined, range || undefined, items.length)
+      .then(q => {
+        setItems(prev => [...prev, ...q.queue]);
+        setTotalPending(q.total);
+        setHasMore(q.has_more);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMore(false));
+  };
+
+  const loadReviewed = (s?: string, r?: string) => {
+    setReviewedLoading(true);
+    api.getReviewed(50, s || undefined, r || undefined)
+      .then(r => setReviewedItems(r.queue))
+      .catch(console.error)
+      .finally(() => setReviewedLoading(false));
   };
 
   useEffect(() => {
@@ -49,11 +105,19 @@ export default function ReviewQueue() {
     load(urlSentiment, urlRange);
   }, [urlSentiment, urlRange]);
 
+  // Load reviewed tab lazily only if not already populated (e.g. user cleared filters)
+  useEffect(() => {
+    if (tab === 'reviewed' && reviewedItems.length === 0 && !reviewedLoading && !loading) {
+      loadReviewed(sentiment || undefined, range || undefined);
+    }
+  }, [tab]);
+
   const applyFilters = () => {
     const next = new URLSearchParams();
     if (sentiment) next.set('sentiment', sentiment);
     if (range) next.set('range', range);
     setSearchParams(next);
+    if (tab === 'reviewed') loadReviewed(sentiment || undefined, range || undefined);
   };
 
   const clearFilters = () => {
@@ -62,23 +126,54 @@ export default function ReviewQueue() {
     setSearchParams({});
   };
 
-  const handleCorrection = async (item: ReviewItem, correctedSentiment: string) => {
+  // Move item from pending to reviewed in local state
+  const promoteToReviewed = (item: ReviewItem, updatedItem?: Partial<ReviewItem>) => {
+    setItems(prev => prev.filter(p => p.id !== item.id));
+    setTotalPending(prev => Math.max(0, prev - 1));
+    setReviewedItems(prev => [{ ...item, ...updatedItem, needs_review: false }, ...prev]);
+    api.getReviewStats().then(setStats).catch(() => undefined);
+  };
+
+  const handleCorrection = async (
+    item: ReviewItem,
+    correctedSentiment: string,
+    correctedAspects?: string[],
+    trustOverride?: number | null,
+  ) => {
     setBusyId(item.id);
     setErrorMsg(null);
     try {
-      const res = await api.submitReview(item.post_id || item.id, {
+      const payload: Record<string, unknown> = {
         original_sentiment: item.sentiment,
         corrected_sentiment: correctedSentiment,
         original_aspects: item.aspects,
         subreddit: item.subreddit,
-        notes: 'Dashboard correction',
-      });
+        notes: correctedSentiment === item.sentiment ? 'Dashboard confirmation' : 'Dashboard correction',
+      };
+      if (correctedAspects !== undefined) payload.corrected_aspects = correctedAspects;
+      if (trustOverride !== undefined && trustOverride !== null) payload.trust_override = trustOverride;
+      const res = await api.submitReview(item.post_id || item.id, payload);
       if (res.status === 'saved') {
-        setItems(prev => prev.filter(p => p.id !== item.id));
-        // Refresh stats so the "learning" counter updates
-        api.getReviewStats().then(setStats).catch(() => undefined);
+        promoteToReviewed(item, { sentiment: correctedSentiment });
       } else {
         setErrorMsg('Could not save correction');
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleClose = async (item: ReviewItem, closeType: 'no_reply' | 'issue_fixed' | 'reply_sent', actionNote?: string) => {
+    setBusyId(item.id);
+    setErrorMsg(null);
+    try {
+      const res = await api.closeReview(item.post_id || item.id, item.subreddit, closeType, actionNote);
+      if (res.status === 'closed') {
+        promoteToReviewed(item, { close_reason: closeType });
+      } else {
+        setErrorMsg(res.reason || 'Could not close post');
       }
     } catch (e) {
       setErrorMsg(String(e));
@@ -114,10 +209,16 @@ export default function ReviewQueue() {
           </span>
           {stats && (
             <>
-              <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20 font-medium" title="Total human corrections recorded">
-                ✓ {stats.total_corrections} corrections
+              <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20 font-medium" title="Sentiment overrides where analyst disagreed with the model">
+                ✎ {stats.total_corrections} corrections
               </span>
-              <span className="px-3 py-1 rounded-pill bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/20 font-medium" title="Auto-replies saved">
+              <span
+                className="px-3 py-1 rounded-pill bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/20 font-medium"
+                title={`Human confirmations of the model's prediction (${stats.total_confirmations}/${stats.total_reviewed} reviewed)`}
+              >
+                ✓ {(stats.agreement_rate * 100).toFixed(1)}% agreement
+              </span>
+              <span className="px-3 py-1 rounded-pill bg-walmart-spark/15 text-walmart-navy border border-walmart-spark/40 font-medium" title="Auto-replies saved">
                 ✉ {stats.total_replies_posted} replies
               </span>
             </>
@@ -169,24 +270,244 @@ export default function ReviewQueue() {
         </div>
       )}
 
-      {items.length === 0 ? (
-        <Card className="text-center py-12 text-gray-500">
-          <p className="text-lg font-semibold text-walmart-navy">All caught up!</p>
-          <p className="text-sm">No posts need review right now.</p>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {items.map(item => (
-            <ReviewCard
-              key={item.id}
-              item={item}
-              busy={busyId === item.id}
-              onCorrect={handleCorrection}
+      {/* Accuracy Tracker */}
+      {stats && stats.daily_accuracy && stats.daily_accuracy.length > 0 && (
+        <AccuracyTracker stats={stats} />
+      )}
+
+      {/* Pending / Reviewed tabs */}
+      <div className="flex items-center gap-0 border-b border-walmart-navy/10">
+        {([
+          { key: 'pending' as const, label: 'Pending Review', count: totalPending },
+          { key: 'reviewed' as const, label: 'Reviewed', count: reviewedItems.length },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+              tab === t.key
+                ? 'border-walmart-blue text-walmart-blue'
+                : 'border-transparent text-gray-500 hover:text-walmart-navy'
+            }`}
+          >
+            {t.label}
+            <span className={`ml-2 px-1.5 py-0.5 rounded-pill text-[11px] ${
+              tab === t.key ? 'bg-walmart-blue/10 text-walmart-blue' : 'bg-gray-100 text-gray-500'
+            }`}>{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Pending tab */}
+      {tab === 'pending' && (
+        items.length === 0 ? (
+          <Card className="text-center py-12 text-gray-500">
+            <p className="text-lg font-semibold text-walmart-navy">All caught up!</p>
+            <p className="text-sm">No posts need review right now.</p>
+          </Card>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {items.map(item => (
+                <ReviewCard
+                  key={item.id}
+                  item={item}
+                  busy={busyId === item.id}
+                  onCorrect={handleCorrection}
+                  onClose={handleClose}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-6 py-2 text-sm font-semibold rounded-pill bg-white border border-walmart-navy/20 text-walmart-navy hover:bg-walmart-blue/5 disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading…' : `Load more (${totalPending - items.length} remaining)`}
+                </button>
+              </div>
+            )}
+            {!hasMore && items.length > 0 && (
+              <p className="text-center text-xs text-gray-400 pt-1">All {totalPending} posts loaded</p>
+            )}
+          </>
+        )
+      )}
+
+      {/* Reviewed tab */}
+      {tab === 'reviewed' && (
+        reviewedLoading ? (
+          <div className="text-gray-500 p-8">Loading reviewed posts…</div>
+        ) : reviewedItems.length === 0 ? (
+          <Card className="text-center py-12 text-gray-500">
+            <p className="text-sm">No reviewed posts yet — validate some from the Pending tab.</p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {reviewedItems.map(item => (
+              <ReviewCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                onCorrect={() => {}}
+                onClose={handleClose}
+                readOnly={!!(item.close_reason || item.reply_posted_at)}
+              />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Feedback History */}
+      <FeedbackHistory />
+    </div>
+  );
+}
+
+// ─── Model Accuracy Tracker ──────────────────────────────────────────────────
+// Line chart of daily agreement rate as analysts confirm/override predictions.
+// This is the HITL feedback-loop story: as the queue is worked through, we get
+// an out-of-sample estimate of how the deployed model is doing right now.
+function AccuracyTracker({ stats }: { stats: ReviewStats }) {
+  const rows = stats.daily_accuracy.map(d => ({
+    date: d.date,
+    agreement: Math.round(d.agreement_rate * 100),
+    reviewed: d.reviewed,
+  }));
+  const overallPct = (stats.agreement_rate * 100).toFixed(1);
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-walmart-navy uppercase tracking-wider">
+            Model Accuracy Tracker
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Daily human-agreement rate. Each point = % of reviews on that day where the analyst
+            confirmed the model's sentiment (didn't override it). {stats.total_reviewed} reviewed to date.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-bold text-walmart-navy">{overallPct}%</div>
+          <div className="text-[11px] uppercase tracking-wider text-gray-500">overall agreement</div>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: 220 }}>
+        <ResponsiveContainer>
+          <LineChart data={rows} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#6b7280' }} label={{ value: '% agreement', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#6b7280' } }} />
+            <Tooltip
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              formatter={(value: number, name: string) => {
+                if (name === 'agreement') return [`${value}%`, 'Agreement'];
+                return [value, name];
+              }}
             />
-          ))}
+            <Line type="monotone" dataKey="agreement" stroke="#0071ce" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Feedback History ────────────────────────────────────────────────────────
+// Collapsible audit table of every past correction — post id, from→to,
+// aspects that changed, trust override, analyst, timestamp. Powers thesis
+// claim that the HITL loop generates retraining data.
+function FeedbackHistory() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<FeedbackHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && items.length === 0 && !loading) {
+      setLoading(true);
+      api.getFeedbackHistory(50)
+        .then(res => setItems(res.items))
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    }
+  }, [open, items.length, loading]);
+
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-walmart-navy uppercase tracking-wider">
+            Feedback History
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Audit trail of every past correction — retraining data for the next model iteration.
+          </p>
+        </div>
+        <span className="text-walmart-blue text-sm font-semibold">{open ? 'Hide ▲' : 'Show ▼'}</span>
+      </button>
+      {open && (
+        <div className="mt-4">
+          {loading && <p className="text-xs text-gray-500">Loading…</p>}
+          {!loading && items.length === 0 && (
+            <p className="text-xs text-gray-500">No feedback recorded yet.</p>
+          )}
+          {!loading && items.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500 border-b border-walmart-navy/10">
+                    <th className="py-2 pr-3">When</th>
+                    <th className="py-2 pr-3">Post</th>
+                    <th className="py-2 pr-3">Sentiment</th>
+                    <th className="py-2 pr-3">Aspects Δ</th>
+                    <th className="py-2 pr-3">Trust</th>
+                    <th className="py-2">Analyst</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map(row => (
+                    <tr key={row.id} className="border-b border-walmart-navy/5 hover:bg-walmart-blue/[0.02]">
+                      <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{row.created_at ? new Date(row.created_at).toLocaleString() : '—'}</td>
+                      <td className="py-2 pr-3 font-mono text-[10px] text-walmart-navy/70">{row.post_id?.slice(0, 12) || '—'}</td>
+                      <td className="py-2 pr-3">
+                        {row.changed ? (
+                          <span className="text-walmart-blue font-medium">
+                            {row.original_sentiment} → <span className="font-semibold">{row.corrected_sentiment}</span>
+                          </span>
+                        ) : (
+                          <span className="text-sentiment-positive">✓ confirmed {row.original_sentiment}</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {row.aspects_changed && row.aspects_changed.length > 0 ? (
+                          <span className="text-walmart-spark-dark">{row.aspects_changed.join(', ')}</span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {row.trust_override !== null && row.trust_override !== undefined ? (
+                          <span className="text-walmart-blue font-medium">{Number(row.trust_override).toFixed(2)}</span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-gray-600">{row.analyst_id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -194,10 +515,14 @@ function ReviewCard({
   item,
   busy,
   onCorrect,
+  onClose,
+  readOnly = false,
 }: {
   item: ReviewItem;
   busy: boolean;
-  onCorrect: (item: ReviewItem, sentiment: string) => void;
+  onCorrect: (item: ReviewItem, sentiment: string, aspects?: string[], trust?: number | null) => void;
+  onClose: (item: ReviewItem, closeType: 'no_reply' | 'issue_fixed' | 'reply_sent', actionNote?: string) => void;
+  readOnly?: boolean;
 }) {
   type Draft = {
     reply: string;
@@ -207,14 +532,38 @@ function ReviewCard({
   };
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
+  const [gatewayAvailable, setGatewayAvailable] = useState<boolean | null>(null);
+  const [gatewayReason, setGatewayReason] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState('');
+  const [actionDraft, setActionDraft] = useState('');
+  const [actionModel, setActionModel] = useState('');
   const [reply, setReply] = useState<string>(item.reply_text || '');
   const [posting, setPosting] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [genActionNote, setGenActionNote] = useState(true);
   const [postedAt, setPostedAt] = useState<string | null>(item.reply_posted_at);
   const [postErr, setPostErr] = useState<string | null>(null);
   const [examplesUsed, setExamplesUsed] = useState<number>(0);
   const [postToReddit, setPostToReddit] = useState(true);
   const [redditStatus, setRedditStatus] = useState<{ kind: 'dry_run' | 'live' | 'error'; msg: string } | null>(null);
+
+  // Advanced correction state (aspect + trust override). null = leave model
+  // output untouched; any change (add/remove aspect, drag slider) causes the
+  // panel to open and its values to be sent along with the sentiment button click.
+  const initialAspects = (item.aspects || []).map(a =>
+    typeof a === 'string' ? a : (a as { aspect?: string }).aspect || String(a),
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [aspects, setAspects] = useState<string[]>(initialAspects);
+  const [trustOverride, setTrustOverride] = useState<number | null>(null);
+  const aspectsDirty =
+    aspects.length !== initialAspects.length ||
+    aspects.some(a => !initialAspects.includes(a)) ||
+    initialAspects.some(a => !aspects.includes(a));
+
+  const toggleAspect = (a: string) => {
+    setAspects(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]);
+  };
 
   const isNegative = item.sentiment === 'negative';
 
@@ -222,19 +571,29 @@ function ReviewCard({
     setPostErr(null);
     setGenerating(true);
     try {
-      const res = await api.generateReply(item.post_id || item.id, item.subreddit);
+      const res = await api.draftAll(item.post_id || item.id, item.subreddit);
       if (res.status === 'ok') {
+        setGatewayAvailable(res.gateway_available ?? null);
+        setGatewayReason(res.gateway_reason ?? null);
+        // Only store action draft if checkbox is checked
+        setActionDraft(genActionNote ? (res.action_draft || '') : '');
+        const actionModelLabel = res.action_model || 'template';
+        setActionModel(actionModelLabel);
         const incoming = (res.drafts && res.drafts.length
           ? res.drafts
           : (res.reply
-            ? [{ reply: res.reply, model_used: res.model_used || 'unknown', source: res.source || 'unknown' }]
+            ? [{ reply: res.reply, model_used: 'unknown', source: 'unknown' as const }]
             : [])) as Draft[];
-        if (!incoming.length) {
+        const realDrafts = incoming.filter(d => !(
+          d.source === 'smart-template' && d.label?.includes('offline fallback')
+        ));
+        const toShow = realDrafts.length > 0 ? realDrafts : incoming;
+        if (!toShow.length) {
           setPostErr('No drafts returned');
         } else {
-          setDrafts(incoming);
+          setDrafts(toShow);
           setSelectedIdx(0);
-          setReply(incoming[0].reply);
+          setReply(toShow[0].reply);
           setExamplesUsed(res.examples_used ?? 0);
         }
       } else {
@@ -279,6 +638,8 @@ function ReviewCard({
         if (item.reddit_url && (!res.reddit || res.reddit.dry_run)) {
           window.open(item.reddit_url, '_blank', 'noopener');
         }
+        // Remove from Pending — reply was sent, close with reply_sent lifecycle
+        onClose(item, 'reply_sent', actionNote.trim() || undefined);
       } else {
         setPostErr(res.reason || 'Could not save reply');
       }
@@ -291,6 +652,13 @@ function ReviewCard({
 
   return (
     <Card>
+      {/* Follow-up alert */}
+      {item.follow_up_needed && (
+        <div className="flex items-center gap-2 mb-2 bg-walmart-spark/10 border border-walmart-spark/40 rounded-lg px-3 py-1.5 text-xs text-walmart-navy">
+          <span>⚠️</span>
+          <span><span className="font-semibold">Follow-up needed</span> — reply was sent 3+ days ago with no resolution. Check the Lifecycle page.</span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -344,30 +712,178 @@ function ReviewCard({
         </div>
 
         <div className="flex flex-col gap-1 flex-shrink-0">
-          <span className="text-xs text-gray-400 text-center mb-1">Correct to:</span>
-          <button
-            onClick={() => onCorrect(item, 'positive')}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded-pill bg-sentiment-positive/10 text-sentiment-positive hover:bg-sentiment-positive/20 border border-sentiment-positive/20 disabled:opacity-50 font-medium"
-          >
-            ✓ Positive
-          </button>
-          <button
-            onClick={() => onCorrect(item, 'neutral')}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded-pill bg-walmart-navy/5 text-walmart-navy hover:bg-walmart-navy/10 border border-walmart-navy/15 disabled:opacity-50 font-medium"
-          >
-            — Neutral
-          </button>
-          <button
-            onClick={() => onCorrect(item, 'negative')}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded-pill bg-sentiment-negative/10 text-sentiment-negative hover:bg-sentiment-negative/20 border border-sentiment-negative/20 disabled:opacity-50 font-medium"
-          >
-            ✗ Negative
-          </button>
+          {readOnly ? (
+            /* Reviewed state badge */
+            <div className="flex flex-col items-center gap-1.5">
+              <span className="px-3 py-1.5 text-xs rounded-pill bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/20 font-medium text-center">
+                ✓ Reviewed
+              </span>
+              {item.close_reason && (
+                <span className="text-[11px] text-gray-400 text-center">No reply sent</span>
+              )}
+              {item.reply_posted_at && (
+                <span className="text-[11px] text-walmart-blue text-center">Reply sent</span>
+              )}
+              {item.validated_at && (
+                <span className="text-[10px] text-gray-400 text-center whitespace-nowrap">
+                  {new Date(item.validated_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Sentiment correction group */}
+              <div className="flex flex-col gap-1 pb-2 border-b border-gray-100">
+                <span className="text-xs text-gray-400 text-center mb-1">Correct to:</span>
+                {item.sentiment !== 'positive' && (
+                  <button
+                    onClick={() => onCorrect(item, 'positive', aspectsDirty ? aspects : undefined, trustOverride)}
+                    disabled={busy}
+                    className="px-3 py-1.5 text-xs rounded-pill bg-sentiment-positive/10 text-sentiment-positive hover:bg-sentiment-positive/20 border border-sentiment-positive/20 disabled:opacity-50 font-medium"
+                  >
+                    ✓ Positive
+                  </button>
+                )}
+                {item.sentiment !== 'neutral' && (
+                  <button
+                    onClick={() => onCorrect(item, 'neutral', aspectsDirty ? aspects : undefined, trustOverride)}
+                    disabled={busy}
+                    className="px-3 py-1.5 text-xs rounded-pill bg-walmart-navy/5 text-walmart-navy hover:bg-walmart-navy/10 border border-walmart-navy/15 disabled:opacity-50 font-medium"
+                  >
+                    — Neutral
+                  </button>
+                )}
+                {item.sentiment !== 'negative' && (
+                  <button
+                    onClick={() => onCorrect(item, 'negative', aspectsDirty ? aspects : undefined, trustOverride)}
+                    disabled={busy}
+                    className="px-3 py-1.5 text-xs rounded-pill bg-sentiment-negative/10 text-sentiment-negative hover:bg-sentiment-negative/20 border border-sentiment-negative/20 disabled:opacity-50 font-medium"
+                  >
+                    ✗ Negative
+                  </button>
+                )}
+              </div>
+
+              {/* Close section — always visible */}
+              <button
+                type="button"
+                onClick={() => onClose(item, 'no_reply')}
+                disabled={busy}
+                className="w-full mt-1 px-2 py-1.5 text-xs rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200 disabled:opacity-50 font-medium"
+              >
+                ✕ Close
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(o => !o)}
+                className="text-[11px] text-walmart-blue hover:underline mt-1"
+              >
+                {advancedOpen ? 'Hide advanced ▲' : 'Advanced ▾'}
+                {(aspectsDirty || trustOverride !== null) && (
+                  <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-walmart-spark" title="Unsent aspect/trust changes" />
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Advanced override: aspects + trust score */}
+      {!readOnly && advancedOpen && (
+        <div className="mt-3 pt-3 border-t border-dashed border-walmart-navy/15 space-y-3">
+          <div>
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] uppercase tracking-wider font-semibold text-gray-600">
+                Aspect override
+                {aspectsDirty && <span className="ml-2 text-walmart-spark-dark normal-case font-normal">(will be saved on next correction click)</span>}
+              </label>
+              {aspects.length > 0 && (
+                <button type="button" onClick={() => setAspects([])}
+                  className="text-[11px] text-sentiment-negative hover:underline" title="Remove all aspects">
+                  ✕ Clear all
+                </button>
+              )}
+            </div>
+
+            {/* Currently tagged — always shown, covers legacy names like "store experience" */}
+            {aspects.length > 0 && (
+              <div className="mb-2 p-2 rounded-lg bg-walmart-navy/5 border border-walmart-navy/10">
+                <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Currently tagged — click to remove</span>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {aspects.map(a => (
+                    <button key={a} type="button" onClick={() => toggleAspect(a)} title={`Remove "${a}"`}
+                      className="px-2.5 py-1 rounded-pill text-[11px] border transition-colors bg-walmart-blue text-white border-walmart-blue hover:bg-sentiment-negative hover:border-sentiment-negative">
+                      ✕ {a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Taxonomy picker — only shows aspects not already tagged */}
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Add from taxonomy</span>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 ml-0">Customer</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {ASPECT_OPTIONS_CUSTOMER.filter(a => !aspects.includes(a)).map(a => (
+                    <button key={a} type="button" onClick={() => toggleAspect(a)} title={`Add "${a}"`}
+                      className="px-2.5 py-1 rounded-pill text-[11px] border transition-colors bg-white text-walmart-navy border-walmart-navy/20 hover:border-walmart-blue">
+                      + {a}
+                    </button>
+                  ))}
+                  {ASPECT_OPTIONS_CUSTOMER.every(a => aspects.includes(a)) && (
+                    <span className="text-[11px] text-gray-400 italic">all tagged</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400">Employee</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {ASPECT_OPTIONS_EMPLOYEE.filter(a => !aspects.includes(a)).map(a => (
+                    <button key={a} type="button" onClick={() => toggleAspect(a)} title={`Add "${a}"`}
+                      className="px-2.5 py-1 rounded-pill text-[11px] border transition-colors bg-white text-walmart-navy border-walmart-navy/20 hover:border-walmart-blue">
+                      + {a}
+                    </button>
+                  ))}
+                  {ASPECT_OPTIONS_EMPLOYEE.every(a => aspects.includes(a)) && (
+                    <span className="text-[11px] text-gray-400 italic">all tagged</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wider font-semibold text-gray-600 flex items-center gap-2">
+              Trust override
+              {trustOverride === null ? (
+                <span className="text-gray-400 normal-case font-normal">(unchanged: {item.trust_score?.toFixed(2)})</span>
+              ) : (
+                <span className="text-walmart-spark-dark normal-case font-normal">→ {trustOverride.toFixed(2)}</span>
+              )}
+              {trustOverride !== null && (
+                <button
+                  type="button"
+                  onClick={() => setTrustOverride(null)}
+                  className="text-[10px] text-gray-500 hover:text-sentiment-negative underline ml-auto"
+                >
+                  reset
+                </button>
+              )}
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={trustOverride ?? item.trust_score ?? 0.5}
+              onChange={e => setTrustOverride(parseFloat(e.target.value))}
+              className="w-full mt-1 accent-walmart-blue"
+            />
+          </div>
+        </div>
+      )}
 
       {/* LLM Reply Draft — two side-by-side candidates */}
       {isNegative && (
@@ -397,6 +913,41 @@ function ReviewCard({
               ⏳ Generating drafts from GPT, Mistral & Smart Composer… (first call may take a few seconds)
             </div>
           )}
+
+          {/* Network / config warning — shown when GPT is unavailable */}
+          {gatewayAvailable === false && (() => {
+            const msgs: Record<string, { title: string; detail: string }> = {
+              no_gateway_key: {
+                title: 'Walmart gateway key not configured.',
+                detail: 'Add WMT_LLM_GATEWAY_KEY to .env and restart the server.',
+              },
+              no_consumer_id: {
+                title: 'WM_CONSUMER.ID not set.',
+                detail: 'Add WMT_CONSUMER_ID=<your-uuid> to .env. Find it in the LLM Gateway APIM portal under use case UC08708, then restart the server.',
+              },
+              no_openai_key: {
+                title: 'WM_CONSUMER.ID not configured.',
+                detail: 'The gateway URL and JWT key are correct, but the WM_CONSUMER.ID routing header is missing. Get your Consumer UUID from the LLM Gateway APIM portal (the UUID registered when use case UC08708 was created), then add WMT_CONSUMER_ID=<uuid> to .env and restart.',
+              },
+              network_unreachable: {
+                title: 'GPT unreachable on this network.',
+                detail: 'The gateway is temporarily unreachable. Try again in a moment.',
+              },
+            };
+            const m = msgs[gatewayReason ?? ''] ?? {
+              title: 'GPT drafts unavailable.',
+              detail: 'Smart Composer drafts are shown instead.',
+            };
+            return (
+              <div className="flex items-start gap-2 bg-walmart-spark/10 border border-walmart-spark/40 rounded-xl px-3 py-2.5 text-xs text-walmart-navy">
+                <span className="text-base leading-none mt-0.5">⚠️</span>
+                <div>
+                  <span className="font-semibold">{m.title}</span>{' '}{m.detail}
+                  {' '}Smart Composer drafts are shown instead.
+                </div>
+              </div>
+            );
+          })()}
 
           {drafts.length > 0 && (
             <div className={`grid grid-cols-1 ${drafts.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3 mb-2`}>
@@ -456,6 +1007,32 @@ function ReviewCard({
                   <span className="text-walmart-spark-dark"> (post your first reply to start the learning loop)</span>
                 )}
               </div>
+
+              {/* Internal action note — generated alongside reply drafts */}
+              <div className="mt-3 p-3 rounded-xl bg-walmart-spark/8 border border-walmart-spark/30">
+                <label className="block text-[11px] uppercase tracking-wider font-semibold text-walmart-navy mb-1">
+                  ⚡ Internal Action Note
+                  <span className="ml-2 normal-case font-normal text-gray-500">— shown in Lifecycle → Actionable Items</span>
+                  {actionModel && (
+                    <span className={`ml-2 normal-case font-medium ${actionModel.includes('GPT') ? 'text-sentiment-positive' : 'text-walmart-blue'}`}>
+                      · {actionModel}
+                    </span>
+                  )}
+                </label>
+                <textarea
+                  value={actionNote}
+                  onChange={e => setActionNote(e.target.value)}
+                  rows={2}
+                  className="w-full text-xs border border-walmart-spark/40 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-walmart-spark bg-white"
+                  placeholder={actionDraft ? actionDraft : "Describe the internal action to take (auto-generated when GPT is available)…"}
+                />
+                {actionDraft && !actionNote && (
+                  <button type="button" onClick={() => setActionNote(actionDraft)}
+                    className="text-[11px] text-walmart-spark-dark hover:underline mt-0.5">
+                    ↑ Use suggested action
+                  </button>
+                )}
+              </div>
             </>
           )}
 
@@ -479,6 +1056,15 @@ function ReviewCard({
             >
               {generating ? 'Generating…' : (drafts.length ? '↻ Regenerate Both' : '✨ Generate Drafts')}
             </button>
+            <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none" title="When checked, also generates an internal action note alongside the customer reply draft">
+              <input
+                type="checkbox"
+                checked={genActionNote}
+                onChange={e => setGenActionNote(e.target.checked)}
+                className="accent-walmart-blue"
+              />
+              Internal Action Note
+            </label>
             <button
               onClick={handlePostReply}
               disabled={posting || generating || !reply.trim()}

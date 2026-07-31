@@ -798,7 +798,13 @@ class RetailSentimentPipeline:
             unit["image_fetch"] = {**meta, "url": url}
             if not cached:
                 continue
-            caption = vision.caption(cached)
+            # Choose caption strategy based on config toggle. The multi-pass
+            # enhanced() call is 4-8x slower, so keep it opt-in.
+            caption = (
+                vision.caption_enhanced(cached)
+                if getattr(vcfg, "enhanced_captioning", False)
+                else vision.caption(cached)
+            )
             if caption:
                 unit["image_caption"] = caption
                 unit["image_cached_path"] = str(cached)
@@ -858,7 +864,12 @@ class RetailSentimentPipeline:
             if not cached:
                 failed += 1
                 continue
-            caption = vision.caption(cached)
+            # Retry runs are off the hot path, so honour the enhanced flag here too.
+            caption = (
+                vision.caption_enhanced(cached)
+                if getattr(vcfg, "enhanced_captioning", False)
+                else vision.caption(cached)
+            )
             if not caption:
                 failed += 1
                 continue

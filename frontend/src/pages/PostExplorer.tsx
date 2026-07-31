@@ -156,6 +156,26 @@ export default function PostExplorer() {
             {post.text && post.text !== post.title && (
               <p className="text-gray-700 line-clamp-3">{post.text}</p>
             )}
+            {/* Vision caption (only shown when the ingestion pipeline produced one) */}
+            {post.image_caption && (
+              <div className="mt-2 flex items-start gap-2 bg-walmart-blue/5 border border-walmart-blue/20 rounded-xl p-2">
+                {post.image_url && (
+                  <img
+                    src={post.image_url}
+                    alt=""
+                    className="w-14 h-14 object-cover rounded-lg border border-walmart-navy/10 shrink-0"
+                    loading="lazy"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-walmart-blue mb-0.5">
+                    Vision caption
+                  </div>
+                  <p className="text-xs text-walmart-navy leading-snug">{post.image_caption}</p>
+                </div>
+              </div>
+            )}
             {post.reddit_url && (
               <a
                 href={post.reddit_url}

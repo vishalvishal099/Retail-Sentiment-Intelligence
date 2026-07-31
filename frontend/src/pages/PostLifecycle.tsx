@@ -132,6 +132,22 @@ export default function PostLifecycle() {
                       <span className="text-[10px] text-gray-500">{relTime(row.created_at)}</span>
                     </div>
                     <div className="text-sm font-medium text-walmart-navy line-clamp-2">{row.title || '(untitled)'}</div>
+                    {row.image_caption && (
+                      <div className="mt-1.5 flex items-start gap-1.5 bg-walmart-blue/5 border border-walmart-blue/20 rounded-lg p-1.5">
+                        {row.image_url && (
+                          <img
+                            src={row.image_url}
+                            alt=""
+                            className="w-8 h-8 object-cover rounded shrink-0"
+                            loading="lazy"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        )}
+                        <p className="text-[10px] text-walmart-navy leading-snug line-clamp-2" title={row.image_caption}>
+                          <span className="uppercase font-semibold text-walmart-blue tracking-wider">Vision:</span> {row.image_caption}
+                        </p>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mt-2 text-[11px] text-gray-600">
                       <span>r/{row.subreddit}</span>
                       {row.top_aspect && <span className="text-walmart-blue">{row.top_aspect}</span>}

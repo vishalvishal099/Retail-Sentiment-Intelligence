@@ -3,14 +3,32 @@ Retail Sentiment Intelligence — Alert Engine
 Detects anomalies: volume spikes, sentiment crashes, emerging topics.
 """
 
+import json
 import math
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional
 
 from src.utils.logger import get_logger
 
 log = get_logger("alerts")
+
+# Rules file (edited from the dashboard Alert Rules panel). Values here take
+# precedence over the hard-coded defaults in this module. Kept next to the
+# API so both write and read from the same place.
+_RULES_PATH = Path("data/alert_rules.json")
+
+
+def _load_rules() -> dict:
+    """Load user-edited alert rules from disk. Missing/malformed → empty dict."""
+    if not _RULES_PATH.exists():
+        return {}
+    try:
+        return json.loads(_RULES_PATH.read_text()) or {}
+    except Exception as e:  # noqa: BLE001
+        log.warning("alert_rules_load_failed", error=str(e))
+        return {}
 
 
 class AlertEngine:
@@ -20,12 +38,33 @@ class AlertEngine:
         self.storage = storage
 
     def detect_all(self) -> list[dict]:
-        """Run all alert detectors and return triggered alerts."""
+        """Run all alert detectors and return triggered alerts. Honors the
+        per-detector `enabled` flag and threshold overrides stored in
+        data/alert_rules.json (edited via the dashboard).
+        """
+        rules = _load_rules()
+
+        def _enabled(key: str) -> bool:
+            r = rules.get(key)
+            return True if not r else bool(r.get("enabled", True))
+
+        def _val(key: str, field: str, default):
+            r = rules.get(key) or {}
+            v = r.get(field)
+            return v if v is not None else default
+
         alerts = []
-        alerts.extend(self.detect_volume_spike())
-        alerts.extend(self.detect_sentiment_crash())
-        alerts.extend(self.detect_emerging_topics())
-        alerts.extend(self.detect_competitor_neg_spike())
+        if _enabled("volume_spike"):
+            alerts.extend(self.detect_volume_spike(sigma_threshold=float(_val("volume_spike", "sigma_threshold", 2.0))))
+        if _enabled("sentiment_crash"):
+            alerts.extend(self.detect_sentiment_crash(drop_threshold=float(_val("sentiment_crash", "drop_threshold", 0.3))))
+        if _enabled("emerging_topic"):
+            alerts.extend(self.detect_emerging_topics(min_count=int(_val("emerging_topic", "min_posts", 5))))
+        if _enabled("competitor_negative"):
+            # This detector uses week-over-week deltas, not sigma. `sigma_threshold`
+            # in the rules JSON exists for symmetry with the other rules; the
+            # actual delta_threshold is left at its class-level default.
+            alerts.extend(self.detect_competitor_neg_spike())
         return alerts
 
     def detect_volume_spike(self, sigma_threshold: float = 2.0) -> list[dict]:

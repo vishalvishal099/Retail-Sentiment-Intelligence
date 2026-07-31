@@ -8,22 +8,34 @@ Uses gpt-4o-mini with JSON mode for reliable structured output.
 # PROMPT 1: Combined Sentiment + Aspect Analysis (Single LLM Call)
 # =============================================================================
 
-SENTIMENT_ASPECT_SYSTEM_PROMPT = """You are a retail customer feedback analyst specializing in Walmart-related social media posts from Reddit.
+SENTIMENT_ASPECT_SYSTEM_PROMPT = """You are a retail analyst specializing in Walmart-related social media posts from Reddit — both customer-facing and employee communities.
 
 Your task: Analyze each post and return structured JSON with sentiment and retail aspects.
 
 ## Rules:
 1. Sentiment must be one of: "positive", "negative", "neutral"
-2. Aspects must be from this fixed taxonomy (select ALL that apply):
-   - delivery: OGP pickup, shipping, Spark drivers, timing, missing/wrong items
+2. Choose aspects from the correct group based on the subreddit:
+
+   CUSTOMER aspects — use for customer-facing subreddits (r/walmart, r/samsclub, r/Sams_Club, r/WalmartCanada, r/WalmartPlus, etc.):
+   - store_experience: In-store layout, checkout, cleanliness, stock availability, self-checkout
+   - online_app: Walmart app, walmart.com, Walmart+ features, checkout bugs, notifications
+   - delivery_pickup: OGP pickup, shipping, Spark drivers, timing, missing/wrong items
    - product_quality: Freshness, damage, substitutions, Great Value/Equate brand quality
    - returns: Return process, refunds, exchange policy, receipt issues
-   - customer_support: Associate interactions, phone/chat/in-store help, manager escalation
+   - customer_support: Associate interactions, phone/chat help, manager escalation
    - pricing: Price accuracy, rollbacks, price match, competitor comparison, value
-   - app_website: Walmart app, walmart.com, Walmart+ features, checkout bugs, notifications
+
+   EMPLOYEE aspects — use for employee/driver subreddits (r/WalmartEmployees, r/OGPBackroom, r/Sparkdriver, r/WalmartSparkDrivers, r/walmartogp, r/walmart_RX):
+   - workforce_hr: Hiring, promotions, scheduling, attendance, PTO/PPTO, terminations
+   - pay_benefits: Wages, raises, bonuses, health insurance, discount card
+   - management: Manager behaviour, store culture, team dynamics, SM/ASM/TL issues
+   - safety_policy: Safety incidents, policy changes, compliance, loss prevention
+   - workload: Task load, staffing cuts, freight, coverage, burnout
+
 3. A post can have 0 aspects (if off-topic) or multiple aspects.
-4. Handle sarcasm and slang (Reddit tone). "Love how my order arrived 3 days late" = negative + delivery.
-5. Confidence scores (0.0-1.0) for each prediction.
+4. NEVER mix customer and employee aspects in the same post.
+5. Handle sarcasm and slang (Reddit tone). "Love how my order arrived 3 days late" = negative + delivery_pickup.
+6. Confidence scores (0.0-1.0) for each prediction.
 
 ## Output JSON format:
 {
@@ -59,7 +71,15 @@ SENTIMENT_ASPECT_FEW_SHOT = [
     },
     {
         "role": "assistant",
-        "content": '{"sentiment": "negative", "sentiment_confidence": 0.91, "aspects": [{"aspect": "pricing", "sentiment": "negative", "confidence": 0.93}, {"aspect": "delivery", "sentiment": "negative", "confidence": 0.72}], "key_phrases": ["$7 batch", "15 miles", "working for free", "Doordash paying more"], "summary": "Spark driver frustrated with low pay rates compared to competitor delivery platforms"}'
+        "content": '{"sentiment": "negative", "sentiment_confidence": 0.91, "aspects": [{"aspect": "pay_benefits", "sentiment": "negative", "confidence": 0.93}, {"aspect": "workload", "sentiment": "negative", "confidence": 0.72}], "key_phrases": ["$7 batch", "15 miles", "working for free", "Doordash paying more"], "summary": "Spark driver frustrated with low pay rates compared to competitor delivery platforms"}'
+    },
+    {
+        "role": "user",
+        "content": "Post from r/WalmartEmployees: 'Seeking Advice: Walmart Career Growth and Promotion Challenges After 2 Years — I have been working at Walmart for almost 2 years as a part-time Produce Associate. I have been requesting a full-time position for 8 months. I spoke with my ASM who said she would discuss it with the Store Manager, but I have not received any update. I also applied for several department manager roles but each time was rejected with the same response: We decided to move forward with another candidate, without any clear feedback.'"
+    },
+    {
+        "role": "assistant",
+        "content": '{"sentiment": "negative", "sentiment_confidence": 0.93, "aspects": [{"aspect": "workforce_hr", "sentiment": "negative", "confidence": 0.97}, {"aspect": "management", "sentiment": "negative", "confidence": 0.85}], "key_phrases": ["full-time position", "8 months without progress", "rejected", "no clear feedback", "department manager roles"], "summary": "Long-term Walmart associate frustrated by lack of full-time conversion and repeated promotion rejections without feedback"}'
     }
 ]
 
