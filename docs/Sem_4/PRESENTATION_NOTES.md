@@ -286,7 +286,7 @@ Only items with a clear next step. Everything else lives in the report's Future 
 
 - **Now → 1 month** — grow the gold set to ~500 posts using HITL feedback already being produced; rerun 5-fold OOF and check the F1 delta.
 - **1 → 3 months** — wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add a promotion gate on OOF F1.
-- **3 → 6 months** — migrate storage to managed Postgres or Cosmos so multiple analysts can use the same feedback table concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.
+- **3 → 6 months** — move the feedback table to a shared managed database so multiple analysts can work concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.
 
 **Deliberately excluded** — auto-reply gate, seasonal P1 forecast, bilingual taxonomy — ideas without a clear next step at this scale. They're in the report's Future Work chapter.
 

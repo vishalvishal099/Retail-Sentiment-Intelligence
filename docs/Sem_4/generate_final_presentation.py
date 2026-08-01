@@ -325,7 +325,6 @@ def build():
         "In-app Notification Centre mirroring the digest",
         "ModernBERT Stage 3 (final)  —  Macro-F1 0.7285 → 0.7642  (5-fold OOF)",
         "Trust-score end-to-end evaluation (n = 200)",
-        "SQLite schema mirroring Cosmos DB partitioning",
     ], size=Pt(12))
     _rect(s, Inches(0.5), Inches(5.55), Inches(12.3), Inches(1.35),
           LIGHT_BLUE, line=WALMART_BLUE)
@@ -555,7 +554,7 @@ def build():
     _rect(s, Inches(0.5), Inches(2.5), Inches(12.3), Inches(0.7),
           DARK_BLUE, line=DARK_BLUE)
     _tx(s, Inches(0.7), Inches(2.55), Inches(12.0), Inches(0.6),
-        "feedback  table  (SQLite / Cosmos DB)  —  one row per human action, JSON payload, partition_key = analyst_id",
+        "feedback  table  —  one row per human action, JSON payload, partition_key = analyst_id",
         size=Pt(12), bold=True, color=WHITE, align=PP_ALIGN.CENTER,
         anchor=MSO_ANCHOR.MIDDLE)
     _rect(s, Inches(0.5), Inches(3.4), Inches(6.05), Inches(2.5),
@@ -923,7 +922,7 @@ def build():
          "Wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add promotion gate on OOF F1.",
          WALMART_BLUE),
         ("3 → 6 months",
-         "Migrate storage to managed Postgres or Cosmos so multiple analysts can use the same feedback table concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.",
+         "Move the feedback table to a shared managed database so multiple analysts can work concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.",
          PURPLE),
     ]
     y = Inches(1.15)
