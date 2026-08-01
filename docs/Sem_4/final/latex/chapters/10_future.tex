@@ -1,0 +1,34 @@
+\chapter{Future Work}\label{ch:future}
+
+Future extensions divide into three groups:
+
+\section{Model-Level Extensions}
+\begin{itemize}
+\item Train a joint sentiment + aspect head with a shared encoder to reduce
+      inference cost by a further $\sim$30\%.
+\item Distil ModernBERT into a $\sim$50M-parameter student for CPU-only
+      inference at the edge.
+\item Add reasoning-augmented VLM captioning (LLaVA-Next 1.6B or SmolVLM) to
+      the vision layer.
+\end{itemize}
+
+\section{Product-Level Extensions}
+\begin{itemize}
+\item Auto-reply confidence gate: promote LLM drafts from ``suggested'' to
+      ``queued for send'' when analyst edit-distance falls below a
+      threshold on the past 200 posts.
+\item Predictive P1 forecast: seasonal-decomposition on daily P1 counts to
+      forecast alert volume 24--48 hours ahead.
+\item Bilingual (Hindi + English) taxonomy validated against Indian retail
+      communities.
+\end{itemize}
+
+\section{Operational Extensions}
+\begin{itemize}
+\item Deploy the pipeline as a scheduled Kubernetes CronJob backed by a
+      managed Postgres instance for multi-analyst concurrency.
+\item Integrate with Walmart's internal ticketing so P1 alerts open cases
+      directly.
+\item Extend the ingestion set to Twitter/X, YouTube comments, and app-store
+      reviews.
+\end{itemize}

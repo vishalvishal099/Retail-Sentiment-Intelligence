@@ -1,0 +1,29 @@
+\chapter{Problems Encountered and Mitigations}\label{ch:problems}
+
+\begin{table}[htbp]\centering
+\caption{Problems encountered and mitigations.}\label{tab:problems}
+\small
+\begin{tabular}{@{}p{0.35\linewidth}p{0.60\linewidth}@{}}\toprule
+\bfseries Problem & \bfseries Mitigation\\\midrule
+Reddit RSS rate-limits caused missed posts. &
+Introduced a token-bucket rate limiter and staggered per-subreddit
+schedules; back-off with jitter on 429 responses.\\
+Baseline sentiment truncated at 128 tokens. &
+Adopted ModernBERT (8192-token context); no truncation for the 200-post
+gold set.\\
+Vision model hallucinated captions on retail screenshots. &
+Introduced a two-pass prompt: free-form caption then constrained OCR/signal
+extraction; discard captions that mention entities absent from OCR text.\\
+Trust score was initially opaque. &
+Decomposed into three named components ($M$, $C$, $L$) each with a
+stakeholder-defensible rationale; expose the decomposition in the dashboard.\\
+Analysts wanted an audit trail. &
+Every HITL correction and reply-post is logged as (post, before, after,
+analyst\_id, timestamp) and surfaced in the Review Queue.\\
+Duplicate posts from cross-posts inflated aggregates. &
+Deduplicated at ingestion by \texttt{post\_id}; secondary dedupe by
+title+body normalised hash.\\
+Local LLM latency dominated the pipeline. &
+Batched vision calls; short-circuited posts without images.\\\bottomrule
+\end{tabular}
+\end{table}

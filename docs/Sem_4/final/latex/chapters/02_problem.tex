@@ -1,0 +1,55 @@
+\chapter{Problem Statement and Objectives}\label{ch:problem}
+
+\section{Problem Statement}
+Manual monitoring of retail-related Reddit communities cannot keep pace with
+the daily volume of posts.  Off-the-shelf sentiment services (a) lack
+retail-domain vocabulary, (b) treat every post as trustworthy, and (c) do not
+recover the topical structure required for operational decisions --- who
+complained, about what, and how credible is the source.
+
+Given a public stream of Reddit posts from a curated set of 32 retail
+communities, the problem is to produce, in near real time, a trust-weighted,
+aspect-tagged, priority-ranked feed of negative posts along with an
+analyst-facing dashboard for review and response.
+
+\section{Objectives}
+\begin{enumerate}
+\item Build a modular offline-first pipeline covering ingestion, trust
+      scoring, sentiment classification, aspect extraction, image analysis,
+      aggregation, and alerting --- with no commercial API cost at inference.
+\item Improve sentiment macro-F1 on a labelled Reddit sample from the
+      out-of-the-box RoBERTa baseline of 0.63 to $\ge 0.75$ overall by
+      fine-tuning ModernBERT on a curriculum of pseudo-labelled and
+      hand-labelled data.
+\item Introduce a multi-pass vision pipeline over Gemma~3 4B that reduces
+      hallucination on retail screenshots to zero and lifts text
+      extraction to $\ge 70\%$.
+\item Design an interpretable trust score whose constants are
+      stakeholder-defensible, and a \textsf{trust $\times$ confidence}
+      admission gate that flags (rather than drops) low-credibility posts.
+\item Ship a React/FastAPI dashboard with a human-in-the-loop Review \&
+      Validate workflow, smart-reply composer, learning-loop capture, and
+      Post-Lifecycle Kanban board.
+\end{enumerate}
+
+\section{Research Questions}
+\begin{description}
+\item[RQ1] Can a domain-fine-tuned ModernBERT encoder beat an out-of-the-box
+      RoBERTa baseline on retail Reddit sentiment, and by how much?
+\item[RQ2] Does a two-pass captioning strategy over an open-weights VLM
+      (Gemma~3 4B) close the accuracy gap to closed multimodal models on
+      retail screenshots?
+\item[RQ3] Does an interpretable, rule-based trust score --- combined with an
+      LLM-graded credibility signal --- yield defensible admission decisions
+      without dropping legitimate complaints?
+\item[RQ4] Does a human-in-the-loop workflow that captures corrections and
+      posted replies produce a training signal usable for future retraining
+      of both the sentiment model and the reply generator?
+\end{description}
+
+\section{Scope}
+The pipeline uses only public Reddit data from 32 curated retail communities.
+It does not consume proprietary Walmart data, is not deployed inside Walmart
+systems, and is not a replacement for authoritative internal customer-service
+tooling.  All evaluations are reported on the ~200-post labelled sample plus
+5-fold out-of-fold cross-validation.

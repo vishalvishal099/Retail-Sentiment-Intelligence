@@ -1,0 +1,33 @@
+\chapter{Conclusions and Recommendations}\label{ch:concl}
+
+This dissertation delivered a working, offline-first, zero-inference-cost
+Retail Sentiment Intelligence pipeline that converts public Reddit posts
+into a trust-weighted, aspect-tagged, priority-ranked feed reviewable by
+analysts.  Against the four research questions posed in
+Chapter~\ref{ch:problem}:
+
+\begin{description}
+\item[RQ1] A fine-tuned ModernBERT with a three-stage curriculum raised
+      macro-F1 from 0.6272 to \textbf{0.7642} overall on the labelled sample
+      and from 0.2778 to \textbf{1.0000} on long posts.
+\item[RQ2] A multi-pass captioning pipeline over Gemma~3 4B reduced
+      hallucination from 50\% to \textbf{0\%} and lifted text extraction from
+      25\% to \textbf{75\%} on 32 retail screenshots.
+\item[RQ3] The interpretable trust score, exposed as three named components
+      with stakeholder-defensible rationales, correctly flagged 12 of 15
+      low-trust posts confirmed by human annotators; low-trust posts are
+      flagged rather than dropped, preserving analyst override.
+\item[RQ4] The HITL workflow logs every correction and posted reply,
+      producing a training signal usable for future retraining of both the
+      sentiment head and the reply generator.
+\end{description}
+
+\section{Recommendations}
+\begin{enumerate}
+\item Adopt an incremental retraining cadence (monthly) using the HITL
+      learning-loop store as the labelling stream.
+\item Add a bilingual pass (Hindi + English) for Indian retail communities
+      when the taxonomy is validated by native-speaker analysts.
+\item Extend Post Lifecycle SLAs into per-team dashboards once analyst
+      volume grows past $\sim$50 posts/day.
+\end{enumerate}

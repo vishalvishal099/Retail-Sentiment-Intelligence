@@ -1,0 +1,28 @@
+\chapter*{Glossary}
+\addcontentsline{toc}{chapter}{Glossary}
+
+\begin{description}\setlength{\itemsep}{4pt}
+\item[Aspect] A retail-relevant topic drawn from a fixed eight-item taxonomy
+      (pricing, product quality, customer service, store experience,
+      online/app, delivery/pickup, returns, account/login) used to tag
+      opinions in each post.
+\item[Curriculum learning] A staged training scheme in which a model is first
+      exposed to easy or general examples and then progressively harder or
+      more domain-specific ones.
+\item[Kanban lifecycle] A four-state workflow board (Triaged --- Acknowledged
+      --- In Progress --- Resolved) used by analysts to track P1/P2 posts.
+\item[Multi-pass captioning] A vision pipeline that runs the caption model
+      twice --- first for a free-form description, then for constrained OCR
+      and retail-signal extraction --- to reduce hallucination and improve
+      text recovery.
+\item[Priority tier] A rule-derived severity label (P1: highest, P2:
+      secondary) applied to trust-weighted negative posts to focus analyst
+      attention.
+\item[Trust score] A 0--1 score combining account-metadata heuristics and an
+      LLM-graded credibility signal; used with model confidence as an
+      admission gate before aggregation.
+\item[Zero-shot NLI] Using a Natural Language Inference model to score
+      whether a hypothesis (``This post is about pricing.'') entails a given
+      premise (the post text), without any task-specific fine-tuning.
+\end{description}
+\cleardoublepage

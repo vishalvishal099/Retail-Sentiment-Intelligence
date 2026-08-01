@@ -1,0 +1,166 @@
+% =====================================================================
+%  BITS Pilani WILP — M.Tech (AI & ML) Final Dissertation
+%  Vishal Singh  |  ID 2020AA05641
+%  Retail Sentiment Intelligence
+%
+%  Build:  pdflatex main -> bibtex main -> pdflatex main -> pdflatex main
+%          (or run ./build.sh)
+% =====================================================================
+\documentclass[12pt,a4paper,openany,oneside]{book}
+
+% ---------- Geometry & typography ----------
+\usepackage[a4paper,left=1.25in,right=1in,top=1in,bottom=1in]{geometry}
+\usepackage{fontspec}                 % xelatex system-font loading
+\setmainfont{Times New Roman}
+\setsansfont{Helvetica}
+\setmonofont{Menlo}[Scale=0.90]
+\usepackage{setspace}
+\onehalfspacing
+\emergencystretch=3em
+\raggedbottom
+
+% ---------- Colour / graphics / tables ----------
+\usepackage[table]{xcolor}
+\definecolor{navy}{HTML}{041E42}
+\definecolor{blue}{HTML}{0071DC}
+\definecolor{zebra}{HTML}{F2F4F7}
+\usepackage{graphicx}
+\graphicspath{{figures/}{../figures/}{../../figures/}}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{caption}
+\captionsetup{font=small,labelfont={bf,color=navy},skip=6pt}
+
+% ---------- Code listings (Python source excerpts in Chapter 5) ----------
+\usepackage{listings}
+\lstdefinestyle{rsipy}{
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\bfseries\color{navy},
+  commentstyle=\itshape\color{gray!70!black},
+  stringstyle=\color{blue},
+  backgroundcolor=\color{gray!5},
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  breakatwhitespace=true,
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+  language=Python,
+  numbers=left,
+  numberstyle=\tiny\color{gray!60},
+  numbersep=6pt,
+  xleftmargin=14pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+}
+\lstset{style=rsipy}
+\renewcommand{\lstlistingname}{Listing}
+
+% ---------- Bibliography ----------
+\usepackage[numbers,square,sort&compress]{natbib}
+
+% ---------- Header / footer ----------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}{}}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ---------- Chapter heading style ----------
+% LaTeX's default book-class \chapter already renders exactly like the
+% classmate's LaTeX report (big "Chapter N" over the title, sits ~1/3
+% down the page).  No titlesec customisation needed.
+
+% ---------- Hyperlinks ----------
+\usepackage[colorlinks=true,linkcolor=navy,citecolor=navy,urlcolor=navy,bookmarksnumbered,unicode]{hyperref}
+\hypersetup{
+  pdftitle={Retail Sentiment Intelligence — Trust-Aware Sentiment Analysis using LLMs},
+  pdfauthor={Vishal Singh},
+  pdfsubject={M.Tech (AI \& ML) Dissertation, BITS Pilani WILP}
+}
+
+% ---------- Convenience commands ----------
+\newcommand{\reporttitle}{Real-Time Social Media Mining and Trust-Aware Sentiment Analysis using Large Language Models for Retail Product Feedback Optimization}
+\newcommand{\student}{Vishal Singh}
+\newcommand{\studentid}{2020AA05641}
+\newcommand{\supervisor}{Mr.\ Varunendra Pratap Singh}
+\newcommand{\supervisordesig}{Principal Software Engineer, Walmart Global Tech}
+\newcommand{\faculty}{Ms.\ Pradnya Kashikar}
+\newcommand{\org}{Walmart Global Tech India Pvt.\ Ltd.}
+\newcommand{\orgloc}{Bengaluru, Karnataka, India}
+\newcommand{\submdate}{August 2026}
+
+% =====================================================================
+\begin{document}
+\pagestyle{empty}
+
+% ================= (i) COVER PAGE  (BITS Appendix A) =================
+\input{frontmatter/cover.tex}
+
+% ================= (ii) TITLE PAGE (BITS Appendix B) =================
+\input{frontmatter/title.tex}
+
+\frontmatter
+\pagestyle{plain}
+
+% ================= (iii) ACKNOWLEDGEMENTS ============================
+\input{frontmatter/acknowledgements.tex}
+
+% ================= (iv) ABSTRACT SHEET (contains signatures) =========
+\input{frontmatter/abstract_sheet.tex}
+
+% ================= (v) TOC / LOF / LOT ===============================
+\tableofcontents
+\cleardoublepage
+\listoffigures
+\cleardoublepage
+\listoftables
+\cleardoublepage
+
+% ================= (vi) LIST OF ABBREVIATIONS =======================
+\input{frontmatter/abbreviations.tex}
+
+% ============================ MAIN MATTER ===========================
+\mainmatter
+\pagestyle{fancy}
+
+\input{chapters/01_introduction.tex}
+\input{chapters/02_problem.tex}
+\input{chapters/03_literature.tex}
+\input{chapters/04_design.tex}
+\input{chapters/05_implementation.tex}
+\input{chapters/06_evaluation.tex}
+\input{chapters/07_tools.tex}
+\input{chapters/08_problems.tex}
+\input{chapters/09_conclusions.tex}
+\input{chapters/10_future.tex}
+
+% ============================ BACK MATTER ===========================
+\appendix
+\renewcommand{\chaptername}{Appendix}
+\input{appendices/A_subreddits.tex}
+\input{appendices/B_reproduction.tex}
+
+% ---------- References ----------
+\backmatter
+\phantomsection
+\addcontentsline{toc}{chapter}{References}
+\bibliographystyle{ieeetr}
+\bibliography{refs}
+
+% ---------- Glossary ----------
+\input{frontmatter/glossary.tex}
+
+% ---------- BITS Checklist ----------
+\input{frontmatter/checklist.tex}
+
+\end{document}

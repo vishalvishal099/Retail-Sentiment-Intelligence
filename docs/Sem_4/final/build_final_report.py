@@ -33,6 +33,25 @@ from docx.oxml import OxmlElement
 OUT_PATH = Path(__file__).parent / "FINAL_REPORT_VishalSingh_2020AA05641.docx"
 FIGURES_DIR = Path(__file__).parent.parent / "figures"
 
+# ── Typography (thesis-style, LaTeX book-class-like) ──
+BODY_FONT = "Times New Roman"
+HEAD_FONT = "Times New Roman"
+BODY_SIZE = 12         # main text
+BODY_LEADING = 1.5     # 1.5 line spacing
+H1_SIZE = 17           # section headings inside chapters (e.g. 1.1)
+H2_SIZE = 14           # subsection (e.g. 5.1.1)
+H3_SIZE = 12           # sub-subsection
+CHAP_LABEL_SIZE = 24   # 'Chapter N' label
+CHAP_TITLE_SIZE = 24   # chapter title, same as label
+CAPTION_SIZE = 11
+TABLE_BODY_SIZE = 11
+TABLE_HEAD_SIZE = 11
+NAVY_RGB = RGBColor(0x04, 0x1E, 0x42)
+
+# LaTeX book class inhibits first-line indent immediately after a heading, then
+# indents every subsequent paragraph.  We emulate that behaviour with a flag.
+_JUST_HEADED = [False]
+
 
 # ───────────────────────── helpers ─────────────────────────
 
@@ -96,8 +115,8 @@ def add_toc_link(doc, text: str, bookmark: str, indent: bool = False, size: int 
     r = OxmlElement("w:r")
     rpr = OxmlElement("w:rPr")
     rFont = OxmlElement("w:rFonts")
-    rFont.set(qn("w:ascii"), "Calibri")
-    rFont.set(qn("w:hAnsi"), "Calibri")
+    rFont.set(qn("w:ascii"), BODY_FONT)
+    rFont.set(qn("w:hAnsi"), BODY_FONT)
     rpr.append(rFont)
     color = OxmlElement("w:color"); color.set(qn("w:val"), "0563C1")
     rpr.append(color)
@@ -116,13 +135,17 @@ def add_toc_link(doc, text: str, bookmark: str, indent: bool = False, size: int 
 def add_caption(doc, text: str, bookmark: str | None = None) -> None:
     p = doc.add_paragraph()
     pf = p.paragraph_format
+    pf.space_before = Pt(4)
     pf.space_after = Pt(4)
     pf.line_spacing = 1.2
     pf.keep_with_next = True
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
     run.bold = True
-    run.font.name = "Calibri"
-    run.font.size = Pt(10)
+    run.italic = True
+    run.font.name = HEAD_FONT
+    run.font.size = Pt(CAPTION_SIZE)
+    run.font.color.rgb = RGBColor(0x04, 0x1E, 0x42)
     if bookmark:
         _add_bookmark(p, bookmark)
 
@@ -130,62 +153,100 @@ def add_caption(doc, text: str, bookmark: str | None = None) -> None:
 def add_heading(doc, text: str, level: int = 1, bookmark: str | None = None) -> None:
     p = doc.add_paragraph()
     pf = p.paragraph_format
-    pf.space_before = Pt(14 if level == 1 else 10)
-    pf.space_after = Pt(6)
+    pf.space_before = Pt(20 if level == 1 else 14 if level == 2 else 10)
+    pf.space_after = Pt(10 if level == 1 else 6)
     pf.keep_with_next = True
     pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
     run = p.add_run(text)
     run.bold = True
-    run.font.name = "Calibri"
+    run.font.name = HEAD_FONT
     if level == 1:
-        run.font.size = Pt(15)
+        run.font.size = Pt(H1_SIZE)
     elif level == 2:
-        run.font.size = Pt(12.5)
+        run.font.size = Pt(H2_SIZE)
     else:
-        run.font.size = Pt(11)
-    run.font.color.rgb = RGBColor(0x04, 0x1E, 0x42)
+        run.font.size = Pt(H3_SIZE)
+    run.font.color.rgb = NAVY_RGB
     _set_outline_level(p, max(0, level - 1))
     if bookmark:
         _add_bookmark(p, bookmark)
+    _JUST_HEADED[0] = True
 
 
 def add_para(doc, text: str, bold: bool = False, italic: bool = False,
-             size: int = 11, align=None, space_after: int = 6, justify: bool = True) -> None:
+             size: int | float | None = None, align=None, space_after: int = 0,
+             justify: bool = True, first_line_indent: bool = True) -> None:
     p = doc.add_paragraph()
     pf = p.paragraph_format
     pf.space_after = Pt(space_after)
-    pf.line_spacing = 1.25
+    pf.line_spacing = BODY_LEADING
+    apply_indent = first_line_indent and align is None and justify and not _JUST_HEADED[0]
+    if apply_indent:
+        pf.first_line_indent = Inches(0.28)
     if align is not None:
         p.alignment = align
     elif justify:
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     run = p.add_run(text)
-    run.font.name = "Calibri"
-    run.font.size = Pt(size)
+    run.font.name = BODY_FONT
+    run.font.size = Pt(BODY_SIZE if size is None else size)
     run.bold = bold
     run.italic = italic
+    if text.strip():
+        _JUST_HEADED[0] = False
+
+
+def add_rich_para(doc, segments: list[tuple], size: int | float | None = None,
+                  align=None, space_after: int = 0, justify: bool = True,
+                  first_line_indent: bool = True) -> None:
+    """Add a paragraph containing multiple runs.
+    Each segment is (text, bold, italic) or (text, bold).  Empty segments are skipped."""
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_after = Pt(space_after)
+    pf.line_spacing = BODY_LEADING
+    apply_indent = first_line_indent and align is None and justify and not _JUST_HEADED[0]
+    if apply_indent:
+        pf.first_line_indent = Inches(0.28)
+    if align is not None:
+        p.alignment = align
+    elif justify:
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    fsize = Pt(BODY_SIZE if size is None else size)
+    for seg in segments:
+        if not seg or not seg[0]:
+            continue
+        text = seg[0]
+        bold = seg[1] if len(seg) > 1 else False
+        italic = seg[2] if len(seg) > 2 else False
+        run = p.add_run(text)
+        run.font.name = BODY_FONT
+        run.font.size = fsize
+        run.bold = bold
+        run.italic = italic
+    _JUST_HEADED[0] = False
 
 
 def add_bullet(doc, text: str) -> None:
     p = doc.add_paragraph(style="List Bullet")
     pf = p.paragraph_format
-    pf.space_after = Pt(3)
-    pf.line_spacing = 1.2
+    pf.space_after = Pt(4)
+    pf.line_spacing = 1.4
     run = p.runs[0] if p.runs else p.add_run("")
     run.text = text
-    run.font.name = "Calibri"
-    run.font.size = Pt(11)
+    run.font.name = BODY_FONT
+    run.font.size = Pt(BODY_SIZE)
 
 
 def add_numbered(doc, text: str) -> None:
     p = doc.add_paragraph(style="List Number")
     pf = p.paragraph_format
-    pf.space_after = Pt(3)
-    pf.line_spacing = 1.2
+    pf.space_after = Pt(4)
+    pf.line_spacing = 1.4
     run = p.runs[0] if p.runs else p.add_run("")
     run.text = text
-    run.font.name = "Calibri"
-    run.font.size = Pt(11)
+    run.font.name = BODY_FONT
+    run.font.size = Pt(BODY_SIZE)
 
 
 def add_table(doc, headers: list[str], rows: list[list[str]],
@@ -203,8 +264,8 @@ def add_table(doc, headers: list[str], rows: list[list[str]],
         p.paragraph_format.line_spacing = 1.15
         run = p.add_run(h)
         run.bold = True
-        run.font.name = "Calibri"
-        run.font.size = Pt(10)
+        run.font.name = HEAD_FONT
+        run.font.size = Pt(TABLE_HEAD_SIZE)
         run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
         set_cell_bg(hdr_cells[i], header_bg)
         set_cell_margins(hdr_cells[i], top=100, bottom=100, left=110, right=110)
@@ -218,8 +279,8 @@ def add_table(doc, headers: list[str], rows: list[list[str]],
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.line_spacing = 1.18
             run = p.add_run(str(val))
-            run.font.name = "Calibri"
-            run.font.size = Pt(10)
+            run.font.name = BODY_FONT
+            run.font.size = Pt(TABLE_BODY_SIZE)
             cells[c_idx].vertical_alignment = WD_ALIGN_VERTICAL.TOP
             set_cell_margins(cells[c_idx], top=70, bottom=70, left=110, right=110)
             if zebra_on:
@@ -246,12 +307,12 @@ def add_image(doc, filename: str, caption: str, width_in: float = 6.3) -> None:
     run.add_picture(str(path), width=Inches(width_in))
     cap = doc.add_paragraph()
     cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    cap.paragraph_format.space_after = Pt(12)
+    cap.paragraph_format.space_after = Pt(14)
     cap.paragraph_format.line_spacing = 1.15
     crun = cap.add_run(caption)
     crun.italic = True
-    crun.font.name = "Calibri"
-    crun.font.size = Pt(10)
+    crun.font.name = HEAD_FONT
+    crun.font.size = Pt(CAPTION_SIZE)
     crun.font.color.rgb = RGBColor(0x04, 0x1E, 0x42)
 
 
@@ -273,12 +334,15 @@ def set_page_numbering(section, fmt: str = "decimal", start: int | None = None) 
 
 def setup_page_chrome(doc) -> None:
     for section in doc.sections:
-        section.top_margin = Inches(0.95)
-        section.bottom_margin = Inches(0.95)
-        section.left_margin = Inches(1.0)
+        # A4 (like Gobind's LaTeX report)
+        section.page_height = Inches(11.69)
+        section.page_width = Inches(8.27)
+        section.top_margin = Inches(1.0)
+        section.bottom_margin = Inches(1.0)
+        section.left_margin = Inches(1.25)
         section.right_margin = Inches(1.0)
         section.header_distance = Inches(0.5)
-        section.footer_distance = Inches(0.45)
+        section.footer_distance = Inches(0.5)
         hp = section.header.paragraphs[0]
         hp.text = ""
         fp = section.footer.paragraphs[0]
@@ -288,7 +352,11 @@ def setup_page_chrome(doc) -> None:
         fld.set(qn("w:instr"), "PAGE")
         inner = OxmlElement("w:r")
         rpr = OxmlElement("w:rPr")
-        sz = OxmlElement("w:sz"); sz.set(qn("w:val"), "20")
+        rFonts = OxmlElement("w:rFonts")
+        rFonts.set(qn("w:ascii"), BODY_FONT)
+        rFonts.set(qn("w:hAnsi"), BODY_FONT)
+        rpr.append(rFonts)
+        sz = OxmlElement("w:sz"); sz.set(qn("w:val"), "22")
         rpr.append(sz)
         inner.append(rpr)
         txt = OxmlElement("w:t"); txt.text = "1"
@@ -297,28 +365,84 @@ def setup_page_chrome(doc) -> None:
         fp._p.append(fld)
 
 
+# ───────────────────────── chapter helper ─────────────────────────
+
+_CHAP_NO = [0]
+
+
+def add_chapter(doc, title: str, bookmark: str | None = None) -> None:
+    """Start a new page and render a LaTeX book-class-style chapter header:
+       'Chapter N' and the chapter title on two separate lines at the same 24pt bold."""
+    _CHAP_NO[0] += 1
+    doc.add_page_break()
+    # push chapter title ~1.4 inches down the page like LaTeX book class
+    spacer = doc.add_paragraph()
+    spacer.paragraph_format.space_after = Pt(0)
+    spacer.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+    for _ in range(6):
+        spacer_run = spacer.add_run("\n")
+        spacer_run.font.size = Pt(12)
+    lab = doc.add_paragraph()
+    lab.paragraph_format.space_before = Pt(0)
+    lab.paragraph_format.space_after = Pt(12)
+    lab.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+    lab.paragraph_format.first_line_indent = Inches(0)
+    r = lab.add_run(f"Chapter {_CHAP_NO[0]}")
+    r.bold = True
+    r.font.name = HEAD_FONT
+    r.font.size = Pt(CHAP_LABEL_SIZE)
+    r.font.color.rgb = NAVY_RGB
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(30)
+    p.paragraph_format.keep_with_next = True
+    p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+    p.paragraph_format.first_line_indent = Inches(0)
+    run = p.add_run(title)
+    run.bold = True
+    run.font.name = HEAD_FONT
+    run.font.size = Pt(CHAP_TITLE_SIZE)
+    run.font.color.rgb = NAVY_RGB
+    _set_outline_level(p, 0)
+    if bookmark:
+        _add_bookmark(p, bookmark)
+
+
 # ───────────────────────── build ─────────────────────────
 
 def build() -> None:
     doc = Document()
 
     style = doc.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(11)
+    style.font.name = BODY_FONT
+    style.font.size = Pt(BODY_SIZE)
     pf = style.paragraph_format
-    pf.line_spacing = 1.25
+    pf.line_spacing = BODY_LEADING
     pf.space_after = Pt(6)
+    # Ensure East-Asian font slot also uses Times New Roman so Word applies it
+    from docx.oxml.ns import qn as _qn
+    rpr = style.element.get_or_add_rPr()
+    rFonts = rpr.find(_qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rpr.insert(0, rFonts)
+    rFonts.set(_qn("w:ascii"), BODY_FONT)
+    rFonts.set(_qn("w:hAnsi"), BODY_FONT)
+    rFonts.set(_qn("w:cs"), BODY_FONT)
 
     for section in doc.sections:
-        section.top_margin = Inches(0.95)
-        section.bottom_margin = Inches(0.95)
-        section.left_margin = Inches(1.0)
+        section.page_height = Inches(11.69)
+        section.page_width = Inches(8.27)
+        section.top_margin = Inches(1.0)
+        section.bottom_margin = Inches(1.0)
+        section.left_margin = Inches(1.25)
         section.right_margin = Inches(1.0)
     setup_page_chrome(doc)
     # Front matter uses lower-case roman page numbers (i, ii, iii, ...)
     set_page_numbering(doc.sections[0], fmt="lowerRoman", start=1)
 
     C = WD_ALIGN_PARAGRAPH.CENTER
+    R = WD_ALIGN_PARAGRAPH.RIGHT
     TITLE = ("REAL-TIME SOCIAL MEDIA MINING AND TRUST-AWARE SENTIMENT ANALYSIS "
              "USING LARGE LANGUAGE MODELS FOR RETAIL PRODUCT FEEDBACK OPTIMIZATION")
 
@@ -387,23 +511,46 @@ def build() -> None:
     # ══════════════ (iii) ACKNOWLEDGEMENTS ══════════════
     add_heading(doc, "Acknowledgements", level=1, bookmark="sec_ack")
     add_para(doc,
-        "I express my sincere gratitude to the Head of my organisation, Walmart Global Tech, "
-        "Bengaluru, for providing the environment and encouragement that made this dissertation "
-        "possible.")
+        "I take this opportunity to thank everyone who supported me during the course of this "
+        "dissertation.")
+    add_rich_para(doc, [
+        ("I am grateful to the leadership at ", False),
+        ("Walmart Global Tech India", True),
+        (" for providing an environment that encouraged learning and experimentation, and "
+         "for allowing me to pursue this industry-linked academic project alongside my regular "
+         "engineering responsibilities.", False),
+    ])
+    add_rich_para(doc, [
+        ("I sincerely thank my Supervisor, ", False),
+        ("Mr. Varunendra Pratap Singh", True),
+        (" (Principal Software Engineer, Walmart Global Tech), for his day-to-day technical "
+         "guidance, patient reviews of my design and evaluation choices, and for continually "
+         "pushing me to raise the standard of the work. I also thank the Additional Examiner, "
+         "assigned by the organisation, for the rigorous mid-project scrutiny that "
+         "substantially improved the evaluation methodology and the trust-score design.", False),
+    ])
     add_para(doc,
-        "I am deeply thankful to my supervisor, Mr. Varunendra Pratap Singh, Principal Software "
-        "Engineer at Walmart Global Tech, and to the Additional Examiner, for their continual "
-        "technical guidance, critical review of my design and evaluation choices, and for "
-        "encouraging an honest, defensible treatment of results throughout the project.")
+        "I thank my colleagues and professional experts on the retail domain at Walmart Global "
+        "Tech for helping me translate free-form Reddit posts into an operational, "
+        "eight-aspect retail taxonomy that drives the aggregation and alerting stages of this "
+        "system.")
+    add_rich_para(doc, [
+        ("I am deeply grateful to my Faculty Mentor, ", False),
+        ("Ms. Pradnya Kashikar", True),
+        (" (BITS Pilani, WILP Division), for her guidance, timely feedback, and academic "
+         "oversight from the abstract-outline stage through mid-semester review to final "
+         "submission, and for ensuring the work conformed to the academic rigour expected of "
+         "an M.Tech dissertation.", False),
+    ])
     add_para(doc,
-        "I acknowledge the Professional Expert / in-charge of the project area and the faculty "
-        "mentor assigned by BITS Pilani WILP Division for periodic review of my progress and for "
-        "ensuring the work conformed to the academic rigour expected of an M.Tech dissertation.")
+        "Finally, I thank my family and friends for their patience and encouragement over the "
+        "course of this programme, and I dedicate this effort to them.")
     add_para(doc,
-        "Finally, I thank my colleagues and family for their patience and support over the two "
-        "semesters during which this dissertation was carried out. All experiments in this report "
-        "use only public data; no proprietary Walmart data or internal systems were used.")
+        "All experiments reported in this dissertation use only publicly available data; no "
+        "proprietary Walmart data or internal systems were used at any stage.")
     add_para(doc, "", space_after=18)
+    add_para(doc, "Vishal Singh", bold=True, size=12, justify=False, space_after=0)
+    add_para(doc, "Bengaluru, November 2026", size=12, justify=False, space_after=18)
     sig = doc.add_table(rows=2, cols=1)
     sig.autofit = True
     sig.cell(0, 0).text = "Signature of the Student"
@@ -431,7 +578,7 @@ def build() -> None:
         ["Name & Designation of Supervisor and Additional Examiner",
          "Mr. Varunendra Pratap Singh, Principal Software Engineer, Walmart Global Tech "
          "(Supervisor); Additional Examiner as assigned by the organisation"],
-        ["Name of the Faculty Mentor", "As assigned by BITS Pilani WILP Division"],
+        ["Name of the Faculty Mentor", "Ms. Pradnya Kashikar, BITS Pilani WILP Division"],
         ["Key Words",
          "Sentiment Analysis; Aspect-Based Opinion Mining; Large Language Models; ModernBERT; "
          "Zero-shot NLI; Trust / Credibility Filtering; Multimodal Vision; Reddit; Retail Analytics"],
@@ -481,17 +628,18 @@ def build() -> None:
         ("Certificate", "sec_cert", False),
         ("Acknowledgements", "sec_ack", False),
         ("Abstract", "sec_abstract", False),
-        ("1. Introduction", "sec_1", False),
+        ("Chapter 1  Introduction", "sec_1", False),
         ("1.1  Broad Area of Work", "sec_1_1", True),
         ("1.2  Motivation", "sec_1_2", True),
         ("1.3  Contributions of this Dissertation", "sec_1_3", True),
-        ("2. Problem Statement and Objectives", "sec_2", False),
-        ("3. Literature Survey", "sec_3", False),
-        ("4. System Design and Architecture", "sec_4", False),
+        ("1.4  Organisation of the Report", "sec_1_4", True),
+        ("Chapter 2  Problem Statement and Objectives", "sec_2", False),
+        ("Chapter 3  Literature Survey", "sec_3", False),
+        ("Chapter 4  System Design and Architecture", "sec_4", False),
         ("4.1  Design Principles", "sec_4_1", True),
         ("4.2  Layered Architecture", "sec_4_2", True),
         ("4.3  End-to-End Pipeline Flow", "sec_4_3", True),
-        ("5. Implementation", "sec_5", False),
+        ("Chapter 5  Implementation", "sec_5", False),
         ("5.1  Data Ingestion and Pre-processing", "sec_5_1", True),
         ("5.2  Trust-Score Module", "sec_5_2", True),
         ("5.3  Sentiment Classification (ModernBERT)", "sec_5_3", True),
@@ -506,16 +654,16 @@ def build() -> None:
         ("5.12  Post Lifecycle (Kanban Workflow)", "sec_5_12", True),
         ("5.13  Insights and Competitor Analysis", "sec_5_13", True),
         ("5.14  Storage Layer", "sec_5_14", True),
-        ("6. Evaluation and Results", "sec_6", False),
+        ("Chapter 6  Evaluation and Results", "sec_6", False),
         ("6.1  Sentiment Model Evaluation", "sec_6_1", True),
         ("6.2  Vision Module Evaluation", "sec_6_2", True),
         ("6.3  Trust-Score Behaviour", "sec_6_3", True),
-        ("7. Tools, Technologies, and Configuration", "sec_7", False),
-        ("8. Problems Encountered and Mitigations", "sec_8", False),
-        ("9. Conclusions and Recommendations", "sec_9", False),
-        ("10. Future Work", "sec_10", False),
-        ("11. Glossary and Abbreviations", "sec_11", False),
-        ("12. References", "sec_12", False),
+        ("Chapter 7  Tools, Technologies, and Configuration", "sec_7", False),
+        ("Chapter 8  Problems Encountered and Mitigations", "sec_8", False),
+        ("Chapter 9  Conclusions and Recommendations", "sec_9", False),
+        ("Chapter 10  Future Work", "sec_10", False),
+        ("Glossary and Abbreviations", "sec_11", False),
+        ("References", "sec_12", False),
         ("Appendix A — Curated Subreddit Coverage", "app_a", False),
         ("Appendix B — Reproduction Commands", "app_b", False),
         ("Checklist of Items for the Final Report", "sec_checklist", False),
@@ -523,8 +671,8 @@ def build() -> None:
     for text, bm, indent in toc:
         add_toc_link(doc, text, bm, indent=indent)
     add_para(doc, "", space_after=8)
-    add_para(doc, "List of Figures and Tables", bold=True, size=11, space_after=4)
-    ft = [
+    add_para(doc, "List of Figures", bold=True, size=11, space_after=4)
+    figs = [
         ("Figure 1: Layered System Architecture", "fig_1"),
         ("Figure 2: End-to-End Pipeline Flow", "fig_2"),
         ("Figure 3: Trust-Score Composition and P1/P2 Tier Rules", "fig_3"),
@@ -539,6 +687,12 @@ def build() -> None:
         ("Figure 12: Vision Multi-Pass Anti-Hallucination Pipeline", "fig_12"),
         ("Figure 13: Alert Engine and Notification Routing", "fig_13"),
         ("Figure 14: Sentiment Macro-F1 — RoBERTa vs ModernBERT", "fig_14"),
+    ]
+    for text, bm in figs:
+        add_toc_link(doc, text, bm)
+    add_para(doc, "", space_after=8)
+    add_para(doc, "List of Tables", bold=True, size=11, space_after=4)
+    tbls = [
         ("Table 1: Eight-Aspect Retail Taxonomy", "tbl_1"),
         ("Table 2: Sentiment Model Comparison (out-of-fold CV)", "tbl_2"),
         ("Table 3: Per-Length-Bucket Sentiment F1", "tbl_3"),
@@ -547,14 +701,16 @@ def build() -> None:
         ("Table 6: Problems Encountered and Mitigations", "tbl_6"),
         ("Table 7: Curated Subreddit Coverage", "tbl_7"),
     ]
-    for text, bm in ft:
+    for text, bm in tbls:
         add_toc_link(doc, text, bm)
 
     # ── Section break: main matter restarts at Arabic page 1 ──
     main_section = doc.add_section(WD_SECTION.NEW_PAGE)
-    main_section.top_margin = Inches(0.95)
-    main_section.bottom_margin = Inches(0.95)
-    main_section.left_margin = Inches(1.0)
+    main_section.page_height = Inches(11.69)
+    main_section.page_width = Inches(8.27)
+    main_section.top_margin = Inches(1.0)
+    main_section.bottom_margin = Inches(1.0)
+    main_section.left_margin = Inches(1.25)
     main_section.right_margin = Inches(1.0)
     set_page_numbering(main_section, fmt="decimal", start=1)
 
@@ -588,7 +744,7 @@ def build() -> None:
 
 
     # ══════════════ 1. INTRODUCTION ══════════════
-    add_heading(doc, "1. Introduction", level=1, bookmark="sec_1")
+    add_chapter(doc, "Introduction", bookmark="sec_1")
 
     add_heading(doc, "1.1  Broad Area of Work", level=2, bookmark="sec_1_1")
     add_para(doc,
@@ -643,8 +799,24 @@ def build() -> None:
                       "roadmap to automatic replies, closing the loop between AI output and "
                       "analyst action.")
 
+    add_heading(doc, "1.4  Organisation of the Report", level=2, bookmark="sec_1_4")
+    add_para(doc,
+        "The remainder of this report is organised into nine further chapters. Chapter 2 states "
+        "the problem precisely and sets out the objectives and scope of the dissertation. "
+        "Chapter 3 surveys the relevant literature on transformer sentiment classification, "
+        "aspect-based opinion mining, multimodal vision-language models, and social-media "
+        "credibility. Chapter 4 presents the layered system design and the end-to-end pipeline "
+        "flow. Chapter 5 describes the implementation of each module in detail — ingestion, "
+        "trust scoring, sentiment, aspects, vision, aggregation and alerting, the dashboard, and "
+        "the human-in-the-loop and learning-loop workflows. Chapter 6 reports the experimental "
+        "evaluation and results for the sentiment, vision, and trust components. Chapter 7 "
+        "documents the tools, technologies, and configuration used. Chapter 8 records the "
+        "problems encountered during the work and the mitigations adopted. Chapter 9 draws "
+        "conclusions and recommendations, and Chapter 10 outlines directions for future work. "
+        "A glossary, the references, and supporting appendices close the report.")
+
     # ══════════════ 2. PROBLEM STATEMENT ══════════════
-    add_heading(doc, "2. Problem Statement and Objectives", level=1, bookmark="sec_2")
+    add_chapter(doc, "Problem Statement and Objectives", bookmark="sec_2")
     add_para(doc,
         "Manual monitoring of retail-related Reddit communities cannot keep pace with the daily "
         "volume of posts, and conventional rule-based or lexicon-based sentiment systems perform "
@@ -677,7 +849,7 @@ def build() -> None:
                       "final dissertation.")
 
     # ══════════════ 3. LITERATURE SURVEY ══════════════
-    add_heading(doc, "3. Literature Survey", level=1, bookmark="sec_3")
+    add_chapter(doc, "Literature Survey", bookmark="sec_3")
     add_para(doc,
         "The survey covered three strands. First, transformer encoders for sentiment: RoBERTa "
         "fine-tuned on TweetEval [2] remains a strong public baseline for short social text, but "
@@ -712,7 +884,7 @@ def build() -> None:
         "drawn from industry reports on social usage and expected response times [14][15][16].")
 
     # ══════════════ 4. SYSTEM DESIGN ══════════════
-    add_heading(doc, "4. System Design and Architecture", level=1, bookmark="sec_4")
+    add_chapter(doc, "System Design and Architecture", bookmark="sec_4")
 
     add_heading(doc, "4.1  Design Principles", level=2, bookmark="sec_4_1")
     add_para(doc, "Four principles governed every design decision:", bold=True)
@@ -761,7 +933,7 @@ def build() -> None:
         "except for an initial back-fill of up to 90 days per community on first run.")
 
     # ══════════════ 5. IMPLEMENTATION ══════════════
-    add_heading(doc, "5. Implementation", level=1, bookmark="sec_5")
+    add_chapter(doc, "Implementation", bookmark="sec_5")
 
     add_heading(doc, "5.1  Data Ingestion and Pre-processing", level=2, bookmark="sec_5_1")
     add_para(doc,
@@ -1139,7 +1311,7 @@ def build() -> None:
         "than a rewrite.")
 
     # ══════════════ 6. EVALUATION ══════════════
-    add_heading(doc, "6. Evaluation and Results", level=1, bookmark="sec_6")
+    add_chapter(doc, "Evaluation and Results", bookmark="sec_6")
 
     add_heading(doc, "6.1  Sentiment Model Evaluation", level=2, bookmark="sec_6_1")
     add_para(doc,
@@ -1219,7 +1391,7 @@ def build() -> None:
         "score drive the metadata sub-score; age and karma will populate on the paid tier.")
 
     # ══════════════ 7. TOOLS ══════════════
-    add_heading(doc, "7. Tools, Technologies, and Configuration", level=1, bookmark="sec_7")
+    add_chapter(doc, "Tools, Technologies, and Configuration", bookmark="sec_7")
     add_caption(doc, "Table 5: Tools and Technologies", bookmark="tbl_5")
     add_table(doc,
         ["Layer", "Technology", "Key decision"],
@@ -1238,7 +1410,7 @@ def build() -> None:
         col_widths=[1.2, 2.6, 2.5])
 
     # ══════════════ 8. PROBLEMS ══════════════
-    add_heading(doc, "8. Problems Encountered and Mitigations", level=1, bookmark="sec_8")
+    add_chapter(doc, "Problems Encountered and Mitigations", bookmark="sec_8")
     add_caption(doc, "Table 6: Problems Encountered and Mitigations", bookmark="tbl_6")
     add_table(doc,
         ["Problem", "Mitigation"],
@@ -1261,7 +1433,7 @@ def build() -> None:
         col_widths=[3.0, 3.3])
 
     # ══════════════ 9. CONCLUSIONS ══════════════
-    add_heading(doc, "9. Conclusions and Recommendations", level=1, bookmark="sec_9")
+    add_chapter(doc, "Conclusions and Recommendations", bookmark="sec_9")
     add_para(doc,
         "This dissertation delivered a complete, working prototype that converts a noisy public "
         "Reddit stream into a structured, aspect-tagged, trust-weighted retail brand-health feed, "
@@ -1283,7 +1455,7 @@ def build() -> None:
         "change rather than a redesign.")
 
     # ══════════════ 10. FUTURE WORK ══════════════
-    add_heading(doc, "10. Future Work", level=1, bookmark="sec_10")
+    add_chapter(doc, "Future Work", bookmark="sec_10")
     add_bullet(doc, "Azure Cosmos DB migration for production-grade, partitioned storage.")
     add_bullet(doc, "Twitter/X integration as a second data source once the Reddit pipeline is stable.")
     add_bullet(doc, "3-seed ModernBERT ensemble (+0.01–0.03 F1, tighter variance) and a blind "
@@ -1302,7 +1474,7 @@ def build() -> None:
                     "reply generation, reserving the review queue for low-confidence cases.")
 
     # ══════════════ 11. GLOSSARY AND ABBREVIATIONS ══════════════
-    add_heading(doc, "11. Glossary and Abbreviations", level=1, bookmark="sec_11")
+    add_heading(doc, "Glossary and Abbreviations", level=1, bookmark="sec_11")
     add_para(doc,
         "The following technical terms and acronyms are used in this report; the section in which "
         "each is first introduced is indicated where relevant.", size=10, space_after=6)
@@ -1332,7 +1504,7 @@ def build() -> None:
         col_widths=[1.4, 4.9])
 
     # ══════════════ 12. REFERENCES ══════════════
-    add_heading(doc, "12. References", level=1, bookmark="sec_12")
+    add_heading(doc, "References", level=1, bookmark="sec_12")
     add_para(doc,
         "References are listed in order of first citation. The serial number of each reference "
         "corresponds to the bracketed number [n] used in the body of the report (principally in "
@@ -1389,6 +1561,14 @@ def build() -> None:
 
     # ══════════════ APPENDIX B ══════════════
     add_heading(doc, "Appendix B — Reproduction Commands", level=1, bookmark="app_b")
+    add_para(doc, "Source code repository:", bold=True, space_after=2)
+    add_para(doc,
+        "https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence", size=10)
+    add_para(doc, "Clone and set up the environment:", bold=True, space_after=2)
+    add_para(doc,
+        "git clone https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence.git && "
+        "cd Retail_Sentiment_Intelligence && conda create -n rsi python=3.11 -y && "
+        "conda activate rsi && pip install -r requirements.txt", size=10)
     add_para(doc, "Fine-tune ModernBERT (offline):", bold=True, space_after=2)
     add_para(doc,
         "HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 python "

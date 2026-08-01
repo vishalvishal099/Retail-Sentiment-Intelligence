@@ -1,0 +1,51 @@
+\chapter{Reproduction Commands}\label{app:repro}
+
+\section{Source Code Repository}\label{sec:repo}
+The complete source code, configuration, evaluation notebooks, and this
+report are hosted at:
+\begin{verbatim}
+https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence
+\end{verbatim}
+To obtain a working copy:
+\begin{verbatim}
+$ git clone https://gecgithub01.walmart.com/v0s01jh/\
+    Retail_Sentiment_Intelligence.git
+$ cd Retail_Sentiment_Intelligence
+\end{verbatim}
+All commands in the sections below are relative to this repository root.
+
+\section{Environment}
+\begin{verbatim}
+$ python -V
+Python 3.11.9
+$ conda create -n rsi python=3.11 -y
+$ conda activate rsi
+$ pip install -r requirements.txt
+\end{verbatim}
+
+\section{Full pipeline}
+\begin{verbatim}
+$ ./start.sh              # brings up FastAPI (:8001) + Vite (:3003)
+\end{verbatim}
+
+\section{Regenerate figures}
+\begin{verbatim}
+$ python docs/Sem_4/generate_diagrams.py           # figs 1--4
+$ python docs/Sem_4/final/generate_final_diagrams.py  # figs 5--14
+\end{verbatim}
+
+\section{Retrain sentiment model}
+\begin{verbatim}
+$ python scripts/train_modernbert_sentiment.py --config config/models.yaml
+\end{verbatim}
+
+\section{Rebuild this report (LaTeX)}
+\begin{verbatim}
+$ cd docs/Sem_4/final/latex
+$ ./build.sh
+\end{verbatim}
+
+\section{Rebuild the .docx working draft}
+\begin{verbatim}
+$ /opt/miniconda3/bin/python docs/Sem_4/final/build_final_report.py
+\end{verbatim}

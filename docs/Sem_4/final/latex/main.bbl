@@ -1,0 +1,63 @@
+\begin{thebibliography}{10}
+
+\bibitem{devlin2019bert}
+J.~Devlin, M.-W. Chang, K.~Lee, and K.~Toutanova, ``{BERT}: Pre-training of
+  deep bidirectional transformers for language understanding,'' in {\em Proc.
+  NAACL-HLT}, 2019.
+
+\bibitem{liu2019roberta}
+Y.~Liu {\em et~al.}, ``{RoBERTa}: A robustly optimized {BERT} pretraining
+  approach,'' {\em arXiv preprint arXiv:1907.11692}, 2019.
+
+\bibitem{loureiro2022timelms}
+D.~Loureiro {\em et~al.}, ``{TimeLMs}: Diachronic language models from
+  {Twitter},'' in {\em Proc. ACL Demos}, 2022.
+
+\bibitem{warner2024modernbert}
+B.~Warner {\em et~al.}, ``{ModernBERT}: Smarter, better, faster, longer -- a
+  modern bidirectional encoder,'' {\em arXiv preprint arXiv:2412.13663}, 2024.
+
+\bibitem{pontiki2014semeval}
+M.~Pontiki {\em et~al.}, ``{SemEval-2014} task 4: Aspect based sentiment
+  analysis,'' in {\em Proc. SemEval}, 2014.
+
+\bibitem{yin2019benchmarking}
+W.~Yin, J.~Hay, and D.~Roth, ``Benchmarking zero-shot text classification:
+  Datasets, evaluation and entailment approach,'' in {\em Proc. EMNLP-IJCNLP},
+  2019.
+
+\bibitem{radford2021learning}
+A.~Radford {\em et~al.}, ``Learning transferable visual models from natural
+  language supervision,'' in {\em Proc. ICML}, 2021.
+
+\bibitem{li2022blip}
+J.~Li {\em et~al.}, ``{BLIP}: Bootstrapping language-image pre-training for
+  unified vision-language understanding and generation,'' in {\em Proc. ICML},
+  2022.
+
+\bibitem{gemma3_2025}
+{Google DeepMind}, ``{Gemma 3}: Multimodal open weights models,'' tech. rep.,
+  Google DeepMind, 2025.
+
+\bibitem{wei2022cot}
+J.~Wei {\em et~al.}, ``Chain-of-thought prompting elicits reasoning in large
+  language models,'' in {\em Proc. NeurIPS}, 2022.
+
+\bibitem{selfcheck2023}
+P.~Manakul, A.~Liusie, and M.~J.~F. Gales, ``{SelfCheckGPT}: Zero-resource
+  black-box hallucination detection for generative large language models,''
+  {\em Proc. EMNLP}, 2023.
+
+\bibitem{ott2011finding}
+M.~Ott, Y.~Choi, C.~Cardie, and J.~T. Hancock, ``Finding deceptive opinion spam
+  by any stretch of the imagination,'' in {\em Proc. ACL}, 2011.
+
+\bibitem{akoglu2013opinion}
+L.~Akoglu, R.~Chandy, and C.~Faloutsos, ``Opinion fraud detection in online
+  reviews by network effects,'' in {\em Proc. ICWSM}, 2013.
+
+\bibitem{zhao2023detect}
+Y.~Zhao {\em et~al.}, ``A survey of fake news detection methods with bert-based
+  models,'' {\em IEEE Transactions on Big Data}, 2023.
+
+\end{thebibliography}

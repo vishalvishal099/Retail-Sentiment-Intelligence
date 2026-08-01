@@ -1,0 +1,61 @@
+\chapter{Evaluation and Results}\label{ch:eval}
+
+\section{Sentiment Model Evaluation}\label{sec:senteval}
+The gold set is 200 hand-labelled retail Reddit posts (74 negative, 66
+neutral, 60 positive) drawn from six subreddits.  Evaluation uses 5-fold
+out-of-fold cross-validation.  Table~\ref{tab:sent} compares the
+out-of-the-box RoBERTa baseline with the fine-tuned ModernBERT.
+
+\begin{table}[htbp]\centering
+\caption{Sentiment model comparison (5-fold out-of-fold cross-validation).}\label{tab:sent}
+\begin{tabular}{@{}lccc@{}}\toprule
+\bfseries Model & \bfseries Macro-F1 & \bfseries Accuracy & \bfseries $\Delta$ vs baseline\\\midrule
+Twitter-RoBERTa-base (baseline) & 0.6272 & 0.640 & --\\
+ModernBERT (Stage 1)            & 0.6810 & 0.685 & +5.4\\
+ModernBERT (Stage 2)            & 0.7285 & 0.730 & +10.1\\
+\textbf{ModernBERT (Stage 3, final)} & \textbf{0.7642} & \textbf{0.770} & \textbf{+13.7}\\\bottomrule
+\end{tabular}
+\end{table}
+
+Length-bucket results are shown in Table~\ref{tab:sentlen}.  The largest gain
+is on long posts ($>$~256 tokens), which the baseline could not process
+without truncation.
+
+\begin{table}[htbp]\centering
+\caption{Per-length-bucket sentiment macro-F1.}\label{tab:sentlen}
+\begin{tabular}{@{}lccc@{}}\toprule
+\bfseries Bucket & \bfseries Baseline & \bfseries ModernBERT & \bfseries $\Delta$\\\midrule
+Short  ($<$~64 tokens)  & 0.7500 & 0.7800 & +3.0\\
+Medium (64--256 tokens) & 0.6500 & 0.7400 & +9.0\\
+Long   ($>$~256 tokens) & 0.2778 & 1.0000 & +72.2\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=0.75\linewidth]{fig14_sentiment_results}
+\caption{Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}
+\label{fig:sentbar}
+\end{figure}
+
+\section{Vision Module Evaluation}\label{sec:viseval}
+The vision gold set is 32 retail screenshots (product pages, error
+messages, receipts).  Table~\ref{tab:vision} compares single-pass and
+multi-pass captioning.
+
+\begin{table}[htbp]\centering
+\caption{Vision module --- before vs after multi-pass anti-hallucination pipeline.}\label{tab:vision}
+\begin{tabular}{@{}lcc@{}}\toprule
+\bfseries Metric                & \bfseries Single-pass & \bfseries Multi-pass\\\midrule
+Hallucination rate              & 50\%  & \textbf{0\%}\\
+Text-extraction success         & 25\%  & \textbf{75\%}\\
+Retail-signal recall            & 40\%  & \textbf{81\%}\\\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Trust-Score Behaviour}\label{sec:trusteval}
+On the 200-post gold set, 15\% fell into the low-trust bucket ($T < 0.4$).
+Cross-check: 12 of 15 low-trust posts contained duplicated or promotional
+content that a human annotator also flagged.  Trust decomposition is
+displayed inline in the dashboard so no post is silently dropped: analysts
+can override the automatic tier with one click, and the override is
+captured for the learning loop.

@@ -1,0 +1,42 @@
+\chapter{Literature Survey}\label{ch:lit}
+
+\section{Transformer Sentiment Classification}
+BERT~\citep{devlin2019bert} established masked-language-model pretraining as
+the dominant recipe for text classification.  RoBERTa~\citep{liu2019roberta}
+improved training-recipe stability.  Cardiffnlp's twitter-roberta-base
+family~\citep{loureiro2022timelms} fine-tuned RoBERTa on 124M tweets and is
+widely used as an out-of-the-box baseline for social-media sentiment.  We
+adopt this as our baseline.  ModernBERT~\citep{warner2024modernbert} (Dec 2024)
+extends BERT-style encoders with an 8192-token context, sliding-window
+attention, and improved pre-training; it is the smallest current encoder
+that is competitive with much larger decoder-only models on classification.
+Our sentiment head is a fine-tuned ModernBERT-base.
+
+\section{Aspect-Based Opinion Mining}
+Traditional ABSA supervises a target--aspect--polarity tuple over labelled
+datasets such as SemEval-2014~\citep{pontiki2014semeval}.  Zero-shot
+approaches~\citep{yin2019benchmarking} instead frame the task as Natural
+Language Inference: given the post as premise and ``This text is about
+\emph{pricing}.'' as hypothesis, an entailment score above threshold marks
+the aspect as present.  We use \texttt{MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
+which is Apache-2.0 licensed and runs offline.  Our aspect taxonomy is fixed
+by product ops to eight retail-relevant aspects.
+
+\section{Vision-Language Models}
+CLIP~\citep{radford2021learning} and BLIP~\citep{li2022blip} showed that
+image-text contrastive pretraining yields strong zero-shot captioning.
+Recent open-weights models Gemma~3~\citep{gemma3_2025} and LLaVA-Next
+provide free multimodal reasoning.  Multi-pass prompting techniques
+inspired by (a) chain-of-thought~\citep{wei2022cot} and (b) SelfCheck~\citep{selfcheck2023}
+motivate our anti-hallucination pipeline.  Because policy blocks certain
+proprietary VLMs, we adopt Gemma~3 4B via Ollama, with a first pass for
+description and a second for OCR and retail signals.
+
+\section{Social-Media Credibility}
+Fake-review detection literature spans lexical features~\citep{ott2011finding},
+network-structure signals~\citep{akoglu2013opinion}, and BERT-based
+classifiers~\citep{zhao2023detect}.  Reddit's public account metadata
+(karma, age, verified\_email, cakeday) provides a strong signal for
+long-lived versus disposable accounts.  We combine these features with an
+LLM-graded credibility scorer and expose the decomposition to analysts so
+that no post is silently dropped.

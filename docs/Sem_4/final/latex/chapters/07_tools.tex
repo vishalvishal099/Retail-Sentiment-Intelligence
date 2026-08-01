@@ -1,0 +1,29 @@
+\chapter{Tools, Technologies, and Configuration}\label{ch:tools}
+
+Table~\ref{tab:tools} lists the tools and libraries used across the pipeline.
+
+\begin{table}[htbp]\centering
+\caption{Tools and technologies.}\label{tab:tools}
+\small
+\begin{tabular}{@{}p{0.28\linewidth}p{0.15\linewidth}p{0.50\linewidth}@{}}\toprule
+\bfseries Component & \bfseries Version & \bfseries Notes\\\midrule
+Python                    & 3.11        & Runtime for all backend modules\\
+PyTorch                   & 2.4         & Sentiment fine-tuning\\
+Hugging Face Transformers & 4.44        & ModernBERT / DeBERTa loading\\
+Ollama                    & 0.5         & Local Gemma~3 4B for vision\\
+FastAPI                   & 0.111       & API surface\\
+React                     & 18          & Dashboard SPA\\
+Vite                      & 5           & Build tool\\
+Tailwind CSS              & 3           & Styling\\
+SQLite                    & 3.45        & Hot store, WAL mode\\
+Arctic Shift              & 2025-Q1     & Historical Reddit dumps\\
+matplotlib                & 3.9         & Diagram rendering\\
+scikit-learn              & 1.5         & CV splits, metric computation\\\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Configuration}
+All runtime knobs live in \texttt{config/pipeline\_config.yaml} and
+\texttt{config/models.yaml}: model checkpoints, thresholds, priority-tier
+constants, subreddit list, and scheduler cadence.  Changing any one of these
+requires no code edit.

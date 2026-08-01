@@ -1,0 +1,95 @@
+% ---- Dissertation Abstract Sheet — mirrors Gobind's BITS format ----
+\clearpage
+\thispagestyle{plain}
+\addcontentsline{toc}{chapter}{Abstract Sheet}
+\begin{center}\Large\bfseries Dissertation Abstract Sheet\end{center}
+\vspace{-4pt}
+
+\begingroup
+\small
+\setlength{\parskip}{0pt}
+\setstretch{1.08}
+
+\begin{center}
+{\normalsize\bfseries BIRLA INSTITUTE OF TECHNOLOGY AND SCIENCE, PILANI}\par
+{\small\bfseries (RAJASTHAN) --- WILP Division}\par
+\end{center}
+\vspace{2pt}
+
+\noindent\begin{tabular}{@{}p{0.48\linewidth}p{0.48\linewidth}@{}}
+\textbf{Organization:} \org       & \textbf{Location:} \orgloc\\[2pt]
+\textbf{Duration:} Two semesters (approximately 4 months) &
+\textbf{Date of Start:} 1 April 2026\\[2pt]
+\textbf{Date of Submission:} \submdate & \\
+\end{tabular}
+\vspace{4pt}
+
+\noindent\textbf{Title of the Project:} \reporttitle.
+
+\vspace{4pt}
+\noindent\textbf{ID No.\ / Name of the Student:} \studentid\ --- \student
+
+\vspace{4pt}
+\noindent\textbf{Supervisor:} \supervisor, \supervisordesig, Bengaluru.
+\quad \textbf{Additional Examiner:} As assigned by the organisation.
+
+\vspace{2pt}
+\noindent\textbf{Faculty Mentor:} \faculty, BITS Pilani --- WILP Division.
+
+\vspace{4pt}
+\noindent\textbf{Key Words:} Sentiment analysis; ModernBERT; aspect-based opinion mining;
+zero-shot NLI; multimodal vision-language models; trust scoring; Reddit; retail feedback.
+
+\vspace{2pt}
+\noindent\textbf{Project Areas:} Applied Natural Language Processing; Multimodal Machine
+Learning; Data Engineering; Human-in-the-Loop Analytics.
+
+\vspace{4pt}
+\noindent\textbf{Abstract:}
+{\footnotesize
+Every day, customers, store associates, and Walmart delivery drivers describe what actually
+happens inside retail --- not on the retailer's app, but on Reddit --- yet
+almost none of that signal is captured today: off-the-shelf sentiment
+services choke on sarcasm, treat every post as equally trustworthy, and
+never touch the screenshots that carry half of the evidence.  This
+dissertation closes that gap with \emph{Retail Sentiment Intelligence}
+(RSI), an offline-first, zero-inference-cost pipeline that turns the raw
+Reddit stream into a trust-weighted, aspect-tagged, priority-ranked feed
+an analyst can act on in minutes.  Posts flow in from \textbf{32
+retail-relevant subreddits} and receive a 0--1 trust score whose three
+components (account metadata, an LLM-graded credibility signal, and a
+retail-insider lexicon) are exposed to the analyst so nothing is silently
+dropped.  A \textbf{ModernBERT} sentiment head is fine-tuned through a
+three-stage curriculum ending in \textbf{200 hand-labelled posts}; a
+zero-shot \textbf{DeBERTa-v3 NLI} classifier tags each post against a
+fixed eight-aspect retail taxonomy; and \textbf{Gemma~3~4B} handles
+screenshots through a multi-pass anti-hallucination prompt (describe
+$\to$ OCR $\to$ discard captions whose entities are absent from the
+OCR).  A React/FastAPI dashboard exposes Brand Health, Alert Feed, Post
+Explorer, a Kanban Post Lifecycle, Insights and Competitor Analysis, and
+Notifications, backed by a human-in-the-loop \emph{Review \& Validate}
+workflow, a dual-draft (rule + LLM) smart-reply composer, and a
+learning-loop store that becomes the next round of training data.
+Evaluated 5-fold out-of-fold on the 200-post gold set, sentiment
+macro-F1 climbs from a Twitter-RoBERTa baseline of \textbf{0.6272} to
+\textbf{0.7642} overall, with the largest gains on long posts the
+baseline could not model.  On a 32-image benchmark the multi-pass vision
+pipeline drops hallucination from \textbf{50\% to 0\%}, lifts text
+extraction from \textbf{25\% to 75\%}, and retail-signal recall from
+\textbf{40\% to 81\%}; the trust module correctly flags \textbf{12 of 15}
+low-trust posts confirmed by human annotators.  All inference runs
+locally, so the reference pipeline carries
+\textbf{zero commercial API cost}, uses only public data, and ships as a
+reproducible artefact backed by SQLite (WAL) and a JSONL cost log.
+\par}
+
+\vspace{6pt}
+\noindent\begin{tabular}{@{}p{0.48\linewidth}p{0.48\linewidth}@{}}
+\rule{0.42\linewidth}{0.4pt} & \rule{0.42\linewidth}{0.4pt}\\
+Signature of Student\quad Date:\rule{0.6in}{0.4pt} &
+Signature of the Supervisor\quad Date:\rule{0.6in}{0.4pt}\\
+Name: \student & Name: \supervisor
+\end{tabular}
+
+\endgroup
+\cleardoublepage

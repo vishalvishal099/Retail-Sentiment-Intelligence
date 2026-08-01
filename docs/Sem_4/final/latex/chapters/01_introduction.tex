@@ -1,0 +1,70 @@
+\chapter{Introduction}\label{ch:intro}
+
+\section{Broad Area of Work}\label{sec:area}
+The broad area of this dissertation is Applied Natural Language Processing
+(NLP) and multimodal machine learning for the analysis of public retail
+customer feedback on social media.  The work spans four technical sub-areas:
+(a) supervised text classification with transformer encoders for sentiment
+in short, informal English social-media text;
+(b) zero-shot natural-language-inference (NLI) models for aspect-based opinion
+mining over a fixed retail taxonomy;
+(c) multimodal vision-language models for captioning and OCR of screenshots
+and photographs attached to retail complaints; and
+(d) lightweight trust and credibility filtering using account-metadata
+heuristics, near-duplicate detection, and retail-insider terminology signals.
+Around these models sits a data-engineering layer for scheduled ingestion of
+public posts and structured storage suitable for aggregation, and a serving
+layer that surfaces the results in an interactive dashboard.
+
+\section{Motivation}\label{sec:motiv}
+Customers, associates, and delivery drivers post continuously about their
+Walmart, Sam's Club, Spark-driver, and OGP/pickup experiences on Reddit.  In
+the author's role at Walmart Global Tech this signal is presently consumed
+through ad-hoc browsing and keyword-filter dashboards, which suffer from poor
+coverage, high noise, and latency: a complaint that trends today may not
+surface in a manual review for days.  Conventional lexicon- or rule-based
+sentiment systems perform poorly on the sarcasm, slang, and long-form
+narrative style typical of Reddit retail posts, and none of them filter fake
+or low-credibility content before aggregation.
+
+This dissertation demonstrates that a stack of task-specific models --- a
+fine-tuned encoder for sentiment, a zero-shot NLI model for aspects, and a
+multimodal vision model for images --- combined with an explicit trust filter
+can convert a raw public stream into a structured, aspect-tagged,
+trust-weighted feed suitable for operational review.
+
+\section{Contributions of this Dissertation}\label{sec:contrib}
+The principal contributions of the completed work are:
+\begin{enumerate}
+\item A modular, offline-first, zero-API-cost end-to-end pipeline (Retail
+Sentiment Intelligence) covering ingestion, trust scoring, sentiment,
+aspects, vision, aggregation, alerting, and dashboarding.
+\item A domain fine-tuned \textbf{ModernBERT} sentiment classifier trained
+through a three-stage curriculum, raising macro-F1 from 0.6272 to
+\textbf{0.7642} overall and from 0.2778 to \textbf{1.0000} on long posts,
+evaluated with 5-fold out-of-fold cross-validation.
+\item A multi-pass vision-captioning technique that adapts ideas from recent
+vision-language papers onto a compliant Gemma~3 4B model, reducing
+hallucination from 50\% to \textbf{0\%} and lifting text extraction from 25\%
+to \textbf{75\%}.
+\item An interpretable trust score and a \textsf{trust $\times$ confidence}
+admission gate that flags --- rather than drops --- low-credibility posts,
+with every constant mapped to a stakeholder-arguable English rationale.
+\item A React/FastAPI dashboard (Brand Health, Alert Feed, Post Explorer,
+Review \& Validate, Post Lifecycle, Insights \& Competitor, Pipeline
+Control, Notifications) with a human-in-the-loop Review \& Validate workflow
+whose corrections and posted replies feed few-shot reply generation and a
+roadmap to automatic replies.
+\end{enumerate}
+
+\section{Organisation of the Report}\label{sec:org}
+Chapter~\ref{ch:problem} states the problem and objectives.
+Chapter~\ref{ch:lit} surveys the relevant literature.
+Chapter~\ref{ch:design} presents the layered system design and end-to-end
+pipeline.  Chapter~\ref{ch:impl} describes the implementation of each module.
+Chapter~\ref{ch:eval} reports the experimental evaluation and results.
+Chapter~\ref{ch:tools} documents the tools and configuration used.
+Chapter~\ref{ch:problems} records the problems encountered and mitigations.
+Chapter~\ref{ch:concl} draws conclusions and Chapter~\ref{ch:future} outlines
+future work.  A glossary, references, and supporting appendices close the
+report.

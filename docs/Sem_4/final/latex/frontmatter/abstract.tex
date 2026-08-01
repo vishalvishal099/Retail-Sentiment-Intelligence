@@ -1,0 +1,41 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Public social media is now a primary real-time channel for retail customer
+voice.  DataReportal (2024) reports about 5.04 billion active social users,
+Reddit's S-1 filing (Feb 2024) discloses $\sim$267 million weekly active
+uniques, and Sprout Social's 2024 Index finds 51\% of consumers expect a
+same-day brand response on social.  At the same time, the World Economic
+Forum (2024) estimates that fake online reviews influence approximately
+USD~152 billion in purchases each year.  Any analytical layer that consumes
+this signal must therefore filter noise and low-credibility content
+explicitly.
+
+This dissertation designs, implements, and evaluates \emph{Retail Sentiment
+Intelligence} (RSI), a working end-to-end prototype that ingests public Reddit
+posts from a curated set of 32 retail-relevant communities, applies sentiment
+classification with a fine-tuned \textbf{ModernBERT} model trained through a
+three-stage curriculum, applies aspect-based opinion mining with a zero-shot
+\textbf{DeBERTa-v3 NLI} classifier over a fixed eight-aspect retail taxonomy
+(pricing, product quality, customer service, store experience, online/app,
+delivery/pickup, returns, account/login), captions image attachments with
+\textbf{Gemma 3 4B} (Ollama) using a multi-pass prompt pipeline that reduces
+hallucination from 50\% to 0\% and lifts text extraction from 25\% to 75\%,
+and assigns each post a 0--1 trust score derived from account-metadata
+heuristics combined with an LLM-graded credibility scorer.  Trust-filtered,
+aspect-tagged results are aggregated and presented in a React/FastAPI
+dashboard with a human-in-the-loop Review \& Validate workflow, a smart
+reply composer (rule + LLM cascade), a learning loop that captures analyst
+corrections for future retraining, and a priority-negatives feed (P1 / P2)
+ranked by \textsf{trust $\times$ confidence}.
+
+Evaluation on a 5-fold out-of-fold cross-validation of the labelled sample
+raises sentiment macro-F1 from 0.6272 (baseline) to \textbf{0.7642} overall and
+from 0.2778 to \textbf{1.0000} on long posts.  The prototype uses only public
+data and is not deployed inside Walmart systems.
+
+\vspace{10pt}
+\noindent\textbf{Key Words:} sentiment analysis; ModernBERT; aspect-based
+opinion mining; zero-shot NLI; vision-language models; trust scoring; Reddit;
+retail feedback.
+\cleardoublepage

@@ -1,0 +1,657 @@
+\chapter{Implementation}\label{ch:impl}
+
+This chapter walks through the running system module by module.  Each section
+pairs a short code excerpt from the production source tree with the
+corresponding piece of the running dashboard, so the reader can trace an idea
+from mathematics to Python to a rendered UI.  All listings are verbatim
+extracts from files under \texttt{src/}; comments and blank lines were
+trimmed only where they carried no explanatory value.
+
+\section{Data Ingestion and Pre-processing}\label{sec:ingest}
+Ingestion runs on a scheduler that polls each subreddit's public RSS feed at
+a configurable cadence (default: hourly).  Historical dumps are pulled from
+the Arctic Shift API for the sentiment gold set.  Each incoming post is
+normalised (HTML-stripped, lowercased for lexical filters), deduplicated by
+\texttt{post\_id}, and screenshots are downloaded to a local image cache.
+Listing~\ref{lst:arctic} shows the paged fetch loop that drives the
+historical pull; it uses \texttt{curl} as transport to sidestep TLS
+quirks on corporate networks and emits an \texttt{on\_page} progress
+callback so the dashboard's Pipeline view can render live counters.
+Figure~\ref{fig:ingest} shows the overall flow.
+
+\begin{lstlisting}[caption={Paged Reddit ingestion with cursor-based dedup ({\tt src/ingestion/arctic\_shift.py}).},label={lst:arctic}]
+def fetch_posts_arctic(subreddit, since_utc=0.0, limit=500,
+                       self_posts_only=False, on_page=None):
+    fetched, before = 0, None
+    while fetched < limit:
+        batch_size = min(100, limit - fetched)
+        params = {"subreddit": subreddit,
+                  "limit": str(batch_size), "sort": "desc"}
+        if since_utc > 0:  params["after"]  = str(int(since_utc))
+        if before:         params["before"] = str(int(before))
+        if self_posts_only: params["is_self"] = "true"
+
+        data = _curl_get(f"{BASE_URL}?{urlencode(params)}")
+        if not data or not (posts := data.get("data", [])):
+            break
+
+        for post in posts:
+            created = post.get("created_utc", 0)
+            if since_utc > 0 and created <= since_utc:
+                continue                     # already ingested
+            selftext = (post.get("selftext") or "").lower()
+            if selftext in ("[deleted]", "[removed]"):
+                continue                     # moderator-scrubbed
+            if (norm := _normalize_post(post, subreddit)):
+                yield norm
+                fetched += 1
+
+        if len(posts) < batch_size: break
+        before = posts[-1].get("created_utc", 0)  # page cursor
+        time.sleep(0.5)                            # be polite
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig9_ingestion_flow}
+\caption{Data ingestion and pre-processing flow.}\label{fig:ingest}
+\end{figure}
+
+\section{Trust-Score Module}\label{sec:trust}
+The trust score $T \in [0,1]$ blends account metadata and content signals:
+$T = 0.4\,M + 0.3\,C + 0.3\,L$ where $M$ is a metadata score
+(account\_age, karma, verified\_email, cakeday), $C$ is an LLM-graded
+credibility signal, and $L$ is a lexical retail-insider score.  Priority
+tiers are: P1 iff $T \ge 0.75$ and sentiment is negative with confidence
+$\ge 0.75$; P2 iff $T \ge 0.55$ and negative with confidence $\ge 0.65$.
+The core scorer is small on purpose --- Listing~\ref{lst:trust} shows the
+entire \texttt{TrustScorer.score()} method.  It also implements the
+cost-shaping heuristic that only invokes the LLM credibility check when
+metadata is genuinely ambiguous ($0.3 < M < 0.8$); outside that band
+metadata is already decisive.  Figure~\ref{fig:trust} depicts the
+composition.  Every constant is exposed in the dashboard so that a
+stakeholder can argue with the rule rather than guess at a black box.
+
+\begin{lstlisting}[caption={Combined trust scorer with cost-shaped LLM invocation ({\tt src/trust/scorer.py}).},label={lst:trust}]
+def score(self, unit: dict) -> dict:
+    meta  = score_metadata(unit, self.config)     # M
+    dedup = score_originality(unit)               # L
+
+    # LLM credibility (C) --- only when metadata is ambiguous.
+    # Outside the band, metadata is decisive, so we skip the call
+    # to cap cost on cloud providers.
+    llm_score, llm_flags = 0.5, []
+    if self.llm_client and 0.3 < meta < 0.8:
+        r = self.llm_client.check_credibility(
+            text=self._get_text(unit),
+            metadata=unit.get("author_metadata", {}))
+        llm_score = r.get("credibility_score", 0.5)
+        llm_flags = r.get("flags", [])
+
+    # T = 0.4 M + 0.3 dedup + 0.3 LLM, clamped to [0, 1]
+    combined = (self.config.weight_metadata * meta   +
+                self.config.weight_dedup    * dedup  +
+                self.config.weight_llm      * llm_score)
+    combined = round(min(max(combined, 0.0), 1.0), 3)
+
+    unit["trust_score"]      = combined
+    unit["trust_components"] = {"metadata": meta,
+                                "dedup":    dedup,
+                                "llm":      llm_score}
+    unit["trust_flags"]      = llm_flags
+    unit["is_trusted"]       = combined >= self.config.threshold
+    if not unit["is_trusted"]:
+        unit["processing_status"] = "flagged_low_trust"
+    return unit
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig3_trust_composition}
+\caption{Trust-Score composition and P1/P2 tier rules.}\label{fig:trust}
+\end{figure}
+
+\section{Sentiment Classification (ModernBERT)}\label{sec:sent}
+The sentiment head is a fine-tuned ModernBERT-base with a three-class
+softmax (positive, neutral, negative).  Training used a three-stage
+curriculum: (Stage 1) 8k pseudo-labelled tweets from the twitter-roberta
+teacher, (Stage 2) 2k retail-focused Reddit posts pseudo-labelled by the
+same teacher, and (Stage 3) 200 hand-labelled retail Reddit posts for a
+final domain adaptation.  See Figure~\ref{fig:curriculum}.  The 5-fold
+out-of-fold macro-F1 rose from the baseline of 0.6272 to \textbf{0.7642};
+long-post macro-F1 rose from 0.2778 to \textbf{1.0000}.
+
+At inference time the sentiment head is wrapped by a thin
+\texttt{SentimentAnalyzer} that owns exactly two responsibilities: assemble
+the prompt string (subreddit-aware, and injecting an
+\texttt{[image: \dots]} tail when a Gemma caption is present), and shape
+the model's output into the analysis record the storage layer expects.
+Listing~\ref{lst:analyzer} shows both.
+
+\begin{lstlisting}[caption={Sentiment orchestration with vision-caption fusion ({\tt src/analysis/analyzer.py}).},label={lst:analyzer}]
+def _get_text(self, unit: dict) -> str:
+    """Compose a subreddit-tagged prompt; append the Gemma caption
+    as [image: ...] so downstream models see it as post body."""
+    title = unit.get("title", "") or ""
+    body  = unit.get("body",  "") or ""
+    sub   = unit.get("subreddit", "unknown")
+    cap   = (unit.get("image_caption") or "").strip()
+    cap_suffix = f" [image: {cap}]" if cap else ""
+
+    if unit.get("unit_type") == "comment":
+        return f'Comment from r/{sub}: "{body}"'
+    if title and body:
+        return f'Post from r/{sub}: "{title}" -- {body}{cap_suffix}'
+    if title:
+        return f'Post from r/{sub}: "{title}"{cap_suffix}'
+    if body:
+        return f'Post from r/{sub}: "{body}{cap_suffix}"'
+    # Image-only post: the caption IS the content.
+    return f'Post from r/{sub}: "{cap}"' if cap else f'Post from r/{sub}: ""'
+
+def _build_analysis_record(self, unit, result):
+    unit_id = unit.get("id", "")
+    conf    = result.get("sentiment_confidence", 0.0)
+    return {
+        "id": f"analysis_{unit_id}",  "post_id": unit_id,
+        "subreddit":            unit.get("subreddit", ""),
+        "trust_score":          unit.get("trust_score"),
+        "sentiment":            result.get("sentiment", "neutral"),
+        "sentiment_confidence": conf,
+        "aspects":              result.get("aspects", []),
+        "key_phrases":          result.get("key_phrases", []),
+        "summary":              result.get("summary", ""),
+        "model_used":     result.get("model_used", self.llm.model_name),
+        "model_version":  result.get("model_version", self.llm.model_version),
+        "analyzed_at":    datetime.now(timezone.utc).isoformat(),
+        "needs_review":   conf < self.config.confidence_threshold,
+        "partition_key":  unit.get("subreddit", ""),
+    }
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig10_modernbert_curriculum}
+\caption{ModernBERT three-stage fine-tuning curriculum.}\label{fig:curriculum}
+\end{figure}
+
+\section{Aspect-Based Opinion Mining}\label{sec:aspect}
+Aspects are extracted with a zero-shot NLI classifier
+(\texttt{mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}) scored against a fixed
+eight-aspect taxonomy (Table~\ref{tab:aspects}).  A post can carry multiple
+aspects when their entailment scores are above threshold~0.55.
+Figure~\ref{fig:aspect} illustrates the NLI framing.  On cloud LLM
+providers the same taxonomy is enforced with the structured JSON prompt in
+Listing~\ref{lst:aspect-prompt}: the model is told exactly which aspect
+group applies to which subreddit (customer vs.\ employee), which prevents
+the ``rude cashier'' $\leftrightarrow$ ``bad manager'' bleed that
+plagued the first-cut prompts.
+
+\begin{lstlisting}[caption={Aspect taxonomy enforced in the JSON-mode system prompt ({\tt src/analysis/prompts.py}).},label={lst:aspect-prompt}]
+SENTIMENT_ASPECT_SYSTEM_PROMPT = """You are a retail analyst ...
+
+Rules:
+1. Sentiment must be one of: "positive", "negative", "neutral".
+2. Choose aspects from the correct group based on the subreddit:
+
+   CUSTOMER aspects (r/walmart, r/samsclub, r/WalmartPlus, ...):
+     store_experience, online_app, delivery_pickup, product_quality,
+     returns, customer_support, pricing
+
+   EMPLOYEE aspects (r/WalmartEmployees, r/OGPBackroom,
+                     r/Sparkdriver, r/walmart_RX, ...):
+     workforce_hr, pay_benefits, management, safety_policy, workload
+
+3. A post can have 0 aspects (off-topic) or multiple aspects.
+4. NEVER mix customer and employee aspects in the same post.
+5. Handle sarcasm and slang (Reddit tone). "Love how my order
+   arrived 3 days late" = negative + delivery_pickup.
+6. Confidence scores (0.0-1.0) for each prediction.
+
+Output JSON:
+{
+  "sentiment": "positive|negative|neutral",
+  "sentiment_confidence": 0.0-1.0,
+  "aspects": [
+    {"aspect": "<name>", "sentiment": "...", "confidence": 0.0-1.0}
+  ],
+  "key_phrases": ["phrase1", "phrase2"],
+  "summary": "One sentence summary of the issue/praise"
+}"""
+\end{lstlisting}
+
+\begin{table}[htbp]\centering
+\caption{Eight-aspect retail taxonomy.}\label{tab:aspects}
+\small
+\begin{tabular}{@{}ll@{}}\toprule
+\bfseries Aspect & \bfseries Example indicative terms\\\midrule
+Pricing               & ``\$2 more this week'', ``price hike'', ``clearance''\\
+Product quality       & ``broken'', ``expired'', ``mouldy''\\
+Customer service      & ``rude cashier'', ``no help'', ``manager''\\
+Store experience      & ``dirty floor'', ``long line'', ``restroom''\\
+Online / app          & ``app crash'', ``payment failed'', ``2FA loop''\\
+Delivery / pickup     & ``missed slot'', ``OGP'', ``Spark driver''\\
+Returns               & ``refused return'', ``restocking fee''\\
+Account / login       & ``locked out'', ``password reset''\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=0.95\linewidth]{fig11_aspect_nli}
+\caption{Zero-shot NLI aspect tagging.}\label{fig:aspect}
+\end{figure}
+
+\section{Vision / Image Processing}\label{sec:vision}
+Screenshots are captioned by Gemma~3 4B via Ollama using a multi-pass prompt
+pipeline: Pass~1 identifies the image \emph{structure}
+(screenshot / receipt / product page / error dialog / meme / photo);
+Pass~2 tiles the image at native resolution and extracts text per tile;
+Pass~3 merges the tile texts against the structure into 2--4 factual
+sentences with a strict ``do not invent'' clause.  A circuit breaker
+disables the whole vision branch after three consecutive Ollama failures
+so a stopped daemon cannot flood the logs.
+Figure~\ref{fig:vision} shows the pipeline.  Hallucination rate on 32
+retail screenshots dropped from 50\% (single pass) to \textbf{0\%}; text
+extraction rose from 25\% to \textbf{75\%}.
+Listing~\ref{lst:vision} shows the entry point and the merge prompt that
+carries the anti-hallucination clause.
+
+\begin{lstlisting}[caption={Vision multi-pass caption entry point and merge prompt ({\tt src/analysis/vision.py}).},label={lst:vision}]
+MERGE_PROMPT = """Combine these observations about a Walmart-related
+image into 2-4 clear sentences.
+
+Image type: {structure}
+Text found in different regions:
+{tile_texts}
+
+Write a factual description that captures: what type of
+screen/image this is, all important text (especially errors,
+prices, status messages), and what the customer might be
+complaining about. Do NOT invent details not mentioned above."""
+
+def caption_enhanced(self, image_path: Path) -> str:
+    if not self.cfg.enabled or not Path(image_path).exists():
+        return ""
+    img = Image.open(image_path)
+
+    # Pass 1: structure identification
+    full_b64  = self._image_to_b64(img)
+    structure = self._call_ollama(self.model, STRUCTURE_PROMPT, full_b64)
+    if not structure:
+        return self.caption(image_path)           # fall back
+
+    # Only tile screenshots / receipts / app screens; photos and
+    # memes are fine as single-pass.
+    if not any(kw in structure.lower() for kw in
+               ("screenshot","receipt","app_screen",
+                "error_dialog","document","product_page")):
+        return self.caption(image_path)
+
+    # Pass 2 + 3: tile at native resolution and extract text per tile
+    tiles, tile_texts = self._create_tiles(img), []
+    for i, b64 in enumerate(tiles):
+        t = self._call_ollama(self.model, TILE_TEXT_PROMPT, b64)
+        if t and "NO TEXT" not in t.upper():
+            tile_texts.append(f"Region {i+1}: {t}")
+
+    merged = self._call_ollama(
+        self.model,
+        MERGE_PROMPT.format(structure=structure,
+                            tile_texts="\n".join(tile_texts)),
+        full_b64)
+    return merged or self.caption(image_path)
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig12_vision_multipass}
+\caption{Vision multi-pass anti-hallucination pipeline.}\label{fig:vision}
+\end{figure}
+
+\section{Aggregation, Alerts and Notifications}\label{sec:agg}
+The aggregator writes daily brand-health rollups (sentiment share, top
+aspects, trust bucket) into SQLite.  The alert engine fires on volume,
+sentiment-crash, emerging-topic and competitor rules; each rule reads its
+thresholds from \texttt{data/alert\_rules.json}, which the dashboard's
+Alert Rules panel writes to.  Listing~\ref{lst:alerts} shows the two
+detectors that drive the majority of P1/P2 traffic: a volume-spike detector
+that fires when today's post count crosses $\mu + \sigma\!\cdot\!\theta$ of
+the trailing 7-day mean, and a sentiment-crash detector that fires when
+the negative share jumps by more than 0.30 versus yesterday.  Alerts flow
+to the dashboard's Alert Feed (\S\ref{sec:dash}) and, optionally, to an
+email digest.  Figure~\ref{fig:alerts} shows the routing.
+
+\begin{lstlisting}[caption={Volume-spike and sentiment-crash detectors ({\tt src/alerts/engine.py}).},label={lst:alerts}]
+def detect_volume_spike(self, sigma_threshold: float = 2.0):
+    """Fire when today's post count is > mu + sigma * threshold of
+       the trailing 7-day mean."""
+    now   = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    today_agg = self.storage.get_item("aggregates",
+                                      f"agg_{today}_daily", today)
+    if not today_agg: return []
+
+    counts = []
+    for i in range(1, 8):
+        d = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        past = self.storage.get_item("aggregates", f"agg_{d}_daily", d)
+        if past: counts.append(past.get("total_posts", 0))
+    if len(counts) < 3: return []
+
+    mu  = sum(counts) / len(counts)
+    std = math.sqrt(sum((x-mu)**2 for x in counts) / len(counts))
+    if std == 0: return []
+
+    n = today_agg.get("total_posts", 0)
+    z = (n - mu) / std
+    if z <= sigma_threshold: return []
+    return [{
+        "id": f"alert_spike_{today}", "type": "volume_spike",
+        "severity": "high" if z > 3.0 else "medium",
+        "title": f"Volume spike: {n} posts today "
+                 f"({z:.1f}sigma above mean)",
+        "details": {"today_count": n, "mean_7d": round(mu, 1),
+                    "std_7d":  round(std, 1),
+                    "z_score": round(z, 2)},
+        "detected_at": now.isoformat(), "time_window": today,
+    }]
+
+def detect_sentiment_crash(self, drop_threshold: float = 0.3):
+    """Fire when negative share jumps > 0.3 vs yesterday."""
+    now   = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    yday  = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    t = self.storage.get_item("aggregates", f"agg_{today}_daily", today)
+    y = self.storage.get_item("aggregates", f"agg_{yday}_daily",  yday)
+    if not t or not y: return []
+    delta = (t.get("sentiment_distribution", {}).get("negative", 0)
+           - y.get("sentiment_distribution", {}).get("negative", 0))
+    if delta <= drop_threshold: return []
+    return [{
+        "id": f"alert_crash_{today}", "type": "sentiment_crash",
+        "severity": "critical" if delta > 0.4 else "high",
+        "title": f"Sentiment crash: negative +{delta:.0%} vs yesterday",
+        "details": {"delta": round(delta, 3)},
+        "detected_at": now.isoformat(), "time_window": today,
+    }]
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig13_alert_routing}
+\caption{Alert engine and notification routing.}\label{fig:alerts}
+\end{figure}
+
+The rendered Alert Feed is shown in Figure~\ref{fig:ui:alerts}; each row
+is one entry from the JSON returned by the detectors above.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/alert_feed.png}
+\caption{Alert Feed --- live P1/P2 stream sourced from the volume-spike
+and sentiment-crash detectors of Listing~\ref{lst:alerts}.}\label{fig:ui:alerts}
+\end{figure}
+
+\section{Dashboard Overview}\label{sec:dash}
+The dashboard is a Vite + React 18 + Tailwind SPA served by FastAPI.
+Pages: Brand Health (KPIs and sentiment trend), Alert Feed (live P1/P2
+stream), Post Explorer (multi-facet search), Review \& Validate (HITL
+queue), Post Lifecycle (Kanban), Insights \& Competitor, Pipeline
+Control, and Notifications.  The landing page is Brand Health
+(Figure~\ref{fig:ui:brand}); the entire volume trend, sentiment gauge
+and aspect breakdown are driven by the SQLite aggregates that
+Listing~\ref{lst:alerts} also reads from, so what the analyst sees on
+the dashboard is always the same view of the world that the alert engine
+scored.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/brand_health.png}
+\caption{Brand Health --- sentiment gauge, distribution donut, volume trend
+and priority breakdown driven by the daily aggregates.}\label{fig:ui:brand}
+\end{figure}
+
+\section{Human-in-the-Loop Review \& Validate}\label{sec:hitl}
+Every post landing in the review queue can be re-labelled (sentiment,
+aspects), corrected (trust bucket), replied to (rule or LLM draft), and
+closed with a resolution reason.  The workflow is shown in
+Figure~\ref{fig:hitl}; the rendered queue is in
+Figure~\ref{fig:ui:review}.  All actions are logged as
+(post, before, after, analyst\_id, timestamp).  Listing~\ref{lst:review}
+shows the endpoint that receives an analyst correction: it appends an
+immutable feedback record \emph{and} rewrites the analysis so the
+correction flows through to every downstream view --- Brand Health,
+aspect drilldowns, Post Explorer and the Kanban board --- without any
+extra re-aggregation call.
+
+\begin{lstlisting}[caption={HITL correction endpoint: feedback audit log + live analysis rewrite ({\tt src/dashboard/api.py}).},label={lst:review}]
+@app.post("/api/review/{post_id}")
+def submit_review(post_id: str, correction: dict):
+    _ensure_initialized()
+    now = datetime.now(timezone.utc).isoformat()
+
+    # 1. Immutable audit log (feedback table).
+    feedback = {
+        "id": f"fb_{post_id}_"
+              f"{int(datetime.now(timezone.utc).timestamp())}",
+        "post_id":             post_id,
+        "analyst_id":          correction.get("analyst_id", "default"),
+        "original_sentiment":  correction.get("original_sentiment"),
+        "corrected_sentiment": correction.get("corrected_sentiment"),
+        "original_aspects":    correction.get("original_aspects", []),
+        "corrected_aspects":   correction.get("corrected_aspects", []),
+        "trust_override":      correction.get("trust_override"),
+        "notes":               correction.get("notes", ""),
+        "created_at":          now,
+        "partition_key":       correction.get("analyst_id", "default"),
+    }
+    _storage.upsert("feedback", feedback)
+
+    # 2. Rewrite the analysis so the correction flows through to
+    #    Brand Health, aspect drilldowns and the Kanban board.
+    analysis = _storage.get_item("analyses",
+                 f"analysis_{post_id}", correction.get("subreddit", ""))
+    if analysis:
+        if (c := correction.get("corrected_sentiment")):
+            analysis["sentiment"]            = c
+            analysis["sentiment_confidence"] = 1.0     # human-validated
+        if isinstance(correction.get("corrected_aspects"), list):
+            analysis["aspects"] = [
+                {"aspect": a, "confidence": 1.0} if isinstance(a, str)
+                else a for a in correction["corrected_aspects"]]
+        if (t := correction.get("trust_override")) is not None:
+            analysis["trust_score"]    = max(0.0, min(1.0, float(t)))
+            analysis["trust_override"] = True
+        analysis["needs_review"]    = False
+        analysis["human_validated"] = True
+        analysis["validated_at"]    = now
+        analysis["validated_by"]    = correction.get("analyst_id", "default")
+        _storage.upsert("analyses", analysis)
+
+    return {"status": "saved", "feedback_id": feedback["id"],
+            "analysis_updated": analysis is not None}
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig5_review_validate_flow}
+\caption{Human-in-the-loop Review \& Validate flow.}\label{fig:hitl}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/review_validate.png}
+\caption{Review \& Validate queue --- posts flagged by the model land here;
+analysts re-label sentiment/aspects and either compose a reply or resolve
+in place.  Corrections are POSTed to the endpoint in
+Listing~\ref{lst:review}.}\label{fig:ui:review}
+\end{figure}
+
+\section{Smart Reply Composer --- Dual-Draft (Rule + LLM)}\label{sec:reply}
+The reply composer offers two drafts side-by-side: a rule-based template
+that guarantees policy compliance, and an LLM-generated draft that
+personalises to the post's aspects and sentiment.  Few-shot examples come
+from the last analyst-posted replies pulled straight from the feedback
+store --- this is what closes the learning loop of \S\ref{sec:loop}
+without any offline retraining.  Listing~\ref{lst:reply} shows the endpoint
+that ties it together.  See Figure~\ref{fig:reply}.
+
+\begin{lstlisting}[caption={Dual-draft reply endpoint (rule + LLM, few-shot from posted replies) ({\tt src/dashboard/api.py}).},label={lst:reply}]
+@app.post("/api/review/{post_id}/draft-reply")
+def draft_reply(post_id: str, payload: dict | None = None):
+    """Generate a customer-specific reply draft. Uses the last N
+    analyst-posted replies as few-shot examples --- every posted
+    reply becomes training context for future drafts."""
+    _ensure_initialized()
+    payload = payload or {}
+    subredd = payload.get("subreddit", "")
+
+    analysis = _storage.get_item("analyses",
+                                 f"analysis_{post_id}", subredd)
+    if not analysis:
+        return {"status": "error", "reason": "analysis_not_found"}
+    if analysis.get("sentiment") != "negative":
+        return {"status": "error", "reason": "not_negative"}
+
+    raw      = _storage.get_item("raw_posts", post_id, subredd) or {}
+    aspects  = _aspect_names(analysis.get("aspects", []))
+    examples = _collect_reply_examples(limit=5)      # <-- few-shot
+
+    llm    = _get_reply_llm()
+    result = llm.generate_reply_pair(
+        post_title=raw.get("title", ""),
+        post_text =raw.get("body",  "") or raw.get("title", ""),
+        subreddit =analysis.get("subreddit", ""),
+        author    =raw.get("author", ""),
+        aspects   =aspects,
+        examples  =examples)
+
+    drafts  = result.get("drafts", [])       # rule + LLM
+    primary = drafts[0] if drafts else {}
+    return {"status": "ok", "drafts": drafts,
+            "reply":         primary.get("reply", ""),
+            "model_used":    primary.get("model_used", ""),
+            "source":        primary.get("source", ""),
+            "examples_used": len(examples)}
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig6_reply_cascade}
+\caption{Smart Reply Composer --- dual-draft with few-shot.}\label{fig:reply}
+\end{figure}
+
+\section{Learning Loop --- Feedback for Future Retraining}\label{sec:loop}
+Corrections and posted replies stream into the feedback store keyed by
+post\_id and model version (the same audit log written by
+Listing~\ref{lst:review}).  A weekly export produces training pairs for
+sentiment (correction $\to$ label) and reply generation (post $\to$
+posted-reply).  Figure~\ref{fig:loop} depicts the loop and the path to
+future auto-reply --- the same few-shot pull in Listing~\ref{lst:reply}
+means the composer becomes measurably better every week without touching
+the model weights.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig7_learning_loop}
+\caption{Feedback learning loop and path to auto-reply.}\label{fig:loop}
+\end{figure}
+
+\section{Post Explorer and Multi-Facet Search}\label{sec:explore}
+Post Explorer supports filters over subreddit, aspect, sentiment, trust
+bucket, priority tier, resolution state, date range, and free-text.
+Figure~\ref{fig:ui:posts} shows the rendered page; every filter is a
+query parameter on the same \texttt{/api/posts} endpoint that the Kanban
+and Review queues also read, so an analyst can navigate freely between
+the three views without ever seeing an inconsistent post state.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/post_explorer.png}
+\caption{Post Explorer --- multi-facet search over subreddit, aspect,
+sentiment, trust bucket, priority tier and free text.}\label{fig:ui:posts}
+\end{figure}
+
+\section{Post Lifecycle (Kanban Workflow)}\label{sec:kanban}
+Every P1/P2 alert flows through a Kanban board with four states
+(Triaged $\to$ Acknowledged $\to$ In Progress $\to$ Resolved).  See
+Figure~\ref{fig:kanban} for the state machine and
+Figure~\ref{fig:ui:kanban} for the rendered board.  State transitions
+carry SLA timestamps so we can compute time-to-acknowledge and
+time-to-resolve.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{fig8_lifecycle_kanban}
+\caption{Post Lifecycle Kanban workflow.}\label{fig:kanban}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/lifecycle_kanban.png}
+\caption{Post Lifecycle --- Kanban board with SLA timestamps for every
+transition.}\label{fig:ui:kanban}
+\end{figure}
+
+\section{Insights and Competitor Analysis}\label{sec:insights}
+The Insights page shows aspect-level negative-share for Walmart vs.\ a
+curated set of competitor communities (Target, Costco, Amazon, Kroger,
+Aldi) so analysts can distinguish a company-specific issue from an
+industry trend.  Figure~\ref{fig:ui:insights} shows the rendered view.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/insights_competitor.png}
+\caption{Insights \& Competitor --- aspect-level negative-share for Walmart
+vs.\ curated competitor communities.}\label{fig:ui:insights}
+\end{figure}
+
+Notifications route the same alerts to email digests and the in-app
+notification centre.  The rendered notification centre is shown in
+Figure~\ref{fig:ui:notif}.
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\linewidth]{ui/notifications.png}
+\caption{Notification centre --- in-app mirror of the email digest;
+sourced from the same alert rows that drive
+Figure~\ref{fig:ui:alerts}.}\label{fig:ui:notif}
+\end{figure}
+
+\section{Storage Layer}\label{sec:storage}
+Persistence uses SQLite in WAL mode for hot data (posts, aggregates,
+alerts, feedback), plus a JSONL cost log for LLM calls and a local file
+cache for downloaded images.  A backup runs nightly.  The schema is
+declared in a single \texttt{CREATE TABLE} block so a fresh clone of the
+repository can boot with an empty database in one command;
+Listing~\ref{lst:storage} shows the relevant excerpt --- note the
+\texttt{data JSON} column that holds the full document, mirroring the
+Cosmos DB partition/PK design so we can lift-and-shift to Azure
+without changing calling code.
+
+\begin{lstlisting}[caption={SQLite schema mirroring the Cosmos DB partition design ({\tt src/storage/store.py}).},label={lst:storage}]
+class SQLiteBackend(StorageBackend):
+    def __init__(self, db_path="data/local.db"):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self.db_path),
+                                     check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._init_tables()
+
+    def _init_tables(self):
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS raw_posts (
+                id TEXT PRIMARY KEY, subreddit TEXT,
+                data JSON NOT NULL, created_timestamp REAL,
+                processing_status TEXT DEFAULT 'pending');
+            CREATE INDEX IF NOT EXISTS idx_raw_posts_subreddit
+                ON raw_posts(subreddit);
+            CREATE INDEX IF NOT EXISTS idx_raw_posts_status
+                ON raw_posts(processing_status);
+
+            CREATE TABLE IF NOT EXISTS analyses (
+                id TEXT PRIMARY KEY, post_id TEXT,
+                subreddit TEXT, data JSON NOT NULL);
+            CREATE INDEX IF NOT EXISTS idx_analyses_post
+                ON analyses(post_id);
+
+            CREATE TABLE IF NOT EXISTS aggregates (
+                id TEXT PRIMARY KEY, time_window TEXT,
+                window_type TEXT, data JSON NOT NULL);
+
+            CREATE TABLE IF NOT EXISTS feedback (
+                id TEXT PRIMARY KEY, analyst_id TEXT,
+                post_id TEXT, data JSON NOT NULL);
+
+            CREATE TABLE IF NOT EXISTS alerts (
+                id TEXT PRIMARY KEY, type TEXT, severity TEXT,
+                time_window TEXT, data JSON NOT NULL);
+        """)
+        self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._conn.commit()
+\end{lstlisting}

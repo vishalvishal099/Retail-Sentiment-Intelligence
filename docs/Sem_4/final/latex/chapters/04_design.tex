@@ -1,0 +1,50 @@
+\chapter{System Design and Architecture}\label{ch:design}
+
+\section{Design Principles}
+The system follows five design principles:
+(i) \emph{offline-first} --- every inference-time model runs locally, so the
+prototype has zero commercial API cost at inference;
+(ii) \emph{modularity} --- ingestion, trust, sentiment, aspect, vision,
+aggregation, and dashboard are independent Python packages with typed
+interfaces;
+(iii) \emph{explainability} --- the trust score exposes every constant to
+analysts; no post is silently dropped;
+(iv) \emph{human-in-the-loop} --- every ML decision is reviewable and
+correctable in the dashboard, and the correction is captured for future
+retraining;
+(v) \emph{operational realism} --- the dashboard mirrors an on-call
+customer-experience console and surfaces P1/P2 tiers.
+
+\section{Layered Architecture}\label{sec:layers}
+Figure~\ref{fig:arch} shows the six-layer architecture: (1) Ingestion via
+Reddit RSS + Arctic Shift historical dumps; (2) Storage in SQLite
+(hot) + JSONL cost log; (3) AI Engine (Trust, Sentiment, Aspect, Vision);
+(4) Aggregation \& Alerting; (5) Dashboard (FastAPI + React); (6) HITL
+Feedback loop feeding trust filters and reply few-shots.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{fig1_architecture}
+\caption{Layered System Architecture --- ingestion, storage, AI engine,
+aggregation, dashboard, and HITL feedback loop.}
+\label{fig:arch}
+\end{figure}
+
+\section{End-to-End Pipeline Flow}\label{sec:e2e}
+Figure~\ref{fig:pipeline} depicts one post's journey.  A new Reddit RSS entry
+is deduplicated by \texttt{post\_id}, passed through the trust scorer, then
+routed in parallel through sentiment, aspect, and (if it has an image)
+vision.  Results are stored, aggregated into daily brand-health metrics, and
+alerts are raised for trust-weighted P1/P2 negatives.  Analysts review the
+alert, edit the labels if needed, choose a reply draft, and (optionally) mark
+the post as resolved on the Kanban board.  Every analyst action is captured
+as a training signal.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{fig2_pipeline_flow}
+\caption{End-to-End Pipeline Flow --- ingestion $\to$ trust $\to$ AI engine
+$\to$ aggregation $\to$ alerts $\to$ dashboard $\to$ analyst action $\to$
+feedback loop.}
+\label{fig:pipeline}
+\end{figure}
