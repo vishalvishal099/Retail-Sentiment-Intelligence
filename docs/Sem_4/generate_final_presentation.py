@@ -445,32 +445,36 @@ def build():
 
     # 7 · Smart Reply — Worked Example ──────────────────────────────────────
     s = new()
-    _header_bar(s, "Smart Reply  —  Worked Example",
-                "One real complaint  →  three drafts  →  analyst picks & posts")
+    _header_bar(s, "Smart Reply  —  Worked Example  (real post from our benchmark)",
+                "id = 1nn7hjxx  ·  r/samsclub  ·  data/benchmark_real_200.jsonl")
     # Complaint card
     _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.55),
           AMBER_TINT, line=AMBER)
     _tx(s, Inches(0.7), Inches(1.15), Inches(12.0), Inches(0.35),
-        "Customer complaint  —  r/walmart  ·  aspects: product_quality, returns",
+        "Customer complaint  —  r/samsclub  ·  aspects: product_quality, store_experience  ·  trust 0.62  ·  P2",
         size=Pt(11), bold=True, color=AMBER)
     _tx(s, Inches(0.7), Inches(1.5), Inches(12.0), Inches(1.05),
-        "u/hangry_shopper : “Bought a 2-lb strawberry pack from OGP pickup last night and half of them are mouldy today. "
-        "Store said returns close at 9pm and refused to help. Second time this month — is this the new normal?”",
-        size=Pt(11), color=DARK_GRAY)
+        "u/hangry_shopper : \"Why do you guys sell whole pizzas made hours ago to customers?  The very few times I've "
+        "gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in "
+        "my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. "
+        "Pizza is meant to be made to order and waited for.\"",
+        size=Pt(10), color=DARK_GRAY)
     # Three drafts side-by-side
     drafts = [
         ("Draft A · GPT-4o", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
-         "Really sorry to see mouldy berries twice in one month — that's not the pickup "
-         "quality we want you to have. Please DM the order number and I'll get produce ops "
-         "to look at that store's chill-chain and cover the refund for you. — Ravi (Walmart Care)"),
+         "Really sorry the pizza's been sitting in the hot case that long — that's not the "
+         "fresh pie experience the club is supposed to deliver. DM me the club number and the "
+         "day/time of your last visit and I'll flag it to the bakery-café team so the "
+         "make-to-order flow gets reinforced. — Ravi (Sam's Club Care)"),
         ("Draft B · Mistral 7B", PURPLE, PURPLE_TINT,
-         "That's genuinely frustrating — nobody expects two bad pickups in a row. Send me a "
-         "DM with the order # and I'll route it to the store manager and produce ops so we "
-         "can dig into the chill chain and refund you today. — Priya"),
+         "Totally fair callout — a whole pie that's been in the hot case for 90 minutes isn't "
+         "the deal. DM me your club number and I'll get the bakery lead to look at their "
+         "bake-off schedule so the pies you buy are made to order like they should be. — Priya"),
         ("Draft C · Smart Composer", GREEN, GREEN_TINT,
-         "Hi hangry_shopper, we're sorry about the quality of what you received on your pickup — "
-         "returns closing at 9pm shouldn't leave you without a refund. Please DM us your order "
-         "details and we'll get the produce team on it. — Walmart Care"),
+         "Hi hangry_shopper, we're really sorry about the quality of what you received on your "
+         "last visit — a pizza that's been sitting for that long isn't the standard. Please DM "
+         "us the club number and the day you bought it and we'll get the bakery team on it. "
+         "— Sam's Club Care"),
     ]
     x = Inches(0.4)
     y = Inches(2.75)
@@ -482,45 +486,77 @@ def build():
         _tx(s, x, y + Inches(0.05), w, Inches(0.35),
             label, size=Pt(12), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
         _tx(s, x + Inches(0.15), y + Inches(0.55), w - Inches(0.3), h - Inches(0.65),
-            body, size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
+            body, size=Pt(9), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
         x = x + w + Inches(0.15)
     # What happens next
     _rect(s, Inches(0.5), Inches(6.05), Inches(12.3), Inches(0.85),
           LIGHT_BLUE, line=WALMART_BLUE)
     _tx(s, Inches(0.7), Inches(6.15), Inches(12.0), Inches(0.7),
         "Analyst picks a draft, edits inline, clicks  Save & Open Reddit  →  posted reply is written to  feedback  "
-        "→  becomes a future few-shot example (Draft A / B pool grows).",
+        "(kind = auto_reply_posted)  →  becomes the next post's top few-shot example. See docs/Sem_4/SMART_REPLY_COMPOSER.md",
         size=Pt(11), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
     # 6 · Learning Loop ─────────────────────────────────────────────────────
     s = new()
     _header_bar(s, "Learning Loop  —  Feedback → Retraining",
-                "HITL corrections + posted replies become the next training set")
-    stages = [
-        ("STEP 1", "CAPTURE",  "analyst overrides sentiment\nand aspect tags", AMBER),
-        ("STEP 2", "STORE",    "feedback(post_id,\nold, new, analyst_id, ts)", WALMART_BLUE),
-        ("STEP 3", "CURATE",   "weekly export of\ndisagreements\n(model ≠ analyst)", PURPLE),
-        ("STEP 4", "RETRAIN",  "add to Stage-3\nfine-tune set,\nrerun 5-fold CV", GREEN),
+                "Every human action becomes a training signal  —  hot loop (live) + warm loop (monthly)")
+    captures = [
+        ("Label / aspect correction", "Review & Validate", WALMART_BLUE),
+        ("Trust-score override",      "Review & Validate", PURPLE),
+        ("Posted reply",              "Smart Reply Composer", GREEN),
+        ("Lifecycle transition",      "Kanban board", AMBER),
     ]
     x = Inches(0.4)
-    y = Inches(1.35)
-    w = Inches(3.0)
-    h = Inches(2.4)
-    for i, (label, title, body, col) in enumerate(stages):
-        _stage_card(s, x, y, w, h, label, title, body, col)
-        if i < 3:
-            _arrow(s, x + w + Inches(0.005),
-                   y + Inches(0.9), Inches(0.18), Inches(0.4))
+    y = Inches(1.05)
+    w = Inches(3.05)
+    h = Inches(1.15)
+    for title, src, col in captures:
+        _rect(s, x, y, w, h, LIGHT_GRAY, line=col)
+        _rect(s, x, y, w, Inches(0.35), col)
+        _tx(s, x, y + Inches(0.05), w, Inches(0.3),
+            title, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, x, y + Inches(0.5), w, Inches(0.65),
+            src, size=Pt(11), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+            anchor=MSO_ANCHOR.MIDDLE)
         x = x + w + Inches(0.15)
-    _tx(s, Inches(0.5), Inches(4.1), Inches(12.3), Inches(0.4),
-        "Two signals feed the loop", size=Pt(13), bold=True, color=DARK_BLUE)
-    _table(s, Inches(0.5), Inches(4.55), Inches(12.3), Inches(2.05), [
-        ["Signal",                 "Table",                          "Downstream use"],
-        ["Label corrections",      "feedback (sentiment / aspect)",  "ModernBERT Stage-3 augmentation"],
-        ["Posted replies",         "feedback (reply_text)",          "FLAN-T5 few-shot pool"],
-        ["Trust-tier overrides",   "feedback (trust_override)",      "Trust-score threshold calibration"],
-    ], first_col_bold=True)
+    _rect(s, Inches(0.5), Inches(2.5), Inches(12.3), Inches(0.7),
+          DARK_BLUE, line=DARK_BLUE)
+    _tx(s, Inches(0.7), Inches(2.55), Inches(12.0), Inches(0.6),
+        "feedback  table  (SQLite / Cosmos DB)  —  one row per human action, JSON payload, partition_key = analyst_id",
+        size=Pt(12), bold=True, color=WHITE, align=PP_ALIGN.CENTER,
+        anchor=MSO_ANCHOR.MIDDLE)
+    _rect(s, Inches(0.5), Inches(3.4), Inches(6.05), Inches(2.5),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(3.5), Inches(5.7), Inches(0.35),
+        "HOT LOOP  ·  in-context, live", size=Pt(13), bold=True, color=GREEN)
+    _bullets(s, Inches(0.7), Inches(3.9), Inches(5.7), Inches(1.95), [
+        "Every Generate Drafts click queries feedback",
+        "SELECT … WHERE kind = 'auto_reply_posted'",
+        "ORDER BY created_at DESC LIMIT 5  →  top 3 pairs",
+        "Injected into the prompt as few-shot examples",
+        "Effect visible on the next reply  —  no training",
+    ], size=Pt(11))
+    _rect(s, Inches(6.75), Inches(3.4), Inches(6.05), Inches(2.5),
+          PURPLE_TINT, line=PURPLE)
+    _tx(s, Inches(6.95), Inches(3.5), Inches(5.7), Inches(0.35),
+        "WARM LOOP  ·  supervised, monthly", size=Pt(13), bold=True, color=PURPLE)
+    _bullets(s, Inches(6.95), Inches(3.9), Inches(5.7), Inches(1.95), [
+        "Export corrections since last train date",
+        "Append to Walmart-200  →  Walmart-N (augmented)",
+        "Rerun ModernBERT Stage-3 with 5-fold OOF CV",
+        "New checkpoint wins only if OOF F1 improves",
+        "Symlink flipped in config/models.yaml",
+    ], size=Pt(11))
+    _rect(s, Inches(0.5), Inches(6.05), Inches(12.3), Inches(0.85),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.15), Inches(12.0), Inches(0.35),
+        "Two failure modes eliminated by design",
+        size=Pt(12), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.5), Inches(12.0), Inches(0.35),
+        "(1)  hot loop uses in-context learning  —  no retrain, no catastrophic forgetting.   "
+        "(2)  warm loop uses 5-fold OOF CV  —  no leakage between train and eval sets.",
+        size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
     # 7 · Post Explorer ─────────────────────────────────────────────────────

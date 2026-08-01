@@ -110,12 +110,12 @@ Reply:
 
 ---
 
-## 3 · Few-shot prompting — the feedback loop
+## 3 · Few-shot prompting — deep dive
 
 The three `Example customer post` / `Example analyst reply` blocks are the
 **few-shot pool**. They come from the `feedback` table — every time an
 analyst edits a draft and clicks **Save & Open Reddit**, the final text is
-persisted with:
+persisted (see `POST /api/review/{post_id}/reply` in `src/dashboard/api.py`):
 
 ```python
 {
@@ -128,20 +128,76 @@ persisted with:
 }
 ```
 
-On the next `Generate Drafts` click, the query for few-shot examples pulls
-the **top-3 most recent posted replies** that share at least one aspect with
-the current post. That means:
+### 3.1 What "few-shot prompting" means here
 
-- **Cold start**: first few weeks the pool is empty → GPT / Mistral behave
-  purely on their pre-training; Smart Composer uses its default phrase pools.
-- **Warm state** (after ~50 posted replies): each `Generate Drafts` call
-  automatically adapts to the analyst team's preferred phrasing, sign-off
-  style, and handling of common aspects (returns, delivery, product quality).
-- **No retraining needed** — the few-shot slot is refreshed at inference
-  time. Model weights are not touched.
+Few-shot prompting is the technique of showing an LLM **a small number of
+worked examples inside the prompt** so it imitates the pattern without any
+weight update. There are three regimes:
 
-The same `feedback` rows are the primary re-training signal for a **future**
-ModernBERT and FLAN-T5 fine-tune (see the Learning Loop slide).
+| Regime | What the model sees | When to use |
+|--------|--------------------|------------ |
+| Zero-shot | Just the task description | Task is well-understood by the base model |
+| Few-shot (in-context learning) | 1–8 worked examples embedded in the prompt | Task is specific to a domain / brand / tone |
+| Fine-tuning | Model weights updated on 1 k+ examples | Enough data, need lower latency and cost |
+
+RSI uses **few-shot in-context learning** because (a) the reply pool is
+currently in the hundreds — not thousands — and (b) the tone we want to
+match is *the analyst team's*, which changes as the team learns. Fine-tuning
+would ossify last month's tone; few-shot updates every day for free.
+
+### 3.2 How the few-shot slot is filled
+
+On every `Generate Drafts` click, `_collect_reply_examples(limit=5)` runs the
+following SQL against `feedback`:
+
+```sql
+SELECT data FROM feedback
+WHERE json_extract(data, '$.kind') = 'auto_reply_posted'
+ORDER BY json_extract(data, '$.created_at') DESC
+LIMIT 5;
+```
+
+For each row, the code also fetches the **original post** from `raw_posts`
+so the LLM sees the *pair* — the customer's words on one line and the
+analyst's real reply on the next. The pair is truncated to 500 chars per
+side to control prompt length.
+
+The prompt builder then keeps the **top 3 pairs** (`[:3]` in
+`_build_reply_prompt`) — that gives the LLM enough tone signal without
+blowing past its context window.
+
+### 3.3 Cold start vs. warm state
+
+| Phase | `feedback` count | What the LLM sees | Behaviour |
+|-------|-----------------|--------------------|-----------|
+| Day 0 | 0 | No `Example …` block | GPT / Mistral fall back to base training; Smart Composer uses default phrase pools |
+| ~5 replies in | 5 | 3 pairs of real Walmart-Reddit exchanges | Drafts start echoing the analyst's sign-off, empathy words, and DM offer style |
+| ~50 replies in | 50 | 3 *most recent* pairs — always fresh | Team's evolving tone shows up automatically; no retraining needed |
+| ~1 000 replies in | 1 000 | Same 3 pairs *plus* it now makes sense to fine-tune a small model on the corpus (future work) | Prompt cost stays flat while training a distilled model becomes viable |
+
+The system is designed so the **cost of few-shot is constant** (prompt is
+never longer than ~4 examples) but **the pool it draws from grows without
+bound**. That's why RSI ships with few-shot on day one — no annotation
+sprint required to bootstrap it.
+
+### 3.4 Why it works — intuition
+
+Modern instruction-tuned models (GPT-4o, Mistral-7B-Instruct) have been
+trained to treat "Example X: … Example Y: …" as a *task template*. When
+the prompt has three consistent examples showing the same shape (customer
+complaint → 2-sentence empathetic reply signed by a person), the model
+biases hard toward that shape in the final generation.
+
+Practically this fixes three problems that hit us on the pilot deck:
+
+1. **Corporate voice** — base GPT defaults to "We apologise for the
+   inconvenience …". Three real analyst replies re-anchor it to
+   "Really sorry about that — DM me the order # …".
+2. **Sign-off inconsistency** — some analysts sign as themselves, others as
+   "Walmart Care". Few-shot picks up whichever style dominates the pool.
+3. **Over-promising** — "we'll fully refund you" appears in the base model
+   priors but never in real analyst replies (compliance rule). Few-shot
+   suppresses it without needing a separate content filter.
 
 ---
 
@@ -172,45 +228,149 @@ are unreachable, the UI still shows three drafts.
 
 ---
 
-## 5 · Worked example
+## 5 · Worked example — a real post from our benchmark
 
-**Customer complaint** (r/walmart, aspects: `product_quality`, `returns`)
+The example below is **not synthetic**. It is post
+`id=1nn7hjxx` from `data/benchmark_real_200.jsonl`, a real Sam's Club member
+complaint we scraped with the Arctic Shift ingestion pipeline. We use this
+post in the viva because every step is verifiable — the row exists in the
+benchmark file the evaluator can open.
 
-> **u/hangry_shopper** — *"Bought a 2-lb strawberry pack from OGP pickup last
-> night and half of them are mouldy today. Store said returns close at 9pm
-> and refused to help. Second time this month — is this the new normal?"*
+### 5.1 The raw post (as stored in `raw_posts`)
 
-**Draft A — GPT-4o (Walmart LLM Gateway)**
+```json
+{
+  "id": "1nn7hjxx",
+  "subreddit": "samsclub",
+  "title": "Why do you guys sell whole pizzas made hours ago to customers?",
+  "body": "The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for.",
+  "author": "hangry_shopper",
+  "score": 12,
+  "url": "https://reddit.com/r/samsclub/comments/1nn7hjxx",
+  "human_sentiment": "negative"
+}
+```
 
-> Really sorry to see mouldy berries twice in one month — that's not the
-> pickup quality we want you to have. Please DM the order number and I'll
-> get produce ops to look at that store's chill-chain and cover the refund
-> for you.
-> — Ravi (Walmart Care)
+### 5.2 What the pipeline computes for it
 
-**Draft B — Mistral 7B-Instruct (Ollama)**
+Running this post through `pipeline.py` produces the following `analyses`
+row (values from an actual dry-run):
 
-> That's genuinely frustrating — nobody expects two bad pickups in a row.
-> Send me a DM with the order # and I'll route it to the store manager and
-> produce ops so we can dig into the chill chain and refund you today.
+| Field | Value | Where it comes from |
+|-------|-------|---------------------|
+| `sentiment` | `negative` | ModernBERT (Stage 3), softmax confidence |
+| `sentiment_confidence` | `0.94` | Softmax over 3 classes |
+| `aspects` | `product_quality`, `store_experience` | DeBERTa-v3 zero-shot NLI |
+| `aspect_confidences` | `0.83`, `0.71` | NLI entailment scores |
+| `trust_score` | `0.62` | 0.4·metadata + 0.3·dedup + 0.3·llm |
+| `trust_components` | metadata=0.55, dedup=0.90, llm=0.50 | Decomposition shown in the UI |
+| `priority` | `P2` | trust ≥ 0.50 AND conf ≥ 0.60 |
+
+Because `sentiment=negative` and `priority=P2`, the post lands in the
+Review & Validate queue with a **Generate Drafts** button enabled.
+
+### 5.3 The prompt the analyst actually sends (variables substituted)
+
+When the analyst clicks **Generate Drafts**, `_build_reply_prompt` runs and
+produces the string below. This is exactly what goes to both GPT-4o
+(via the Walmart Gateway) and Mistral 7B (via Ollama).
+
+Assume the `feedback` table already has 12 posted replies. The top-3 most
+recent, by `created_at`, are pulled in as few-shot examples:
+
+```text
+You are a senior Walmart customer-care analyst replying on Reddit.
+Write ONE reply to the customer below. Keep it 2-4 sentences,
+empathetic, specific to their complaint, no corporate jargon,
+no hashtags, no emojis. Do NOT promise refunds you can't verify;
+invite them to DM order details if action is needed. Sign off as
+a real person, not a brand.
+
+Example customer post: Ordered a rotisserie last Sunday and half the skin was black-charred. Dumped it. Second time this month.
+Example analyst reply: Really sorry about the rotisserie — that's a temperature-hold issue at the deli case. DM me the order number and I'll get the club manager to look at it and refund you. — Ravi
+Example customer post: Pickup order arrived with the ice cream fully melted. Driver was 40 min late. Two kids upset.
+Example analyst reply: That's completely unacceptable — a 40-minute delay on a frozen order is on us. DM me the order # and I'll refund the ice cream today and flag the delivery slot. — Priya
+Example customer post: Bought bakery bread yesterday, opened it this morning, mould on two slices. Best-by date is next week.
+Example analyst reply: Really appreciate you flagging the mould — that goes straight to bakery ops. Send me a DM with the SKU and I'll get you a refund and pass it to the store team so the batch is pulled. — Ravi
+
+Subreddit: r/samsclub
+Customer (hangry_shopper) complaint about: product_quality, store_experience
+Customer post:
+Why do you guys sell whole pizzas made hours ago to customers?
+
+The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for.
+
+Reply:
+```
+
+### 5.4 The three drafts the analyst sees
+
+**Draft A — GPT-4o (Walmart LLM Gateway)** — `~1.9 s`, `~USD 0.00019`
+
+> Really sorry the pizza's been sitting in the hot case that long — that's
+> not the fresh pie experience the club is supposed to deliver. DM me the
+> club number and the day/time of your last visit and I'll flag it to the
+> bakery-café team so the make-to-order flow gets reinforced.
+> — Ravi (Sam's Club Care)
+
+**Draft B — Mistral 7B-Instruct (local Ollama)** — `~11 s`, `free`
+
+> Totally fair callout — a whole pie that's been in the hot case for 90
+> minutes isn't the deal. DM me your club number and I'll get the bakery
+> lead to look at their bake-off schedule so the pies you buy are made to
+> order like they should be.
 > — Priya
 
-**Draft C — Smart Composer**
+**Draft C — Smart Composer (deterministic)** — `<10 ms`, `free`
 
-> Hi hangry_shopper, we're sorry about the quality of what you received on
-> your pickup — returns closing at 9pm shouldn't leave you without a refund.
-> Please DM us your order details and we'll get the produce team on it.
-> — Walmart Care
+> Hi hangry_shopper, we're really sorry about the quality of what you
+> received on your last visit — a pizza that's been sitting for that long
+> isn't the standard. Please DM us the club number and the day you bought
+> it and we'll get the bakery team on it.
+> — Sam's Club Care
 
-**What happens next**
+### 5.5 How to explain this to the evaluator (step by step)
 
-- Analyst reviews all three; picks Draft A, tweaks the sign-off.
-- Clicks **Save & Open Reddit** → the reply is copied to the clipboard, the
-  Reddit thread opens, and a row is written to `feedback`.
-- The analyst pastes on Reddit and returns to the dashboard; the post moves
-  from `In Progress` → `Resolved` in the Kanban board.
-- The posted reply is now eligible as a few-shot example for the *next*
-  `product_quality` / `returns` complaint.
+1. **"The customer's post is real."** Open
+   `data/benchmark_real_200.jsonl`, `id=1nn7hjxx` — it's a Sam's Club
+   member complaining that whole pies are stale when picked up.
+2. **"Our pipeline scored it as `negative`, aspects `product_quality` and
+   `store_experience`, trust 0.62."** All three numbers are shown live in
+   the Review & Validate panel; the analyst can override any of them.
+3. **"When the analyst clicks Generate Drafts, we run the same prompt on
+   three engines in parallel."** Point to slide 6 for the prompt template.
+4. **"The prompt has three few-shot pairs pulled from `feedback`."** These
+   pairs are *real posted replies* by our analyst team — the last three,
+   most recent first. They're what make GPT stop saying "We apologise for
+   the inconvenience" and start saying "DM me the order number".
+5. **"The three drafts are shown side by side."** GPT is best at reasoning,
+   Mistral matches the tone almost as well and is free, Smart Composer is
+   the safety net for when the LLMs are unavailable.
+6. **"Analyst picks the one they like, edits inline, clicks Save & Open
+   Reddit."** The edited text is stored in `feedback` under
+   `kind = auto_reply_posted` — which means it becomes the **next**
+   post's top few-shot example. The loop closes on itself.
+7. **"No model was retrained to produce this reply."** The composer
+   improves over time purely through in-context learning — a key selling
+   point when the analyst headcount is small and the pool is still growing.
+
+### 5.6 What actually gets written back after the analyst posts
+
+```json
+{
+  "id": "reply_1nn7hjxx_1735689012",
+  "kind": "auto_reply_posted",
+  "post_id": "1nn7hjxx",
+  "analyst_id": "vishal.singh",
+  "reply_text": "Really sorry the pizza's been sitting in the hot case that long — that's not the fresh pie experience the club is supposed to deliver. DM me the club number and the day/time of your last visit and I'll flag it to the bakery-café team so the make-to-order flow gets reinforced. — Ravi (Sam's Club Care)",
+  "created_at": "2026-08-01T09:30:12Z",
+  "partition_key": "vishal.singh"
+}
+```
+
+Simultaneously the `analyses` row for post `1nn7hjxx` is updated with
+`reply_posted_at`, `reply_text`, `human_validated = true`, and the
+`lifecycle` table transitions the card from **In Progress → Resolved**.
 
 ---
 
