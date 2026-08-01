@@ -17,17 +17,23 @@ ModernBERT (Stage 2)            & 0.7285 & 0.730 & +10.1\\
 \end{tabular}
 \end{table}
 
-Length-bucket results are shown in Table~\ref{tab:sentlen}.  The largest gain
-is on long posts ($>$~256 tokens), which the baseline could not process
-without truncation.
+Length-bucket results are shown in Table~\ref{tab:sentlen}, split at the
+RoBERTa 512-token truncation boundary.  The short-to-medium bucket
+($<$~512~tokens, $n{=}193$) covers 96.5\% of the gold set; the long
+bucket ($\ge$~512~tokens, $n{=}7$) contains posts the baseline cannot
+see in full.  All seven long posts are labelled negative by the human
+annotator, so the meaningful score for this bucket is the per-post
+classification count rather than a per-class F1.  The fine-tuned model
+recovers both long posts the baseline mis-classifies (RoBERTa 5/7 vs
+ModernBERT 7/7); we report this as evidence that the truncation ceiling
+is removed, not as evidence of long-text mastery.
 
 \begin{table}[htbp]\centering
-\caption{Per-length-bucket sentiment macro-F1.}\label{tab:sentlen}
+\caption{Per-length-bucket sentiment results (5-fold out-of-fold predictions).}\label{tab:sentlen}
 \begin{tabular}{@{}lccc@{}}\toprule
-\bfseries Bucket & \bfseries Baseline & \bfseries ModernBERT & \bfseries $\Delta$\\\midrule
-Short  ($<$~64 tokens)  & 0.7500 & 0.7800 & +3.0\\
-Medium (64--256 tokens) & 0.6500 & 0.7400 & +9.0\\
-Long   ($>$~256 tokens) & 0.2778 & 1.0000 & +72.2\\\bottomrule
+\bfseries Bucket & \bfseries Baseline & \bfseries ModernBERT & \bfseries Recovered\\\midrule
+Short-to-medium ($<$~512~tokens, $n{=}193$)  & 138/193 correct (72\%) & 159/193 correct (82\%) & +21\\
+Long ($\ge$~512~tokens, $n{=}7$, all negative) & 5/7 correct           & 7/7 correct           & +2\\\bottomrule
 \end{tabular}
 \end{table}
 

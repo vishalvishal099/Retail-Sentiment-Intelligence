@@ -72,8 +72,10 @@ workflow, a dual-draft (rule + LLM) smart-reply composer, and a
 learning-loop store that becomes the next round of training data.
 Evaluated 5-fold out-of-fold on the 200-post gold set, sentiment
 macro-F1 climbs from a Twitter-RoBERTa baseline of \textbf{0.6272} to
-\textbf{0.7642} overall, with the largest gains on long posts the
-baseline could not model.  On a 32-image benchmark the multi-pass vision
+\textbf{0.7642} overall; on the small long-post bucket
+($\ge 512$~tokens, $n{=}7$, all negative-class) the baseline classifies
+5/7 correctly and the fine-tuned model \textbf{7/7}, showing the
+truncation ceiling that limited the baseline is removed.  On a 32-image benchmark the multi-pass vision
 pipeline drops hallucination from \textbf{50\% to 0\%}, lifts text
 extraction from \textbf{25\% to 75\%}, and retail-signal recall from
 \textbf{40\% to 81\%}; the trust module correctly flags \textbf{12 of 15}

@@ -41,8 +41,9 @@ Sentiment Intelligence) covering ingestion, trust scoring, sentiment,
 aspects, vision, aggregation, alerting, and dashboarding.
 \item A domain fine-tuned \textbf{ModernBERT} sentiment classifier trained
 through a three-stage curriculum, raising macro-F1 from 0.6272 to
-\textbf{0.7642} overall and from 0.2778 to \textbf{1.0000} on long posts,
-evaluated with 5-fold out-of-fold cross-validation.
+\textbf{0.7642} overall, and recovering all long posts ($\ge 512$~tokens,
+$n{=}7$, all negative-class) that the RoBERTa baseline mis-classifies (5/7
+$\to$~7/7 correct), evaluated with 5-fold out-of-fold cross-validation.
 \item A multi-pass vision-captioning technique that adapts ideas from recent
 vision-language papers onto a compliant Gemma~3 4B model, reducing
 hallucination from 50\% to \textbf{0\%} and lifting text extraction from 25\%

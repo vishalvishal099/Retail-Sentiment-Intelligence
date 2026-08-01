@@ -7,7 +7,8 @@ Walmart-flavored Reddit complaints — specifically on the long posts where
 RoBERTa's context cap silently throws away information.
 
 **Final result, foreshadowed up front:** macro F1 **0.6272 → 0.7642
-(+0.137)** overall and **0.2778 → 1.0000 (+0.722)** on posts ≥ 512 tokens,
+(+0.137)** overall and **all seven ≥512-token posts recovered (RoBERTa 5/7,
+ModernBERT 7/7 correct)** on the long bucket (n = 7, all negative-class),
 all measured via 5-fold cross-validated out-of-fold predictions (no
 memorization).
 
@@ -241,8 +242,8 @@ After this fix the honest v1 result became: ModernBERT **0.7233** vs RoBERTa
 ## 7. Challenge — ModernBERT's Long-Context Advantage Wasn't Showing Up
 
 **What we hit.** After the memorization fix, the length-bucket numbers were
-disappointing: long posts (≥512 tokens, n=7) scored RoBERTa **0.28** vs
-ModernBERT **0.46** — a real gain, but far smaller than the thesis claim
+disappointing: long posts (≥512 tokens, n=7, all negative-class) had RoBERTa
+correct on 5/7 and v1 ModernBERT correct on only about 4/7 (macro-F1 0.46),
 needed.
 
 **Diagnosis.** Stage 3 was being trained at `max_length=512`. That is, even
@@ -266,21 +267,21 @@ fine-tuned and one not. The long-context architecture was sitting idle.
 
 **Result of the retrain (v2):**
 
-| Variant | Macro F1 (OOF) | CV std | Pos F1 | Long-bucket F1 |
+| Variant | Macro F1 (OOF) | CV std | Pos F1 | Long-bucket correct |
 |---|---|---|---|---|
-| ModernBERT v1 (max_length=512) | 0.7233 | 0.1388 | ~0.62 | 0.46 |
-| **ModernBERT v2 (max_length=1024)** | **0.7642** | **0.1155** | **0.67** | **1.00** |
+| ModernBERT v1 (max_length=512) | 0.7233 | 0.1388 | ~0.62 | 4 / 7 |
+| **ModernBERT v2 (max_length=1024)** | **0.7642** | **0.1155** | **0.67** | **7 / 7** |
 
 Going from 512 → 1024 tokens improved overall macro F1 by +0.041, **lowered
-fold-to-fold variance by 17%** (more stable across seeds/splits), and lifted
-long-post F1 from 0.46 to a perfect 1.00. We did **not** push to
-`max_length=2048` because only 7 posts hit the long bucket and we already
-score perfectly on them at 1024 — diminishing returns at 2× the training
-time.
+fold-to-fold variance by 17%** (more stable across seeds/splits), and
+recovered all three long posts v1 mis-classifies (4/7 → 7/7 correct). We did
+**not** push to `max_length=2048` because only 7 posts hit the long bucket
+and v2 already classifies all seven correctly at 1024 — diminishing returns
+at 2× the training time.
 
 We considered not pushing to `max_length=2048`. Only 7 posts hit the long
-bucket and v2 already scores 1.00 on them. The training time at 2048 would
-roughly double on MPS for ~zero expected gain.
+bucket and v2 already classifies all seven correctly. Training time at 2048
+would roughly double on MPS for ~zero expected gain.
 
 ---
 
@@ -446,7 +447,7 @@ is rock-solid: 0.8781 ± 0.0348.
 | F1 negative | 0.7967 | 0.8779 | +0.081 |
 | F1 neutral | 0.6087 | 0.7480 | +0.139 |
 | F1 positive | 0.4762 | 0.6667 | +0.190 |
-| Long-bucket F1 (n=7, ≥512 tok) | 0.2778 | **1.0000** | **+0.722** |
+| Long-bucket correct (n=7, ≥512 tok, all negative-class) | 5 / 7 | **7 / 7** | **+2** |
 | Short-bucket F1 (n=193) | 0.6360 | 0.7619 | +0.126 |
 | Latency (ms/post, MPS warm) | 6.5 | 11.9 | +5.4 |
 

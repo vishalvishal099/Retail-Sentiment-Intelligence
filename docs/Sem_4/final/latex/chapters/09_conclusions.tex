@@ -9,7 +9,9 @@ Chapter~\ref{ch:problem}:
 \begin{description}
 \item[RQ1] A fine-tuned ModernBERT with a three-stage curriculum raised
       macro-F1 from 0.6272 to \textbf{0.7642} overall on the labelled sample
-      and from 0.2778 to \textbf{1.0000} on long posts.
+      and recovered the two long posts ($\ge 512$~tokens, $n{=}7$, all
+      negative-class) the RoBERTa baseline mis-classifies (5/7
+      $\to$~\textbf{7/7 correct}).
 \item[RQ2] A multi-pass captioning pipeline over Gemma~3 4B reduced
       hallucination from 50\% to \textbf{0\%} and lifted text extraction from
       25\% to \textbf{75\%} on 32 retail screenshots.

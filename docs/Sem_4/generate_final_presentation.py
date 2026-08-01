@@ -323,7 +323,7 @@ def build():
         "Post Lifecycle  —  Kanban with 2-step Resolve",
         "Insights & Competitor Analysis page",
         "In-app Notification Centre mirroring the digest",
-        "ModernBERT Stage 3 (final)  —  F1 0.7285 → 0.7642",
+        "ModernBERT Stage 3 (final)  —  Macro-F1 0.7285 → 0.7642  (5-fold OOF)",
         "Trust-score end-to-end evaluation (n = 200)",
         "SQLite schema mirroring Cosmos DB partitioning",
     ], size=Pt(12))
@@ -714,8 +714,8 @@ def build():
               "Overall Macro-F1", "0.6272 → 0.7642",
               value_color=GREEN, tint=GREEN_TINT, value_size=Pt(24))
     _kpi_tile(s, Inches(4.65), Inches(1.05), Inches(4.0), Inches(1.75),
-              "Long-post F1  (> 256 tok)", "0.28 → 1.00",
-              value_color=GREEN, tint=GREEN_TINT, value_size=Pt(24))
+              "Long posts  (≥ 512 tok,  n = 7)", "5 / 7  →  7 / 7  correct",
+              value_color=GREEN, tint=GREEN_TINT, value_size=Pt(20))
     _kpi_tile(s, Inches(8.8), Inches(1.05), Inches(4.0), Inches(1.75),
               "Uplift over baseline", "+13.7 pts",
               value_color=WALMART_BLUE, value_size=Pt(28))
@@ -729,13 +729,13 @@ def build():
         ["Stage 3  (final)", "Walmart-200 hand-labelled",          "0.7642",   "+13.7"],
     ], first_col_bold=True, highlight_rows={4: GREEN_TINT})
     _tx(s, Inches(0.5), Inches(5.4), Inches(12.3), Inches(0.35),
-        "Per-length-bucket F1", size=Pt(13), bold=True, color=DARK_BLUE)
+        "Per-length-bucket accuracy  (5-fold OOF predictions)",
+        size=Pt(13), bold=True, color=DARK_BLUE)
     _table(s, Inches(0.5), Inches(5.8), Inches(12.3), Inches(1.1), [
-        ["Bucket",                    "Baseline", "ModernBERT",  "Δ"],
-        ["Short  (< 64 tokens)",       "0.7500",  "0.7800",       "+3.0"],
-        ["Medium  (64 – 256 tokens)",  "0.6500",  "0.7400",       "+9.0"],
-        ["Long  (> 256 tokens)",       "0.2778",  "1.0000",       "+72.2"],
-    ], first_col_bold=True, highlight_rows={3: GREEN_TINT})
+        ["Bucket  (token count)",           "Baseline correct", "ModernBERT correct",  "Recovered"],
+        ["Short-to-medium  (< 512, n = 193)", "138 / 193 (72 %)",  "159 / 193 (82 %)",     "+21"],
+        ["Long  (≥ 512, n = 7, all negative)", "5 / 7",            "7 / 7",                "+2"],
+    ], first_col_bold=True, highlight_rows={2: GREEN_TINT})
     _footer(s, page[0], TOTAL)
 
     # 12 · Vision Multi-Pass Payoff ─────────────────────────────────────────
@@ -811,7 +811,7 @@ def build():
     _table(s, Inches(0.5), Inches(1.1), Inches(12.3), Inches(5.6), [
         ["Area",             "Metric",                                          "Value",         "Notes"],
         ["Sentiment",        "Macro-F1 (final)",                                "0.7642",        "+13.7 pts vs RoBERTa baseline"],
-        ["Sentiment",        "Long-post F1  (> 256 tokens)",                    "1.0000",        "From 0.2778 baseline"],
+        ["Sentiment",        "Long-bucket accuracy  (≥ 512 tokens, n=7)",       "7 / 7 correct",  "Baseline 5 / 7  ·  all negative-class"],
         ["Sentiment",        "Cross-validation",                                "5-fold OOF",    "No test-set leakage"],
         ["Vision",           "Hallucination rate",                              "0 %",           "From 50 % on single-pass"],
         ["Vision",           "Text extraction success",                         "75 %",          "From 25 % on single-pass"],
@@ -893,7 +893,7 @@ def build():
         "What worked", size=Pt(15), bold=True, color=GREEN)
     _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(5.0), [
         "3-stage ModernBERT curriculum landed the sentiment win we set out for  (Macro-F1 0.62 → 0.76 on 5-fold OOF).",
-        "Long-post recovery  (0.28 → 1.00)  came for free once we switched off truncation.",
+        "Long-post recovery came for free once we switched off truncation  (≥1024-tok context):  5/7 → 7/7 correct on the ≥ 512-token bucket.",
         "Removing the image on the final vision merge step ended the 50 % hallucination problem  —  the mechanism, not just the number, is what makes it credible.",
         "Trust score as flag-not-drop  matched the human annotator on 12 / 15 low-trust posts. Analysts trust it because they can override it.",
         "HITL feedback table quietly turned into the most useful piece of infrastructure  —  drives few-shot on every click today, retraining tomorrow.",
@@ -905,7 +905,7 @@ def build():
     _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(5.0), [
         "200-post gold set is small.  Numbers are OOF-CV, but a bigger blind held-out set is needed before I'd claim generalisation.",
         "Vision eval is 32 images  —  enough to sanity-check the mechanism, not enough to claim production-grade quality.",
-        "Long-post F1 of 1.00 is on 7 posts  —  read it as evidence the truncation ceiling is gone, not that the model is perfect on long text.",
+        "Long bucket has only 7 posts and they are all negative-class  —  7/7 correct is evidence the truncation ceiling is gone, not proof of long-text mastery.",
         "Reply drafts still need an analyst edit  —  we track edit-distance but haven't shown it dropping consistently yet.",
         "Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done  —  they're in the roadmap on the next slide.",
     ], size=Pt(11))

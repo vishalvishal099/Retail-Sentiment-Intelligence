@@ -191,12 +191,12 @@
 ## Slide 13 — ModernBERT — Final Training Results
 
 **Content**
-- Three KPI tiles: Overall Macro-F1 **0.6272 → 0.7642**  ·  Long-post F1 (> 256 tok) **0.28 → 1.00**  ·  Uplift **+13.7 pts**.
+- Three KPI tiles: Overall Macro-F1 **0.6272 → 0.7642**  ·  Long posts (≥ 512 tok, n = 7, all negative) **5/7 → 7/7 correct**  ·  Uplift **+13.7 pts Macro-F1**.
 - 3-stage curriculum table (Baseline → Stage 1 → Stage 2 → Stage 3 final).
-- Per-length-bucket F1: short 0.75 → 0.78, medium 0.65 → 0.74, long 0.28 → 1.00.
+- Per-length-bucket accuracy: short-to-medium (< 512, n=193) 138/193 → 159/193 correct; long (≥ 512, n=7, all negative-class) 5/7 → 7/7 correct.
 
 **Talking track**
-> "Final ModernBERT numbers on 5-fold OOF CV of 200 hand-labelled retail Reddit posts. Macro-F1 climbs the curriculum monotonically. The most dramatic gain is on long posts — the Twitter-RoBERTa baseline is capped at 512 tokens, so long complaints get truncated and F1 collapses to 0.28. ModernBERT sees the full 1024 tokens and hits 1.0 on that bucket. A caveat: only 7 posts sit in that bucket — I read this as 'the truncation ceiling is gone', not 'the model is perfect'."
+> "Final ModernBERT numbers on 5-fold OOF CV of 200 hand-labelled retail Reddit posts. Macro-F1 climbs the curriculum monotonically. The most dramatic move is on the long bucket — the Twitter-RoBERTa baseline is capped at 512 tokens, so long complaints get truncated. Of the seven ≥512-token posts, all seven happen to be labelled negative by our annotator; RoBERTa gets 5 of 7 right, ModernBERT gets all 7. Two caveats I want to make explicit: n is only 7 and all of them are negative-class, so I read this as evidence the truncation ceiling is gone, not that the model is perfect on long text."
 
 ---
 
@@ -263,7 +263,7 @@ Deliberately grounded — not a green wall of ticks.
 
 **What worked**
 - 3-stage ModernBERT curriculum landed the sentiment win we set out for (0.62 → 0.76 on 5-fold OOF).
-- Long-post recovery came for free once we switched off truncation.
+- Long-post recovery came for free once we switched off truncation  (5/7 → 7/7 correct on the ≥1024-tok context).
 - Removing the image on the vision merge step ended the 50 % hallucination problem — the mechanism, not just the number.
 - Trust score as *flag-not-drop* matched the annotator on 12 / 15 low-trust posts; analysts trust it because they can override it.
 - HITL feedback table quietly became the most useful piece of infrastructure — drives few-shot today, retraining tomorrow.
@@ -271,7 +271,7 @@ Deliberately grounded — not a green wall of ticks.
 **What's still open (honest)**
 - 200-post gold set is small; a bigger blind held-out set is needed before I'd claim generalisation.
 - Vision eval is 32 images — enough to sanity-check the mechanism, not to claim production-grade quality.
-- Long-post F1 = 1.00 is on 7 posts — evidence the truncation ceiling is gone, not that the model is perfect on long text.
+- Long bucket has only 7 posts and they are all negative-class — 7/7 correct is evidence the truncation ceiling is gone, not proof of long-text mastery.
 - Reply drafts still need an analyst edit — we track edit-distance but haven't shown it dropping consistently yet.
 - Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done.
 

@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  1 AUG 2026 09:41
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  1 AUG 2026 18:11
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -707,7 +707,7 @@ Chapter 1.
 
 
 ]
-Underfull \hbox (badness 1024) in paragraph at lines 46--50
+Underfull \hbox (badness 1024) in paragraph at lines 47--51
 []\TU/TimesNewRoman(0)/m/n/12 A multi-pass vision-captioning technique that ada
 pts ideas from recent vision-
  []
@@ -796,7 +796,7 @@ File: figures/fig3_trust_composition.png Graphic file (type bmp)
 File: figures/fig10_modernbert_curriculum.png Graphic file (type bmp)
 <figures/fig10_modernbert_curriculum.png>
 
-Overfull \hbox (106.40605pt too wide) in paragraph at lines 176--186
+Overfull \hbox (106.40605pt too wide) in paragraph at lines 178--188
 \TU/TimesNewRoman(0)/m/n/12 Aspects are extracted with a zero-shot NLI classifi
 er (\TU/Menlo(0)/m/n/12 mDeBERTa-v3-base-xnli-multilingual-nli-2mil7\TU/TimesNe
 wRoman(0)/m/n/12 )
@@ -821,11 +821,11 @@ File: figures/fig12_vision_multipass.png Graphic file (type bmp)
 [18]
 File: figures/fig13_alert_routing.png Graphic file (type bmp)
 <figures/fig13_alert_routing.png>
-File: ../figures/ui/alert_feed.png Graphic file (type bmp)
-<../figures/ui/alert_feed.png>
 
 
 [19]
+File: ../figures/ui/alert_feed.png Graphic file (type bmp)
+<../figures/ui/alert_feed.png>
 File: ../figures/ui/brand_health.png Graphic file (type bmp)
 <../figures/ui/brand_health.png>
 
@@ -874,13 +874,18 @@ File: ../figures/ui/notifications.png Graphic file (type bmp)
 
 [30]
 Chapter 6.
+
+Overfull \hbox (70.0041pt too wide) in paragraph at lines 33--38
+ [][] 
+ []
+
 File: figures/fig14_sentiment_results.png Graphic file (type bmp)
 <figures/fig14_sentiment_results.png>
-) (./chapters/07_tools.tex
+
 
 [31
 
-]
+]) (./chapters/07_tools.tex
 
 [32]
 Chapter 7.

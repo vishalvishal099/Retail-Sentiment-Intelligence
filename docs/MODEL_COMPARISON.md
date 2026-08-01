@@ -10,7 +10,7 @@ truncated. This chapter documents how we replaced it with a fine-tuned
 `answerdotai/ModernBERT-base` and what the swap was worth.
 
 The headline result: **macro F1 0.6272 → 0.7642 (+0.137)** overall, and
-**0.2778 → 1.0000 (+0.722)** on long posts (≥512 tokens) — the differentiator
+**7 / 7 correct on long posts (≥ 512 tokens, n = 7, all negative-class)** vs 5 / 7 for the RoBERTa baseline — the truncation ceiling that limited RoBERTa is removed
 ModernBERT's 8192-token context was supposed to deliver.
 
 ---
@@ -124,18 +124,19 @@ the model under test.
 We ran the full Stage-3 protocol twice — once at `max_length=512` (v1, kept
 for ablation), once at `max_length=1024` (v2, shipped):
 
-| Variant | Macro F1 (OOF) | CV std | Pos F1 | Long-bucket F1 |
+| Variant | Macro F1 (OOF) | CV std | Pos F1 | Long-bucket correct |
 |---|---|---|---|---|
-| ModernBERT v1 (max_length=512) | 0.7233 | 0.1388 | 0.62 | 0.46 |
-| **ModernBERT v2 (max_length=1024)** | **0.7642** | **0.1155** | **0.67** | **1.00** |
+| ModernBERT v1 (max_length=512) | 0.7233 | 0.1388 | 0.62 | 6/7 |
+| **ModernBERT v2 (max_length=1024)** | **0.7642** | **0.1155** | **0.67** | **7/7** |
 
 Going from 512 → 1024 tokens improved overall macro F1 by +0.041, **lowered
-fold-to-fold variance by 17%** (0.1388 → 0.1155), and lifted long-post F1
-from 0.46 to a perfect 1.00. This is the empirical justification for the
-`max_length: 1024` line in [config/models.yaml](../config/models.yaml).
+fold-to-fold variance by 17%** (0.1388 → 0.1155), and recovered the last long
+post the 512-token variant mis-classifies (6/7 → 7/7). This is the empirical
+justification for the `max_length: 1024` line in
+[config/models.yaml](../config/models.yaml).
 
 We did **not** push to 2048: only 7 posts hit the long bucket, we already
-score perfectly on them at 1024, and 2048 doubles training time on MPS.
+classify all seven correctly at 1024, and 2048 doubles training time on MPS.
 
 ## 7. Final Results (RoBERTa vs ModernBERT v2)
 
@@ -149,12 +150,12 @@ score perfectly on them at 1024, and 2048 doubles training time on MPS.
 | F1 — positive | 0.4762 | 0.6667 | +0.190 |
 | Latency (ms / post, MPS, warm) | 6.5 | 11.9 | +5.4 |
 
-### 7.2 Length-bucketed F1 — the thesis axis
+### 7.2 Length-bucketed results — the thesis axis
 
-| Bucket | RoBERTa | **ModernBERT v2** | Δ |
+| Bucket | Baseline correct | **ModernBERT v2 correct** | Recovered |
 |---|---|---|---|
-| `short_lt512` (n=193) | 0.6360 | **0.7619** | **+0.126** |
-| `long_gte512` (n=7) | 0.2778 | **1.0000** | **+0.722** |
+| `short_lt512` (n=193)                    | 138 / 193 (72 %) | **159 / 193 (82 %)** | **+21** |
+| `long_gte512` (n=7, all negative-class)  | 5 / 7             | **7 / 7**             | **+2**  |
 
 Both buckets benefit from fine-tuning, but the long bucket is where the
 8192-token architecture pays for itself: RoBERTa simply cannot read the

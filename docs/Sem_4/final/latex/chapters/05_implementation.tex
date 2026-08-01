@@ -117,7 +117,9 @@ teacher, (Stage 2) 2k retail-focused Reddit posts pseudo-labelled by the
 same teacher, and (Stage 3) 200 hand-labelled retail Reddit posts for a
 final domain adaptation.  See Figure~\ref{fig:curriculum}.  The 5-fold
 out-of-fold macro-F1 rose from the baseline of 0.6272 to \textbf{0.7642};
-long-post macro-F1 rose from 0.2778 to \textbf{1.0000}.
+long-post accuracy (bucket $\ge 512$~tokens, $n{=}7$, all negative-class)
+rose from 5/7 correct on the RoBERTa baseline to \textbf{7/7 correct}
+on ModernBERT.
 
 At inference time the sentiment head is wrapped by a thin
 \texttt{SentimentAnalyzer} that owns exactly two responsibilities: assemble

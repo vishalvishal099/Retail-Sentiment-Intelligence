@@ -783,8 +783,9 @@ def build() -> None:
                       "aspects, vision, aggregation, alerting, and dashboarding.")
     add_numbered(doc, "A domain fine-tuned ModernBERT sentiment classifier trained through a "
                       "three-stage curriculum, raising macro-F1 from 0.6272 to 0.7642 overall and "
-                      "from 0.2778 to 1.0000 on long posts, evaluated with honest 5-fold "
-                      "out-of-fold cross-validation.")
+                      "recovering all long posts (≥ 512 tokens, n=7, all negative-class) that the "
+                      "RoBERTa baseline mis-classifies (5/7 → 7/7 correct), evaluated with honest "
+                      "5-fold out-of-fold cross-validation.")
     add_numbered(doc, "A multi-pass vision-captioning technique that adapts ideas from recent "
                       "(policy-blocked) vision-language papers onto a compliant Gemma 3 4B model, "
                       "reducing hallucination from 50% to 0% and lifting text extraction from "
@@ -1322,8 +1323,8 @@ def build() -> None:
     add_caption(doc, "Figure 14: Sentiment Macro-F1 — RoBERTa vs Fine-Tuned ModernBERT", bookmark="fig_14")
     add_image(doc, "fig14_sentiment_results.png",
               "Figure 14: Out-of-fold macro-F1 by length bucket — the fine-tuned ModernBERT "
-              "gains most on long posts (0.28 → 1.00) where RoBERTa's 512-token cap truncates the "
-              "decisive detail.", width_in=5.6)
+              "recovers all seven ≥512-token posts (RoBERTa 5/7, ModernBERT 7/7) where RoBERTa's "
+              "512-token cap truncates the decisive detail.", width_in=5.6)
     add_caption(doc, "Table 2: Sentiment Model Comparison (out-of-fold CV)", bookmark="tbl_2")
     add_table(doc,
         ["Model", "Context", "Macro-F1", "Notes"],
@@ -1334,19 +1335,21 @@ def build() -> None:
         ],
         col_widths=[2.6, 0.9, 1.1, 2.1])
     add_para(doc,
-        "The decisive gain is on long posts. Table 3 buckets the evaluation by tokenized length; "
-        "ModernBERT's long-context capacity converts a near-random 0.2778 on posts ≥512 tokens "
-        "into a perfect 1.0000, because those are exactly the posts whose sentiment-determining "
-        "detail RoBERTa truncated.")
-    add_caption(doc, "Table 3: Per-Length-Bucket Sentiment F1", bookmark="tbl_3")
+        "The decisive gain is on long posts. Table 3 splits the evaluation at the RoBERTa "
+        "512-token truncation boundary. All seven long posts are labelled negative by the human "
+        "annotator, so the meaningful score for that bucket is a per-post correctness count "
+        "rather than a per-class F1: ModernBERT recovers the two long posts the baseline "
+        "mis-classifies (5/7 → 7/7 correct), showing the truncation ceiling that limited "
+        "RoBERTa is removed.")
+    add_caption(doc, "Table 3: Per-Length-Bucket Sentiment Results (5-fold OOF predictions)", bookmark="tbl_3")
     add_table(doc,
-        ["Length bucket", "RoBERTa F1", "ModernBERT F1", "Δ"],
+        ["Length bucket", "Baseline correct", "ModernBERT correct", "Recovered"],
         [
-            ["< 512 tokens (193 posts)", "0.65", "0.75", "+0.10"],
-            ["≥ 512 tokens (7 posts)", "0.2778", "1.0000", "+0.722"],
-            ["Overall (200 posts)", "0.6272", "0.7642", "+0.137"],
+            ["< 512 tokens  (n=193)",                     "138/193 (72%)", "159/193 (82%)", "+21"],
+            ["≥ 512 tokens  (n=7, all negative)",         "5/7",           "7/7",           "+2"],
+            ["Overall  (n=200)",                           "143/200 (72%)", "166/200 (83%)", "+23"],
         ],
-        col_widths=[2.4, 1.3, 1.5, 1.0])
+        col_widths=[2.6, 1.4, 1.4, 0.9])
     add_para(doc,
         "Honesty caveats, stated plainly: the labelled set is small (200) and AI-assisted with "
         "full human review (all suggestions accepted), the positive class is severely "
@@ -1418,7 +1421,7 @@ def build() -> None:
             ["Vision model hallucinated on 50% of images (fake receipts/prices)",
              "Four-pass pipeline with image-free final synthesis → hallucination 0%"],
             ["512-token models truncated long complaints, losing decisive detail",
-             "Fine-tuned ModernBERT with 1024-token context → long-post F1 0.28 → 1.00"],
+             "Fine-tuned ModernBERT with 1024-token context → all seven ≥512-token posts recovered (RoBERTa 5/7, ModernBERT 7/7)"],
             ["Every state-of-the-art vision model was blocked by vendor policy",
              "Re-implemented paper techniques as a calling strategy on compliant Gemma 3 4B"],
             ["Free ingest provider returns age=0, karma=0 for all posts",
@@ -1439,8 +1442,9 @@ def build() -> None:
         "Reddit stream into a structured, aspect-tagged, trust-weighted retail brand-health feed, "
         "running entirely on a local, offline-first, zero-API-cost stack. The central technical "
         "claims are supported by honest evaluation: fine-tuning ModernBERT raised sentiment "
-        "macro-F1 from 0.6272 to 0.7642 (out-of-fold), with a decisive 0.2778 → 1.0000 gain on "
-        "the long posts that motivated the long-context model; and the multi-pass vision pipeline "
+        "macro-F1 from 0.6272 to 0.7642 (out-of-fold), with all seven ≥512-token posts recovered "
+        "(RoBERTa 5/7, ModernBERT 7/7) — the long-context motivation of ModernBERT is what "
+        "delivers that recovery; and the multi-pass vision pipeline "
         "eliminated hallucination (50% → 0%) while tripling correct text extraction. The trust "
         "score and trust × confidence gate provide an interpretable, auditable filter that flags "
         "rather than drops low-credibility content, and the human-in-the-loop dashboard closes "
