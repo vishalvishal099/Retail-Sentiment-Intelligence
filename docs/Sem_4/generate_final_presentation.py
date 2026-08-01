@@ -445,36 +445,38 @@ def build():
 
     # 7 · Smart Reply — Worked Example ──────────────────────────────────────
     s = new()
-    _header_bar(s, "Smart Reply  —  Worked Example  (real post from our benchmark)",
-                "id = 1nn7hjxx  ·  r/samsclub  ·  data/benchmark_real_200.jsonl")
+    _header_bar(s, "Smart Reply  —  Worked Example  (real post, real drafts, real DB)",
+                "raw_posts.id = reddit_1u2bgdw  ·  r/samsclub  ·  captured live from data/local.db")
     # Complaint card
     _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.55),
           AMBER_TINT, line=AMBER)
     _tx(s, Inches(0.7), Inches(1.15), Inches(12.0), Inches(0.35),
-        "Customer complaint  —  r/samsclub  ·  aspects: product_quality, store_experience  ·  trust 0.62  ·  P2",
-        size=Pt(11), bold=True, color=AMBER)
+        "Customer complaint  —  r/samsclub  ·  ModernBERT: negative 0.9999997  ·  aspects: customer service, product quality, store experience  ·  trust 0.66",
+        size=Pt(10), bold=True, color=AMBER)
     _tx(s, Inches(0.7), Inches(1.5), Inches(12.0), Inches(1.05),
-        "u/hangry_shopper : \"Why do you guys sell whole pizzas made hours ago to customers?  The very few times I've "
-        "gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in "
-        "my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. "
-        "Pizza is meant to be made to order and waited for.\"",
+        "\"Why do you guys sell whole pizzas made hours ago to customers?  The very few times I've gotten a whole "
+        "pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. "
+        "How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant "
+        "to be made to order and waited for.\"",
         size=Pt(10), color=DARK_GRAY)
-    # Three drafts side-by-side
+    # Three drafts side-by-side (VERBATIM from the live capture)
     drafts = [
-        ("Draft A · GPT-4o", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
-         "Really sorry the pizza's been sitting in the hot case that long — that's not the "
-         "fresh pie experience the club is supposed to deliver. DM me the club number and the "
-         "day/time of your last visit and I'll flag it to the bakery-café team so the "
-         "make-to-order flow gets reinforced. — Ravi (Sam's Club Care)"),
-        ("Draft B · Mistral 7B", PURPLE, PURPLE_TINT,
-         "Totally fair callout — a whole pie that's been in the hot case for 90 minutes isn't "
-         "the deal. DM me your club number and I'll get the bakery lead to look at their "
-         "bake-off schedule so the pies you buy are made to order like they should be. — Priya"),
-        ("Draft C · Smart Composer", GREEN, GREEN_TINT,
-         "Hi hangry_shopper, we're really sorry about the quality of what you received on your "
-         "last visit — a pizza that's been sitting for that long isn't the standard. Please DM "
-         "us the club number and the day you bought it and we'll get the bakery team on it. "
-         "— Sam's Club Care"),
+        ("Draft A · GPT-4o  (Walmart Gateway  ✓)", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
+         "Hi u/there, I'm sorry to hear about your experience with the pizzas — it sounds "
+         "really disappointing. Our goal is to provide fresh and enjoyable food, and I "
+         "understand how frustrating it must be to receive something that feels old. If "
+         "you'd like, feel free to DM me the store location so I can share your feedback "
+         "directly with the team and look into it further.  — [Your Name]"),
+        ("Draft B · Mistral 7B  [offline fallback]", PURPLE, PURPLE_TINT,
+         "Hi u/there — thanks for flagging this. that's not the experience we want anyone "
+         "to have with your order. DM us the details when you have a moment and we'll "
+         "start looking into the specifics.  — The Walmart Care team\n\n"
+         "(Ollama not running on localhost:11434 → system fell back to Smart Composer "
+         "and badged the slot [offline fallback] in the UI.)"),
+        ("Draft C · Smart Composer  (deterministic)", GREEN, GREEN_TINT,
+         "Hi u/there, Your order like this absolutely shouldn't happen. DM us the details "
+         "when you have a moment and we'll start looking into the specifics.  "
+         "— Walmart Care 💙"),
     ]
     x = Inches(0.4)
     y = Inches(2.75)
@@ -484,7 +486,7 @@ def build():
         _rect(s, x, y, w, h, tint, line=col)
         _rect(s, x, y, w, Inches(0.42), col)
         _tx(s, x, y + Inches(0.05), w, Inches(0.35),
-            label, size=Pt(12), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+            label, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
         _tx(s, x + Inches(0.15), y + Inches(0.55), w - Inches(0.3), h - Inches(0.65),
             body, size=Pt(9), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
         x = x + w + Inches(0.15)
@@ -492,9 +494,9 @@ def build():
     _rect(s, Inches(0.5), Inches(6.05), Inches(12.3), Inches(0.85),
           LIGHT_BLUE, line=WALMART_BLUE)
     _tx(s, Inches(0.7), Inches(6.15), Inches(12.0), Inches(0.7),
-        "Analyst picks a draft, edits inline, clicks  Save & Open Reddit  →  posted reply is written to  feedback  "
-        "(kind = auto_reply_posted)  →  becomes the next post's top few-shot example. See docs/Sem_4/SMART_REPLY_COMPOSER.md",
-        size=Pt(11), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
+        "Live capture — GPT-4o gateway reached (gateway_available=True); Ollama refused connection so slot B fell back to Smart Composer; "
+        "Smart Composer always produces slot C. Few-shot: 3 real posted replies from feedback (top-3 by created_at DESC).",
+        size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
     # 6 · Learning Loop ─────────────────────────────────────────────────────

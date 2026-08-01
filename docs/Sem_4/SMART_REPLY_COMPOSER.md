@@ -228,55 +228,54 @@ are unreachable, the UI still shows three drafts.
 
 ---
 
-## 5 · Worked example — a real post from our benchmark
+## 5 · Worked example — a real post + real drafts + real few-shot
 
-The example below is **not synthetic**. It is post
-`id=1nn7hjxx` from `data/benchmark_real_200.jsonl`, a real Sam's Club member
-complaint we scraped with the Arctic Shift ingestion pipeline. We use this
-post in the viva because every step is verifiable — the row exists in the
-benchmark file the evaluator can open.
+Everything below is **captured from a live run** on the local SQLite
+instance (`data/local.db`). Nothing on this page is invented; every
+sentence in every draft was produced by the actual pipeline at the moment
+this document was written. The exact commands that reproduce it are in
+§6.5 below.
 
-### 5.1 The raw post (as stored in `raw_posts`)
+### 5.1 The raw post (from `raw_posts`)
+
+Real row, ingested by the Arctic Shift ingestion pass and stored under
+`id = reddit_1u2bgdw`:
 
 ```json
 {
-  "id": "1nn7hjxx",
+  "id": "reddit_1u2bgdw",
   "subreddit": "samsclub",
   "title": "Why do you guys sell whole pizzas made hours ago to customers?",
-  "body": "The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for.",
-  "author": "hangry_shopper",
-  "score": 12,
-  "url": "https://reddit.com/r/samsclub/comments/1nn7hjxx",
-  "human_sentiment": "negative"
+  "body": "The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for. I'd rather wait 30mins for a pizza worth freaking eating then 0secs for a waste of money. Why do you guys do this seriously?",
+  "author": "",
+  "score": 0,
+  "url": "https://www.reddit.com/r/samsclub/comments/1u2bgdw/why_do_you_guys_sell_whole_pizzas_made_hours_ago/",
+  "created_utc": "2026-06-10T18:59:12+00:00"
 }
 ```
 
-### 5.2 What the pipeline computes for it
+### 5.2 What the pipeline computed (from `analyses`)
 
-Running this post through `pipeline.py` produces the following `analyses`
-row (values from an actual dry-run):
+Real row from the `analyses` container — copy-paste of the actual DB value:
 
 | Field | Value | Where it comes from |
 |-------|-------|---------------------|
-| `sentiment` | `negative` | ModernBERT (Stage 3), softmax confidence |
-| `sentiment_confidence` | `0.94` | Softmax over 3 classes |
-| `aspects` | `product_quality`, `store_experience` | DeBERTa-v3 zero-shot NLI |
-| `aspect_confidences` | `0.83`, `0.71` | NLI entailment scores |
-| `trust_score` | `0.62` | 0.4·metadata + 0.3·dedup + 0.3·llm |
-| `trust_components` | metadata=0.55, dedup=0.90, llm=0.50 | Decomposition shown in the UI |
-| `priority` | `P2` | trust ≥ 0.50 AND conf ≥ 0.60 |
+| `sentiment` | `negative` | ModernBERT (Stage 3), softmax argmax |
+| `sentiment_confidence` | `0.99999976` | Softmax over 3 classes |
+| `aspects` (top-3) | `customer service (0.967)`, `product quality (0.962)`, `store experience (0.894)` | DeBERTa-v3 zero-shot NLI, `-negative` for each |
+| `trust_score` | `0.66` | 0.4·metadata + 0.3·dedup + 0.3·llm |
+| `human_validated` | `null` | Not reviewed by an analyst yet |
+| `reply_posted_at` | `null` | No reply posted yet — the drafts below are what would appear if the analyst clicked *Generate* right now |
 
-Because `sentiment=negative` and `priority=P2`, the post lands in the
-Review & Validate queue with a **Generate Drafts** button enabled.
+Because `sentiment = negative` and trust ≥ 0.5, the post is eligible for
+Review & Validate; the **Generate Drafts** button is enabled.
 
-### 5.3 The prompt the analyst actually sends (variables substituted)
+### 5.3 The prompt the LLMs actually see (variables substituted)
 
-When the analyst clicks **Generate Drafts**, `_build_reply_prompt` runs and
-produces the string below. This is exactly what goes to both GPT-4o
-(via the Walmart Gateway) and Mistral 7B (via Ollama).
-
-Assume the `feedback` table already has 12 posted replies. The top-3 most
-recent, by `created_at`, are pulled in as few-shot examples:
+Below is the **exact prompt string** printed by
+`WalmartLLMClient._build_reply_prompt()` on this post, using the top-3 most
+recent `auto_reply_posted` rows from `feedback` as few-shot examples. The
+few-shot pairs are real analyst-posted replies — no invention:
 
 ```text
 You are a senior Walmart customer-care analyst replying on Reddit.
@@ -286,91 +285,111 @@ no hashtags, no emojis. Do NOT promise refunds you can't verify;
 invite them to DM order details if action is needed. Sign off as
 a real person, not a brand.
 
-Example customer post: Ordered a rotisserie last Sunday and half the skin was black-charred. Dumped it. Second time this month.
-Example analyst reply: Really sorry about the rotisserie — that's a temperature-hold issue at the deli case. DM me the order number and I'll get the club manager to look at it and refund you. — Ravi
-Example customer post: Pickup order arrived with the ice cream fully melted. Driver was 40 min late. Two kids upset.
-Example analyst reply: That's completely unacceptable — a 40-minute delay on a frozen order is on us. DM me the order # and I'll refund the ice cream today and flag the delivery slot. — Priya
-Example customer post: Bought bakery bread yesterday, opened it this morning, mould on two slices. Best-by date is next week.
-Example analyst reply: Really appreciate you flagging the mould — that goes straight to bakery ops. Send me a DM with the SKU and I'll get you a refund and pass it to the store team so the batch is pulled. — Ravi
+Example customer post: Mostly metric fraud (there's a reason why customer codes are a thing + our former lead tried that before our coach put there foot down) mixed with having the spots right by the door
+Example analyst reply: Hi u/there, it sounds like you're dealing with some frustrating situations around metrics and spot placements. I understand how issues like these can impact both customer service and the overall flow of operations. If you'd like to share more details about what's going on, feel free to DM, and I'll do my best to help. – Sam
+
+Example customer post: Can anyone explain the ATC role to me? My store is aggressively using ATCs to keep the department running. We'll have anywhere from two to six ATCs working per day. They do things like handling customer issues and bossing associates around,
+Example analyst reply: Hi u/there, I understand your concerns about the ATC role in your store. The ATC (Associate Team Coach) role is designed to provide support and guidance to associates within a department, but it's not intended to replace team leads or boss people around. If you have specific instances where you feel this isn't the case, I would encourage you to reach out to your store management to discuss your concerns.
+
+Example customer post: I was completely on board until I read the second part lol. I'm like 🤔
+Example analyst reply: Hi u/there, I can understand why you might have reservations after reading the app requirements. We strive to make our processes as straightforward and accessible as possible for all associates. If you have specific concerns or need clarification on any aspects of the app usage, please feel free to share your order details with me via DM so we can address them directly.
 
 Subreddit: r/samsclub
-Customer (hangry_shopper) complaint about: product_quality, store_experience
+Customer (there) complaint about: customer_service, product_quality, store_experience
 Customer post:
 Why do you guys sell whole pizzas made hours ago to customers?
 
-The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for.
+The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant to be made to order and waited for. I'd rather wait 30mins for a pizza worth freaking eating then 0secs for a waste of money. Why do you guys do this seriously?
 
 Reply:
 ```
 
-### 5.4 The three drafts the analyst sees
+### 5.4 The three drafts the system actually produced
 
-**Draft A — GPT-4o (Walmart LLM Gateway)** — `~1.9 s`, `~USD 0.00019`
+Captured verbatim from `WalmartLLMClient.generate_reply_pair(...)` on
+`reddit_1u2bgdw`. Runtime state at capture time:
 
-> Really sorry the pizza's been sitting in the hot case that long — that's
-> not the fresh pie experience the club is supposed to deliver. DM me the
-> club number and the day/time of your last visit and I'll flag it to the
-> bakery-café team so the make-to-order flow gets reinforced.
-> — Ravi (Sam's Club Care)
+- Walmart LLM Gateway (`gpt-4o`) — **reachable** (`gateway_available = True`)
+- Local Ollama (`mistral:7b-instruct`) — **not running** (`ollama_available = False`, error: `Connection refused` on `localhost:11434`)
+- Smart Composer — **always available**
 
-**Draft B — Mistral 7B-Instruct (local Ollama)** — `~11 s`, `free`
+The system correctly used GPT-4o for slot A, fell back to Smart Composer
+for slot B (badged as `[offline fallback]` in the UI), and produced the
+Smart Composer draft in slot C.
 
-> Totally fair callout — a whole pie that's been in the hot case for 90
-> minutes isn't the deal. DM me your club number and I'll get the bakery
-> lead to look at their bake-off schedule so the pies you buy are made to
-> order like they should be.
-> — Priya
+**Draft A — GPT-4o (Walmart LLM Gateway)** — real
+`source = llm`, `model_used = gpt-4o`
 
-**Draft C — Smart Composer (deterministic)** — `<10 ms`, `free`
+> Hi u/there, I'm sorry to hear about your experience with the pizzas —
+> it sounds really disappointing. Our goal is to provide fresh and
+> enjoyable food, and I understand how frustrating it must be to receive
+> something that feels old. If you'd like, feel free to DM me the store
+> location so I can share your feedback directly with the team and look
+> into it further. — [Your Name]
 
-> Hi hangry_shopper, we're really sorry about the quality of what you
-> received on your last visit — a pizza that's been sitting for that long
-> isn't the standard. Please DM us the club number and the day you bought
-> it and we'll get the bakery team on it.
-> — Sam's Club Care
+**Draft B — Mistral 7B (Ollama)** — real, but slot fell back
+`source = smart-template`, `model_used = mistral:7b-instruct`, UI badge: **[offline fallback]**
 
-### 5.5 How to explain this to the evaluator (step by step)
+> Hi u/there — thanks for flagging this. that's not the experience we want
+> anyone to have with your order. DM us the details when you have a moment
+> and we'll start looking into the specifics.
+> — The Walmart Care team
 
-1. **"The customer's post is real."** Open
-   `data/benchmark_real_200.jsonl`, `id=1nn7hjxx` — it's a Sam's Club
-   member complaining that whole pies are stale when picked up.
-2. **"Our pipeline scored it as `negative`, aspects `product_quality` and
-   `store_experience`, trust 0.62."** All three numbers are shown live in
-   the Review & Validate panel; the analyst can override any of them.
-3. **"When the analyst clicks Generate Drafts, we run the same prompt on
-   three engines in parallel."** Point to slide 6 for the prompt template.
-4. **"The prompt has three few-shot pairs pulled from `feedback`."** These
-   pairs are *real posted replies* by our analyst team — the last three,
-   most recent first. They're what make GPT stop saying "We apologise for
-   the inconvenience" and start saying "DM me the order number".
-5. **"The three drafts are shown side by side."** GPT is best at reasoning,
-   Mistral matches the tone almost as well and is free, Smart Composer is
-   the safety net for when the LLMs are unavailable.
-6. **"Analyst picks the one they like, edits inline, clicks Save & Open
-   Reddit."** The edited text is stored in `feedback` under
-   `kind = auto_reply_posted` — which means it becomes the **next**
-   post's top few-shot example. The loop closes on itself.
-7. **"No model was retrained to produce this reply."** The composer
-   improves over time purely through in-context learning — a key selling
-   point when the analyst headcount is small and the pool is still growing.
+**Draft C — Smart Composer** — real
+`source = smart-template`, `model_used = smart-composer`
+
+> Hi u/there, Your order like this absolutely shouldn't happen. DM us the
+> details when you have a moment and we'll start looking into the
+> specifics. — Walmart Care 💙
+
+### 5.5 What to tell the evaluator (step by step)
+
+1. **"The customer's post is real, in our database, right now."** — Open
+   `data/local.db` and query
+   `SELECT data FROM raw_posts WHERE json_extract(data,'$.id')='reddit_1u2bgdw';`
+   The row from §5.1 comes back.
+2. **"The pipeline classified it as `negative` with confidence 0.9999997,
+   three aspects, trust 0.66."** — Same DB, query the `analyses` table for
+   the same post_id. Show the row.
+3. **"The prompt has three real few-shot pairs from the `feedback` table."**
+   — Point at §5.3. These are actual posted replies by our analyst team
+   pulled with the SQL query from §3.2, sorted by `created_at DESC`.
+4. **"Draft A is a real GPT-4o response through the Walmart LLM Gateway."**
+   — The call was made through the internal
+   `wmtllmgateway.stage.walmart.com/v1/chat/completions` endpoint with the
+   `WM_CONSUMER.ID` header. Cost tracker recorded ~200 output tokens.
+5. **"Draft B *would have been* Mistral 7B, but Ollama isn't running on
+   this machine so the system fell back to Smart Composer and badged the
+   slot `[offline fallback]`."** — This is the fallback logic from §1
+   working in production, live.
+6. **"Draft C is the Smart Composer — pure Python, no LLM, always
+   available."** — This is our safety net. It produces a varied,
+   aspect-specific reply from curated phrase pools.
+7. **"If the analyst picks Draft A, edits it, and clicks Save & Open
+   Reddit, the reply is written to `feedback` with `kind = auto_reply_posted`
+   and becomes the next post's top few-shot example."** — See §5.6.
 
 ### 5.6 What actually gets written back after the analyst posts
 
+If the analyst had accepted Draft A and clicked *Save & Open Reddit*, the
+following row would be inserted into `feedback` (schema matches the 18 rows
+already in the DB):
+
 ```json
 {
-  "id": "reply_1nn7hjxx_1735689012",
+  "id": "reply_reddit_1u2bgdw_<epoch_seconds>",
   "kind": "auto_reply_posted",
-  "post_id": "1nn7hjxx",
-  "analyst_id": "vishal.singh",
-  "reply_text": "Really sorry the pizza's been sitting in the hot case that long — that's not the fresh pie experience the club is supposed to deliver. DM me the club number and the day/time of your last visit and I'll flag it to the bakery-café team so the make-to-order flow gets reinforced. — Ravi (Sam's Club Care)",
-  "created_at": "2026-08-01T09:30:12Z",
-  "partition_key": "vishal.singh"
+  "post_id": "reddit_1u2bgdw",
+  "analyst_id": "<session_analyst>",
+  "reply_text": "<the edited Draft A>",
+  "created_at": "<utc_iso>",
+  "partition_key": "<session_analyst>"
 }
 ```
 
-Simultaneously the `analyses` row for post `1nn7hjxx` is updated with
+Simultaneously the `analyses` row for `reddit_1u2bgdw` is updated with
 `reply_posted_at`, `reply_text`, `human_validated = true`, and the
-`lifecycle` table transitions the card from **In Progress → Resolved**.
+`post_lifecycle` table transitions the card from **In Progress → Resolved**.
 
 ---
 
@@ -424,7 +443,59 @@ openai_model:      str = "gpt-4o-mini"
   failures → falls back to direct OpenAI (if key set), then to the Smart
   Composer. The UI badges the slot as `[offline fallback]` so the analyst
   knows the source.
-- *"Why not a fine-tuned reply model?"* — Currently the reply pool is
-  ~hundreds of examples; not enough for supervised fine-tuning. Few-shot
-  prompting on top of GPT-4o / Mistral is the right regime at this scale.
-  A fine-tune is on the future-work roadmap once the pool passes ~10 k.
+## 8 · Reproduce §5 in a terminal
+
+The following one-liner regenerates the prompt in §5.3 and the three
+drafts in §5.4 against the live `data/local.db`. Runs offline; only slots
+that have network / Ollama available call out.
+
+```bash
+python - << 'PY'
+import sqlite3, json, sys
+sys.path.insert(0, '.')
+from src.utils.config import load_config
+from src.analysis.llm_client import create_llm_client
+
+conn = sqlite3.connect('data/local.db')
+cur = conn.cursor()
+
+# Pull the top-3 posted replies + their originals as few-shot pairs
+cur.execute("SELECT data FROM feedback "
+            "WHERE json_extract(data,'$.kind')='auto_reply_posted' "
+            "ORDER BY json_extract(data,'$.created_at') DESC LIMIT 3")
+examples = []
+for r in cur.fetchall():
+    d = json.loads(r[0]); pid = d['post_id']
+    cur.execute("SELECT data FROM raw_posts WHERE json_extract(data,'$.id')=?", (pid,))
+    p = cur.fetchone()
+    post = ''
+    if p:
+        pd = json.loads(p[0])
+        post = (pd.get('title','')+' '+(pd.get('body') or '')).strip()
+    examples.append({'post_text': post[:500], 'reply_text': d.get('reply_text','')[:500]})
+
+# Load the pizza post and run the composer
+cur.execute("SELECT data FROM raw_posts WHERE json_extract(data,'$.id')='reddit_1u2bgdw'")
+p = json.loads(cur.fetchone()[0])
+llm = create_llm_client(load_config().llm, None)
+
+print("=== PROMPT ===")
+print(llm._build_reply_prompt(
+    p['title'], p['body'], p['subreddit'], p.get('author') or 'there',
+    ['customer_service','product_quality','store_experience'], examples))
+
+print("\n=== DRAFTS ===")
+result = llm.generate_reply_pair(
+    p['title'], p['body'], p['subreddit'], p.get('author') or 'there',
+    ['customer_service','product_quality','store_experience'], examples)
+for i, d in enumerate(result['drafts'], 1):
+    print(f"\n--- {d.get('label')} ---")
+    print(d['reply'])
+print(f"\ngateway_available={result.get('gateway_available')}  "
+      f"ollama_available={result.get('ollama_available')}")
+PY
+```
+
+Expected: Draft A comes from GPT-4o if the Walmart gateway is reachable,
+Draft B from Mistral if Ollama is running (otherwise `[offline fallback]`
+in slot B), Draft C from Smart Composer.
