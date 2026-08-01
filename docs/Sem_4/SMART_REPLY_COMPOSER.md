@@ -239,7 +239,8 @@ this document was written. The exact commands that reproduce it are in
 ### 5.1 The raw post (from `raw_posts`)
 
 Real row, ingested by the Arctic Shift ingestion pass and stored under
-`id = reddit_1u2bgdw`:
+`id = reddit_1u2bgdw`. Open the original on Reddit:
+**[reddit.com/r/samsclub/comments/1u2bgdw](https://www.reddit.com/r/samsclub/comments/1u2bgdw/why_do_you_guys_sell_whole_pizzas_made_hours_ago/)**.
 
 ```json
 {
@@ -307,47 +308,44 @@ Reply:
 ### 5.4 The three drafts the system actually produced
 
 Captured verbatim from `WalmartLLMClient.generate_reply_pair(...)` on
-`reddit_1u2bgdw`. Runtime state at capture time:
+`reddit_1u2bgdw` with **all three engines healthy**:
 
 - Walmart LLM Gateway (`gpt-4o`) — **reachable** (`gateway_available = True`)
-- Local Ollama (`mistral:7b-instruct`) — **not running** (`ollama_available = False`, error: `Connection refused` on `localhost:11434`)
+- Local Ollama (`mistral:7b-instruct`) — **reachable** (`ollama_available = True`)
 - Smart Composer — **always available**
 
-The system correctly used GPT-4o for slot A, fell back to Smart Composer
-for slot B (badged as `[offline fallback]` in the UI), and produced the
-Smart Composer draft in slot C.
+**Draft A — GPT-4o (Walmart LLM Gateway)** — `source = llm`, `model_used = gpt-4o`
 
-**Draft A — GPT-4o (Walmart LLM Gateway)** — real
-`source = llm`, `model_used = gpt-4o`
+> Hi u/there, I'm sorry to hear about your experience with the pizzas. I
+> understand how disappointing it must be to get something that feels less
+> fresh than expected. While the hot case is meant to provide convenience,
+> I agree that quality should never be sacrificed. If you'd like, feel
+> free to DM me with the details of your store location so we can look
+> into this and address it properly. — [Your Name]
 
-> Hi u/there, I'm sorry to hear about your experience with the pizzas —
-> it sounds really disappointing. Our goal is to provide fresh and
-> enjoyable food, and I understand how frustrating it must be to receive
-> something that feels old. If you'd like, feel free to DM me the store
-> location so I can share your feedback directly with the team and look
-> into it further. — [Your Name]
+**Draft B — Mistral 7B-Instruct (local Ollama)** — `source = llm`, `model_used = mistral:7b-instruct`
 
-**Draft B — Mistral 7B (Ollama)** — real, but slot fell back
-`source = smart-template`, `model_used = mistral:7b-instruct`, UI badge: **[offline fallback]**
+> Hi u/there, I appreciate your concern about the quality of our prepared
+> pizzas. It's important to us that our customers receive fresh and
+> delicious food. The stickers with dates are there to help us manage the
+> rotation of our products, ensuring they are consumed before they become
+> stale. If you ever encounter a pizza that doesn't meet your expectations,
+> please feel free to DM me the details of your order so I can look into
+> it further. Thank you for taking the time to share your feedback.
 
-> Hi u/there — thanks for flagging this. that's not the experience we want
-> anyone to have with your order. DM us the details when you have a moment
-> and we'll start looking into the specifics.
-> — The Walmart Care team
+**Draft C — Smart Composer** — `source = smart-template`, `model_used = smart-composer`
 
-**Draft C — Smart Composer** — real
-`source = smart-template`, `model_used = smart-composer`
-
-> Hi u/there, Your order like this absolutely shouldn't happen. DM us the
-> details when you have a moment and we'll start looking into the
-> specifics. — Walmart Care 💙
+> Hi u/there — thanks for flagging this. completely understand the
+> frustration around your order. Drop us a private message with the order #
+> or store info and we'll take it from here. — Walmart Care
 
 ### 5.5 What to tell the evaluator (step by step)
 
 1. **"The customer's post is real, in our database, right now."** — Open
-   `data/local.db` and query
+   the original on Reddit ([`r/samsclub/comments/1u2bgdw`](https://www.reddit.com/r/samsclub/comments/1u2bgdw/why_do_you_guys_sell_whole_pizzas_made_hours_ago/))
+   *or* query `data/local.db`:
    `SELECT data FROM raw_posts WHERE json_extract(data,'$.id')='reddit_1u2bgdw';`
-   The row from §5.1 comes back.
+   Both return the same row from §5.1.
 2. **"The pipeline classified it as `negative` with confidence 0.9999997,
    three aspects, trust 0.66."** — Same DB, query the `analyses` table for
    the same post_id. Show the row.
@@ -358,14 +356,15 @@ Smart Composer draft in slot C.
    — The call was made through the internal
    `wmtllmgateway.stage.walmart.com/v1/chat/completions` endpoint with the
    `WM_CONSUMER.ID` header. Cost tracker recorded ~200 output tokens.
-5. **"Draft B *would have been* Mistral 7B, but Ollama isn't running on
-   this machine so the system fell back to Smart Composer and badged the
-   slot `[offline fallback]`."** — This is the fallback logic from §1
-   working in production, live.
+5. **"Draft B is a real Mistral 7B response from local Ollama."** — The
+   call hit `http://localhost:11434/api/generate` with `mistral:7b-instruct`
+   at `temperature=0.55, top_p=0.9`. If Ollama were down, this slot would
+   badge `[offline fallback]` and use the Smart Composer instead — the
+   system never leaves an empty slot.
 6. **"Draft C is the Smart Composer — pure Python, no LLM, always
    available."** — This is our safety net. It produces a varied,
    aspect-specific reply from curated phrase pools.
-7. **"If the analyst picks Draft A, edits it, and clicks Save & Open
+7. **"If the analyst picks a draft, edits it, and clicks Save & Open
    Reddit, the reply is written to `feedback` with `kind = auto_reply_posted`
    and becomes the next post's top few-shot example."** — See §5.6.
 

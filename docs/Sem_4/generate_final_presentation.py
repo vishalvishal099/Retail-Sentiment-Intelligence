@@ -196,6 +196,24 @@ def _image(slide, path: Path, left, top, width=None, height=None):
     slide.shapes.add_picture(str(path), left, top, **kw)
 
 
+def _link(slide, left, top, width, height, url, label=None, *,
+          size=Pt(10), bold=False, color=WALMART_BLUE, align=PP_ALIGN.LEFT):
+    """Add a clickable hyperlink text box."""
+    box = slide.shapes.add_textbox(left, top, width, height)
+    tf = box.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    p.alignment = align
+    run = p.add_run()
+    run.text = label or url
+    run.font.size = size
+    run.font.bold = bold
+    run.font.color.rgb = color
+    run.font.underline = True
+    run.hyperlink.address = url
+    return box
+
+
 # ─── deck ────────────────────────────────────────────────────────────────────
 def build():
     prs = Presentation()
@@ -445,41 +463,51 @@ def build():
 
     # 7 · Smart Reply — Worked Example ──────────────────────────────────────
     s = new()
-    _header_bar(s, "Smart Reply  —  Worked Example  (real post, real drafts, real DB)",
-                "raw_posts.id = reddit_1u2bgdw  ·  r/samsclub  ·  captured live from data/local.db")
-    # Complaint card
-    _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.55),
+    _header_bar(s, "Smart Reply  —  Worked Example  (all three drafts real, live-captured)",
+                "raw_posts.id = reddit_1u2bgdw  ·  r/samsclub  ·  gateway ✓  ·  Ollama ✓  ·  Smart Composer ✓")
+    # Customer complaint card
+    _rect(s, Inches(0.5), Inches(1.0), Inches(12.3), Inches(2.05),
           AMBER_TINT, line=AMBER)
-    _tx(s, Inches(0.7), Inches(1.15), Inches(12.0), Inches(0.35),
-        "Customer complaint  —  r/samsclub  ·  ModernBERT: negative 0.9999997  ·  aspects: customer service, product quality, store experience  ·  trust 0.66",
-        size=Pt(10), bold=True, color=AMBER)
-    _tx(s, Inches(0.7), Inches(1.5), Inches(12.0), Inches(1.05),
-        "\"Why do you guys sell whole pizzas made hours ago to customers?  The very few times I've gotten a whole "
-        "pie, it'll be stuff premade and left in the hot case for like an hour 30mins before it's in my hand. "
-        "How can I tell? They put a sticker with the date and the pizza looks and taste hours old. Pizza is meant "
-        "to be made to order and waited for.\"",
+    _tx(s, Inches(0.7), Inches(1.08), Inches(12.0), Inches(0.35),
+        "CUSTOMER COMPLAINT  ·  r/samsclub", size=Pt(11), bold=True, color=AMBER)
+    _tx(s, Inches(0.7), Inches(1.4), Inches(12.0), Inches(0.32),
+        "Why do you guys sell whole pizzas made hours ago to customers?",
+        size=Pt(12), bold=True, color=DARK_BLUE)
+    _tx(s, Inches(0.7), Inches(1.72), Inches(12.0), Inches(0.9),
+        "\"The very few times I've gotten a whole pie, it'll be stuff premade and left in the hot case for like "
+        "an hour 30mins before it's in my hand. How can I tell? They put a sticker with the date and the pizza "
+        "looks and taste hours old. Pizza is meant to be made to order and waited for.\"",
         size=Pt(10), color=DARK_GRAY)
-    # Three drafts side-by-side (VERBATIM from the live capture)
+    _tx(s, Inches(0.7), Inches(2.6), Inches(8.5), Inches(0.28),
+        "ModernBERT: negative (conf 0.9999997)  ·  aspects: customer service · product quality · store experience  ·  trust 0.66",
+        size=Pt(9), color=MED_GRAY)
+    _link(s, Inches(9.25), Inches(2.6), Inches(3.5), Inches(0.28),
+          "https://www.reddit.com/r/samsclub/comments/1u2bgdw/why_do_you_guys_sell_whole_pizzas_made_hours_ago/",
+          label="🔗 Open original on Reddit",
+          size=Pt(9), bold=True, align=PP_ALIGN.RIGHT)
+    # Three drafts side-by-side (VERBATIM from the live capture with all 3 engines running)
     drafts = [
-        ("Draft A · GPT-4o  (Walmart Gateway  ✓)", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
-         "Hi u/there, I'm sorry to hear about your experience with the pizzas — it sounds "
-         "really disappointing. Our goal is to provide fresh and enjoyable food, and I "
-         "understand how frustrating it must be to receive something that feels old. If "
-         "you'd like, feel free to DM me the store location so I can share your feedback "
-         "directly with the team and look into it further.  — [Your Name]"),
-        ("Draft B · Mistral 7B  [offline fallback]", PURPLE, PURPLE_TINT,
-         "Hi u/there — thanks for flagging this. that's not the experience we want anyone "
-         "to have with your order. DM us the details when you have a moment and we'll "
-         "start looking into the specifics.  — The Walmart Care team\n\n"
-         "(Ollama not running on localhost:11434 → system fell back to Smart Composer "
-         "and badged the slot [offline fallback] in the UI.)"),
-        ("Draft C · Smart Composer  (deterministic)", GREEN, GREEN_TINT,
-         "Hi u/there, Your order like this absolutely shouldn't happen. DM us the details "
-         "when you have a moment and we'll start looking into the specifics.  "
-         "— Walmart Care 💙"),
+        ("A · GPT-4o  (Walmart Gateway)", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
+         "Hi u/there, I'm sorry to hear about your experience with the pizzas. I understand "
+         "how disappointing it must be to get something that feels less fresh than expected. "
+         "While the hot case is meant to provide convenience, I agree that quality should "
+         "never be sacrificed. If you'd like, feel free to DM me with the details of your "
+         "store location so we can look into this and address it properly. – [Your Name]"),
+        ("B · Mistral 7B  (local Ollama)", PURPLE, PURPLE_TINT,
+         "Hi u/there, I appreciate your concern about the quality of our prepared pizzas. "
+         "It's important to us that our customers receive fresh and delicious food. The "
+         "stickers with dates are there to help us manage the rotation of our products, "
+         "ensuring they are consumed before they become stale. If you ever encounter a "
+         "pizza that doesn't meet your expectations, please feel free to DM me the details "
+         "of your order so I can look into it further. Thank you for taking the time to "
+         "share your feedback."),
+        ("C · Smart Composer  (no-LLM)", GREEN, GREEN_TINT,
+         "Hi u/there — thanks for flagging this. completely understand the frustration "
+         "around your order. Drop us a private message with the order # or store info and "
+         "we'll take it from here. — Walmart Care"),
     ]
     x = Inches(0.4)
-    y = Inches(2.75)
+    y = Inches(3.05)
     w = Inches(4.15)
     h = Inches(3.15)
     for label, col, tint, body in drafts:
@@ -487,15 +515,15 @@ def build():
         _rect(s, x, y, w, Inches(0.42), col)
         _tx(s, x, y + Inches(0.05), w, Inches(0.35),
             label, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        _tx(s, x + Inches(0.15), y + Inches(0.55), w - Inches(0.3), h - Inches(0.65),
+        _tx(s, x + Inches(0.15), y + Inches(0.5), w - Inches(0.3), h - Inches(0.6),
             body, size=Pt(9), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
         x = x + w + Inches(0.15)
-    # What happens next
-    _rect(s, Inches(0.5), Inches(6.05), Inches(12.3), Inches(0.85),
+    # Bottom explainer bar
+    _rect(s, Inches(0.5), Inches(6.35), Inches(12.3), Inches(0.6),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(6.15), Inches(12.0), Inches(0.7),
-        "Live capture — GPT-4o gateway reached (gateway_available=True); Ollama refused connection so slot B fell back to Smart Composer; "
-        "Smart Composer always produces slot C. Few-shot: 3 real posted replies from feedback (top-3 by created_at DESC).",
+    _tx(s, Inches(0.7), Inches(6.4), Inches(12.0), Inches(0.5),
+        "One prompt fed to all three engines.  Analyst picks the best draft, edits inline, clicks Save & Open Reddit  →  "
+        "the posted reply is written to  feedback  and becomes the next post's top few-shot example.",
         size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
