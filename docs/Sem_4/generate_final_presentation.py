@@ -202,7 +202,7 @@ def build():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    TOTAL = 23
+    TOTAL = 25
     page = [0]
 
     def new():
@@ -248,32 +248,34 @@ def build():
     items = [
         ("1", "Since Mid-Sem — What's New",         "Post-midsem workstream map"),
         ("2", "Review & Validate  (HITL)",           "Human-in-the-loop correction workflow"),
-        ("3", "Smart Reply Composer",                "Dual-draft:  rule-based  +  LLM"),
-        ("4", "Learning Loop",                       "Corrections + posted replies → retraining"),
-        ("5", "Post Explorer",                       "Multi-facet search across analysed posts"),
-        ("6", "Post Lifecycle  (Kanban)",            "Triage → Acknowledged → In-Progress → Resolved"),
-        ("7", "Insights & Competitor Analysis",      "Strategic weekly summaries + cross-brand"),
-        ("8", "Notification Centre",                 "In-app + email + Slack, group-routed"),
-        ("9", "ModernBERT — Final Results",          "Macro-F1  0.6272 → 0.7642  (+13.7 pts)"),
-        ("10", "Vision — Multi-Pass Payoff",         "Hallucination  50% → 0%,  extraction 25% → 75%"),
-        ("11", "Trust-Score Evaluation",             "15% flagged; 12 of 15 confirmed by annotator"),
-        ("12", "Storage — SQLite → Cosmos DB",       "Lift-and-shift ready"),
-        ("13", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
-        ("14", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + roadmap"),
+        ("3", "Smart Reply  —  Triple Draft",        "GPT-4o  +  Mistral 7B  +  Smart Composer"),
+        ("4", "Smart Reply  —  Prompt & Few-Shot",   "Prompt template + past validated replies"),
+        ("5", "Smart Reply  —  Worked Example",      "One complaint  →  three drafts"),
+        ("6", "Learning Loop",                       "Corrections + posted replies → retraining"),
+        ("7", "Post Explorer",                       "Multi-facet search across analysed posts"),
+        ("8", "Post Lifecycle  (Kanban)",            "Triage → Acknowledged → In-Progress → Resolved"),
+        ("9", "Insights & Competitor Analysis",      "Strategic weekly summaries + cross-brand"),
+        ("10", "Notification Centre",                "In-app + email + Slack, group-routed"),
+        ("11", "ModernBERT — Final Results",         "Macro-F1  0.6272 → 0.7642  (+13.7 pts)"),
+        ("12", "Vision — Multi-Pass Payoff",         "Hallucination  50% → 0%,  extraction 25% → 75%"),
+        ("13", "Trust-Score Evaluation",             "15% flagged; 12 of 15 confirmed by annotator"),
+        ("14", "Storage — SQLite → Cosmos DB",       "Lift-and-shift ready"),
+        ("15", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
+        ("16", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + roadmap"),
     ]
-    x0, y0 = Inches(0.5), Inches(1.15)
-    col_w, row_h = Inches(6.15), Inches(0.4)
+    x0, y0 = Inches(0.5), Inches(1.0)
+    col_w, row_h = Inches(6.15), Inches(0.38)
     for i, (n, title, sub) in enumerate(items):
-        col = i // 7
-        row = i % 7
+        col = i // 8
+        row = i % 8
         lx = x0 + col * (col_w + Inches(0.15))
-        ly = y0 + row * (row_h + Inches(0.11))
+        ly = y0 + row * (row_h + Inches(0.1))
         _rect(s, lx, ly, col_w, row_h, LIGHT_BLUE, line=WALMART_BLUE)
-        _tx(s, lx + Inches(0.1), ly + Inches(0.05), Inches(0.5), Inches(0.3),
+        _tx(s, lx + Inches(0.1), ly + Inches(0.05), Inches(0.55), Inches(0.28),
             n, size=Pt(12), bold=True, color=WALMART_BLUE)
-        _tx(s, lx + Inches(0.6), ly + Inches(0.03), col_w - Inches(0.7), Inches(0.2),
+        _tx(s, lx + Inches(0.7), ly + Inches(0.03), col_w - Inches(0.8), Inches(0.2),
             title, size=Pt(11), bold=True, color=DARK_BLUE)
-        _tx(s, lx + Inches(0.6), ly + Inches(0.22), col_w - Inches(0.7), Inches(0.2),
+        _tx(s, lx + Inches(0.7), ly + Inches(0.2), col_w - Inches(0.8), Inches(0.2),
             sub, size=Pt(9), color=MED_GRAY)
     _footer(s, page[0], TOTAL)
 
@@ -339,48 +341,156 @@ def build():
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 5 · Smart Reply Composer ──────────────────────────────────────────────
+    # 5 · Smart Reply Composer — Triple Draft ──────────────────────────────
     s = new()
-    _header_bar(s, "Smart Reply Composer  —  Dual-Draft",
-                "Deterministic composer + LLM composer, analyst chooses")
-    _rect(s, Inches(0.5), Inches(1.05), Inches(6.05), Inches(3.4),
+    _header_bar(s, "Smart Reply Composer  —  Triple Draft",
+                "One prompt, three generators; analyst picks the best draft")
+    drafts = [
+        ("Draft A", "GPT-4o", "Walmart LLM Gateway",
+         "Strong reasoning, safest tone\nGuardrails via Walmart proxy\n~$0.0002 / reply\nFallback: direct OpenAI",
+         WALMART_BLUE),
+        ("Draft B", "Mistral 7B-Instruct", "Local Ollama  (:11434)",
+         "Open-weights, free\nRuns fully offline\n~15 s warm latency\nStrong at retail jargon",
+         PURPLE),
+        ("Draft C", "Smart Composer", "Deterministic template",
+         "No LLM, always available\nZero latency, zero cost\nContent-aware phrase pools\nSafety-net fallback",
+         GREEN),
+    ]
+    x = Inches(0.4)
+    y = Inches(1.05)
+    w = Inches(4.15)
+    h = Inches(3.35)
+    for i, (label, model, transport, body, col) in enumerate(drafts):
+        _rect(s, x, y, w, h, LIGHT_GRAY, line=col)
+        _rect(s, x, y, w, Inches(0.5), col)
+        _tx(s, x, y + Inches(0.08), w, Inches(0.35),
+            label, size=Pt(13), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, x, y + Inches(0.6), w, Inches(0.4),
+            model, size=Pt(16), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER)
+        _tx(s, x, y + Inches(1.05), w, Inches(0.35),
+            transport, size=Pt(10), color=MED_GRAY, align=PP_ALIGN.CENTER)
+        _tx(s, x + Inches(0.2), y + Inches(1.5), w - Inches(0.4), Inches(1.8),
+            body, size=Pt(11), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+            anchor=MSO_ANCHOR.MIDDLE)
+        x = x + w + Inches(0.15)
+    # Cascade + fallback logic
+    _rect(s, Inches(0.5), Inches(4.6), Inches(12.3), Inches(2.3),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(1.2), Inches(5.7), Inches(0.4),
-        "Draft A  ·  Rule / Smart Composer", size=Pt(14), bold=True, color=WALMART_BLUE)
-    _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(2.7), [
-        "Keyword & aspect extraction from post",
-        "Curated phrase pool  →  templated apology + resolution",
-        "Deterministic — same input, same output",
-        "Always available, zero latency, zero cost",
-        "Strong default tone for common complaints",
-    ], size=Pt(12))
-    _rect(s, Inches(6.75), Inches(1.05), Inches(6.05), Inches(3.4),
-          PURPLE_TINT, line=PURPLE)
-    _tx(s, Inches(6.95), Inches(1.2), Inches(5.7), Inches(0.4),
-        "Draft B  ·  FLAN-T5-base", size=Pt(14), bold=True, color=PURPLE)
-    _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(2.7), [
-        "Multi-temperature sampling  (T = 0.7, 0.9, 1.1)",
-        "Best-of-N scorer over drafts",
-        "Higher variety, less templated tone",
-        "Learns from posted replies over time",
-        "Fallback to Draft A if model unavailable",
-    ], size=Pt(12))
-    _rect(s, Inches(0.5), Inches(4.6), Inches(12.3), Inches(1.9),
-          LIGHT_GRAY, line=DARK_BLUE)
-    _tx(s, Inches(0.7), Inches(4.75), Inches(12.0), Inches(0.4),
-        "Composer pipeline", size=Pt(13), bold=True, color=DARK_BLUE)
-    steps = ["post + aspects", "Draft A + Draft B", "analyst picks + edits",
-             "posted reply", "feedback store"]
-    x = Inches(0.7)
-    for i, txt in enumerate(steps):
-        _rect(s, x, Inches(5.25), Inches(2.15), Inches(0.7),
-              WHITE, line=WALMART_BLUE)
-        _tx(s, x, Inches(5.3), Inches(2.15), Inches(0.6),
-            txt, size=Pt(11), bold=True, color=DARK_BLUE,
-            align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-        if i < len(steps) - 1:
-            _arrow(s, x + Inches(2.16), Inches(5.42), Inches(0.18), Inches(0.36))
-        x = x + Inches(2.35)
+    _tx(s, Inches(0.7), Inches(4.75), Inches(12.0), Inches(0.35),
+        "Fallback logic  —  no draft is ever missing", size=Pt(13), bold=True,
+        color=WALMART_BLUE)
+    _bullets(s, Inches(0.7), Inches(5.1), Inches(12.0), Inches(1.7), [
+        "GPT-4o unavailable  (no gateway key / consumer-ID / network)  →  Smart Composer draft in slot A",
+        "Mistral unavailable  (Ollama not running)  →  Smart Composer draft in slot B",
+        "Smart Composer  always  produces slot C  —  guaranteed reply",
+        "UI labels each card with the actual model used, plus an offline-fallback badge when applicable",
+    ], size=Pt(11))
+    _footer(s, page[0], TOTAL)
+
+    # 6 · Smart Reply — Prompt Design & Few-Shot ────────────────────────────
+    s = new()
+    _header_bar(s, "Smart Reply  —  Prompt Design & Few-Shot",
+                "Same prompt fed to GPT and Mistral; Smart Composer skips the LLM step")
+    _tx(s, Inches(0.5), Inches(1.0), Inches(12.3), Inches(0.35),
+        "Prompt template  (built in  _build_reply_prompt)",
+        size=Pt(13), bold=True, color=DARK_BLUE)
+    prompt_box_top = Inches(1.4)
+    _rect(s, Inches(0.5), prompt_box_top, Inches(12.3), Inches(3.55),
+          RGBColor(0x1E, 0x29, 0x3B), line=DARK_BLUE)
+    prompt_text = (
+        "You are a senior Walmart customer-care analyst replying on Reddit.\n"
+        "Write ONE reply to the customer below. Keep it 2-4 sentences,\n"
+        "empathetic, specific to their complaint, no corporate jargon,\n"
+        "no hashtags, no emojis. Do NOT promise refunds you can't verify;\n"
+        "invite them to DM order details if action is needed. Sign off as\n"
+        "a real person, not a brand.\n"
+        "\n"
+        "Example customer post: {past_post_1}\n"
+        "Example analyst reply: {past_reply_1}\n"
+        "Example customer post: {past_post_2}\n"
+        "Example analyst reply: {past_reply_2}\n"
+        "\n"
+        "Subreddit: r/{subreddit}\n"
+        "Customer ({author}) complaint about: {aspect_1}, {aspect_2}\n"
+        "Customer post:\n{post_title + post_body, ≤ 1200 chars}\n"
+        "\n"
+        "Reply:"
+    )
+    _tx(s, Inches(0.7), prompt_box_top + Inches(0.15), Inches(11.9), Inches(3.25),
+        prompt_text, size=Pt(10), color=RGBColor(0xE6, 0xED, 0xF7))
+    # Few-shot source
+    _rect(s, Inches(0.5), Inches(5.15), Inches(6.0), Inches(1.75),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(5.25), Inches(5.7), Inches(0.35),
+        "Few-shot source  —  feedback  table",
+        size=Pt(12), bold=True, color=GREEN)
+    _bullets(s, Inches(0.7), Inches(5.6), Inches(5.7), Inches(1.25), [
+        "Top-3 past validated replies for the same aspect",
+        "Written by human analysts, already posted to Reddit",
+        "Refreshed on every  Generate  click  →  adapts over time",
+    ], size=Pt(10))
+    # Guardrails
+    _rect(s, Inches(6.75), Inches(5.15), Inches(6.05), Inches(1.75),
+          AMBER_TINT, line=AMBER)
+    _tx(s, Inches(6.95), Inches(5.25), Inches(5.7), Inches(0.35),
+        "Style guardrails baked into the prompt",
+        size=Pt(12), bold=True, color=AMBER)
+    _bullets(s, Inches(6.95), Inches(5.6), Inches(5.7), Inches(1.25), [
+        "2 – 4 sentences, empathetic, specific",
+        "No corporate jargon, no hashtags, no emojis",
+        "No unverifiable refund promises  →  DM to continue",
+        "Sign off as a person, not a brand",
+    ], size=Pt(10))
+    _footer(s, page[0], TOTAL)
+
+    # 7 · Smart Reply — Worked Example ──────────────────────────────────────
+    s = new()
+    _header_bar(s, "Smart Reply  —  Worked Example",
+                "One real complaint  →  three drafts  →  analyst picks & posts")
+    # Complaint card
+    _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.55),
+          AMBER_TINT, line=AMBER)
+    _tx(s, Inches(0.7), Inches(1.15), Inches(12.0), Inches(0.35),
+        "Customer complaint  —  r/walmart  ·  aspects: product_quality, returns",
+        size=Pt(11), bold=True, color=AMBER)
+    _tx(s, Inches(0.7), Inches(1.5), Inches(12.0), Inches(1.05),
+        "u/hangry_shopper : “Bought a 2-lb strawberry pack from OGP pickup last night and half of them are mouldy today. "
+        "Store said returns close at 9pm and refused to help. Second time this month — is this the new normal?”",
+        size=Pt(11), color=DARK_GRAY)
+    # Three drafts side-by-side
+    drafts = [
+        ("Draft A · GPT-4o", WALMART_BLUE, RGBColor(0xE8, 0xF4, 0xFD),
+         "Really sorry to see mouldy berries twice in one month — that's not the pickup "
+         "quality we want you to have. Please DM the order number and I'll get produce ops "
+         "to look at that store's chill-chain and cover the refund for you. — Ravi (Walmart Care)"),
+        ("Draft B · Mistral 7B", PURPLE, PURPLE_TINT,
+         "That's genuinely frustrating — nobody expects two bad pickups in a row. Send me a "
+         "DM with the order # and I'll route it to the store manager and produce ops so we "
+         "can dig into the chill chain and refund you today. — Priya"),
+        ("Draft C · Smart Composer", GREEN, GREEN_TINT,
+         "Hi hangry_shopper, we're sorry about the quality of what you received on your pickup — "
+         "returns closing at 9pm shouldn't leave you without a refund. Please DM us your order "
+         "details and we'll get the produce team on it. — Walmart Care"),
+    ]
+    x = Inches(0.4)
+    y = Inches(2.75)
+    w = Inches(4.15)
+    h = Inches(3.15)
+    for label, col, tint, body in drafts:
+        _rect(s, x, y, w, h, tint, line=col)
+        _rect(s, x, y, w, Inches(0.42), col)
+        _tx(s, x, y + Inches(0.05), w, Inches(0.35),
+            label, size=Pt(12), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, x + Inches(0.15), y + Inches(0.55), w - Inches(0.3), h - Inches(0.65),
+            body, size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
+        x = x + w + Inches(0.15)
+    # What happens next
+    _rect(s, Inches(0.5), Inches(6.05), Inches(12.3), Inches(0.85),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.15), Inches(12.0), Inches(0.7),
+        "Analyst picks a draft, edits inline, clicks  Save & Open Reddit  →  posted reply is written to  feedback  "
+        "→  becomes a future few-shot example (Draft A / B pool grows).",
+        size=Pt(11), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
     # 6 · Learning Loop ─────────────────────────────────────────────────────
