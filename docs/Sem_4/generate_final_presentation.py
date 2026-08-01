@@ -220,7 +220,7 @@ def build():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    TOTAL = 25
+    TOTAL = 22
     page = [0]
 
     def new():
@@ -230,35 +230,37 @@ def build():
     # 1 · Title ──────────────────────────────────────────────────────────────
     s = new()
     _set_bg(s, DARK_BLUE)
-    _rect(s, Inches(0), Inches(2.5), Inches(0.4), Inches(2.7), YELLOW)
-    _tx(s, Inches(0.9), Inches(1.2), Inches(11.5), Inches(0.9),
-        "Retail Sentiment Intelligence", size=Pt(44), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(2.15), Inches(11.5), Inches(0.6),
-        "Trust-Aware Sentiment Analysis of Retail Feedback using LLMs",
-        size=Pt(20), color=YELLOW)
-    _tx(s, Inches(0.9), Inches(2.95), Inches(11.5), Inches(0.4),
+    _rect(s, Inches(0), Inches(2.3), Inches(0.4), Inches(2.7), YELLOW)
+    _tx(s, Inches(0.9), Inches(0.85), Inches(11.5), Inches(0.9),
+        "Retail Sentiment Intelligence", size=Pt(38), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(1.75), Inches(11.5), Inches(1.4),
+        "Real-Time Social Media Mining and Trust-Aware Sentiment Analysis\n"
+        "Using Large Language Models for Retail Feedback Optimization",
+        size=Pt(18), color=YELLOW)
+    _tx(s, Inches(0.9), Inches(3.15), Inches(11.5), Inches(0.4),
         "BITS ZG628T  ·  Dissertation  ·  Post Mid-Semester Presentation",
         size=Pt(14), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(3.9), Inches(11.5), Inches(0.4),
-        "Vishal Singh   ·   ID No. 2020AA05641",
-        size=Pt(18), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(4.35), Inches(11.5), Inches(0.4),
-        "M.Tech (Artificial Intelligence & Machine Learning)",
-        size=Pt(14), color=LIGHT_BLUE)
-    _tx(s, Inches(0.9), Inches(4.7), Inches(11.5), Inches(0.4),
-        "Birla Institute of Technology & Science, Pilani  (WILP)",
-        size=Pt(14), color=LIGHT_BLUE)
-    _tx(s, Inches(0.9), Inches(5.5), Inches(11.5), Inches(0.4),
-        "Dissertation work at  Walmart Global Tech, Bengaluru",
-        size=Pt(12), color=WHITE)
-    _tx(s, Inches(0.9), Inches(5.85), Inches(11.5), Inches(0.4),
-        "Supervisor:  Mr. Varunendra Pratap Singh  —  Principal Software Engineer, Walmart Global Tech",
-        size=Pt(12), color=WHITE)
-    _tx(s, Inches(0.9), Inches(6.2), Inches(11.5), Inches(0.4),
-        "Additional Examiner:  Ms. Pradnya Kashikar  —  BITS Pilani",
-        size=Pt(12), color=WHITE)
-    _tx(s, Inches(0.9), Inches(6.85), Inches(11.5), Inches(0.4),
-        "August 2026", size=Pt(11), color=MED_GRAY)
+    # People — Faculty Mentor → Supervisor → Candidate (candidate at the end)
+    _tx(s, Inches(0.9), Inches(4.15), Inches(11.5), Inches(0.4),
+        "Faculty Mentor:   Ms. Pradnya Kashikar",
+        size=Pt(15), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(4.6), Inches(11.5), Inches(0.4),
+        "BITS Pilani (WILP)",
+        size=Pt(12), color=LIGHT_BLUE)
+    _tx(s, Inches(0.9), Inches(5.15), Inches(11.5), Inches(0.4),
+        "Supervisor:   Mr. Varunendra Pratap Singh",
+        size=Pt(15), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(5.6), Inches(11.5), Inches(0.4),
+        "Principal Software Engineer  ·  Walmart Global Tech, Bengaluru",
+        size=Pt(12), color=LIGHT_BLUE)
+    _tx(s, Inches(0.9), Inches(6.15), Inches(11.5), Inches(0.4),
+        "Candidate:   Vishal Singh   ·   2020AA05641",
+        size=Pt(15), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(6.6), Inches(11.5), Inches(0.4),
+        "M.Tech (AI & ML)  ·  Birla Institute of Technology & Science, Pilani (WILP)",
+        size=Pt(12), color=LIGHT_BLUE)
+    _tx(s, Inches(0.9), Inches(7.05), Inches(11.5), Inches(0.3),
+        "August 2026", size=Pt(10), color=MED_GRAY)
 
     # 2 · Agenda ─────────────────────────────────────────────────────────────
     s = new()
@@ -277,9 +279,8 @@ def build():
         ("11", "ModernBERT — Final Results",         "Macro-F1  0.6272 → 0.7642  (+13.7 pts)"),
         ("12", "Vision — Multi-Pass Payoff",         "Hallucination  50% → 0%,  extraction 25% → 75%"),
         ("13", "Trust-Score Evaluation",             "15% flagged; 12 of 15 confirmed by annotator"),
-        ("14", "Storage — SQLite → Cosmos DB",       "Lift-and-shift ready"),
-        ("15", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
-        ("16", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + roadmap"),
+        ("14", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
+        ("15", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + realistic roadmap"),
     ]
     x0, y0 = Inches(0.5), Inches(1.0)
     col_w, row_h = Inches(6.15), Inches(0.38)
@@ -802,42 +803,7 @@ def build():
         size=Pt(12), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 14 · Storage — SQLite → Cosmos DB ─────────────────────────────────────
-    s = new()
-    _header_bar(s, "Storage  —  SQLite → Cosmos DB Lift-and-Shift",
-                "Same schema, same partition keys, no calling-code change")
-    _table(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(3.4), [
-        ["Container",           "Partition Key",  "Key Fields",                                       "Purpose"],
-        ["raw_posts",           "/subreddit",     "id, title, body, author_hash, created_utc",         "Ingested (privacy-safe)"],
-        ["analyses",            "/subreddit",     "post_id, sentiment, confidence, aspects, trust",    "AI analysis results"],
-        ["aggregates",          "/time_window",   "subreddit, window, metrics_json",                    "Pre-computed KPIs"],
-        ["alerts",              "/severity",      "type, aspect, threshold_breached",                   "Triggered anomalies"],
-        ["feedback",            "/analyst_id",    "post_id, correction, reply_text",                    "HITL corrections + replies"],
-        ["notification_log",    "/group_id",      "post_id, channel, status, sent_at",                  "Delivery audit trail"],
-    ], first_col_bold=True, body_font=Pt(10))
-    _rect(s, Inches(0.5), Inches(4.6), Inches(6.0), Inches(2.3),
-          LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(4.75), Inches(5.6), Inches(0.35),
-        "Design choices", size=Pt(12), bold=True, color=WALMART_BLUE)
-    _bullets(s, Inches(0.7), Inches(5.1), Inches(5.6), Inches(1.7), [
-        "SQLite in WAL mode for hot dev data",
-        "data JSON column mirrors Cosmos doc",
-        "Pluggable StorageBackend interface",
-        "Nightly backup + JSONL cost ledger",
-    ], size=Pt(11))
-    _rect(s, Inches(6.75), Inches(4.6), Inches(6.05), Inches(2.3),
-          GREEN_TINT, line=GREEN)
-    _tx(s, Inches(6.95), Inches(4.75), Inches(5.7), Inches(0.35),
-        "Migration story", size=Pt(12), bold=True, color=GREEN)
-    _bullets(s, Inches(6.95), Inches(5.1), Inches(5.7), Inches(1.7), [
-        "Swap SQLiteBackend → CosmosBackend",
-        "Same CREATE TABLE mapped to container spec",
-        "Partition keys already match production",
-        "Zero change to pipeline / dashboard code",
-    ], size=Pt(11))
-    _footer(s, page[0], TOTAL)
-
-    # 15 · Evaluation summary ───────────────────────────────────────────────
+    # 14 · Evaluation summary ───────────────────────────────────────────────
     s = new()
     _header_bar(s, "Evaluation Summary  —  Post-Midsem Numbers",
                 "All results reported against the same 200-post retail-Reddit gold set")
@@ -858,7 +824,7 @@ def build():
        highlight_rows={1: GREEN_TINT, 2: GREEN_TINT, 4: GREEN_TINT, 5: GREEN_TINT})
     _footer(s, page[0], TOTAL)
 
-    # 16 · Contributions ────────────────────────────────────────────────────
+    # 15 · Contributions ────────────────────────────────────────────────────
     s = new()
     _header_bar(s, "Principal Contributions",
                 "What this dissertation delivered — end to end")
@@ -889,7 +855,7 @@ def build():
         y = y + Inches(1.14)
     _footer(s, page[0], TOTAL)
 
-    # 17 · Live Demo (screenshot grid) ──────────────────────────────────────
+    # 16 · Live Demo (screenshot grid) ──────────────────────────────────────
     s = new()
     _header_bar(s, "Live Demo  —  Dashboard Walkthrough",
                 "One post → alert → review → reply → lifecycle → resolved")
@@ -916,123 +882,67 @@ def build():
             label, size=Pt(11), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER)
     _footer(s, page[0], TOTAL)
 
-    # 18 · Conclusions (RQ1–RQ4) ────────────────────────────────────────────
+    # 17 · What worked / what didn't ────────────────────────────────────────
     s = new()
-    _header_bar(s, "Conclusions  —  Research Questions Answered")
-    rqs = [
-        ("RQ1", "Can a fine-tuned encoder beat baselines on Reddit retail sentiment?",
-         "YES  —  ModernBERT 3-stage curriculum raised Macro-F1 from 0.6272 → 0.7642 overall  "
-         "and from 0.2778 → 1.0000 on long posts.", GREEN),
-        ("RQ2", "Can a compliant open-weights VLM extract structured retail signal from screenshots?",
-         "YES  —  Multi-pass pipeline on Gemma 3 4B reduced hallucination from 50 % → 0 %  "
-         "and lifted text extraction from 25 % → 75 %.", GREEN),
-        ("RQ3", "Can a defensible trust score filter low-credibility posts without silent drops?",
-         "YES  —  Interpretable 3-part score flagged 15 % of posts;  12 of 15 confirmed by human annotator.  "
-         "All low-trust posts remain visible and analyst-overridable.", GREEN),
-        ("RQ4", "Can a HITL workflow produce a re-training signal from analyst corrections?",
-         "YES  —  Every correction and posted reply is logged in the  feedback  table  →  "
-         "feeds ModernBERT Stage-3 augmentation and FLAN-T5 few-shot pool.", GREEN),
-    ]
-    y = Inches(1.05)
-    for tag, q, a, col in rqs:
-        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.35),
-              LIGHT_GRAY, line=col)
-        _rect(s, Inches(0.5), y, Inches(0.9), Inches(1.35), col)
-        _tx(s, Inches(0.5), y, Inches(0.9), Inches(1.35),
-            tag, size=Pt(18), bold=True, color=WHITE,
-            align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-        _tx(s, Inches(1.55), y + Inches(0.08), Inches(11.0), Inches(0.4),
-            q, size=Pt(12), bold=True, color=DARK_BLUE)
-        _tx(s, Inches(1.55), y + Inches(0.5), Inches(11.0), Inches(0.85),
-            a, size=Pt(11), color=DARK_GRAY)
-        y = y + Inches(1.44)
-    _footer(s, page[0], TOTAL)
-
-    # 19 · Recommendations ──────────────────────────────────────────────────
-    s = new()
-    _header_bar(s, "Recommendations  —  Immediate Follow-Ons")
-    recs = [
-        ("Monthly retraining cadence",
-         "Use the HITL feedback store as the incremental labelling stream and re-run the 3-stage curriculum monthly.",
-         WALMART_BLUE),
-        ("Bilingual pass  (Hindi + English)",
-         "Validate the retail taxonomy with native-speaker analysts before extending to Indian retail communities.",
-         PURPLE),
-        ("Per-team SLA dashboards",
-         "Extend the Post Lifecycle SLA analytics into per-team dashboards once analyst volume passes ~50 posts / day.",
-         GREEN),
-    ]
-    y = Inches(1.2)
-    for title, body, col in recs:
-        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.65),
-              LIGHT_GRAY, line=col)
-        _rect(s, Inches(0.5), y, Inches(0.2), Inches(1.65), col)
-        _tx(s, Inches(0.9), y + Inches(0.15), Inches(11.5), Inches(0.5),
-            title, size=Pt(15), bold=True, color=DARK_BLUE)
-        _tx(s, Inches(0.9), y + Inches(0.7), Inches(11.5), Inches(0.9),
-            body, size=Pt(12), color=DARK_GRAY)
-        y = y + Inches(1.8)
-    _footer(s, page[0], TOTAL)
-
-    # 20 · Future Work — Model + Product ────────────────────────────────────
-    s = new()
-    _header_bar(s, "Future Work  —  Model + Product",
-                "Directions grouped by layer of the stack")
-    _rect(s, Inches(0.5), Inches(1.05), Inches(6.05), Inches(5.6),
-          LIGHT_BLUE, line=WALMART_BLUE)
+    _header_bar(s, "Conclusions  —  What Worked, What's Still Open",
+                "Honest read on 5 months of post-midsem work")
+    _rect(s, Inches(0.5), Inches(1.05), Inches(6.05), Inches(5.75),
+          GREEN_TINT, line=GREEN)
     _tx(s, Inches(0.7), Inches(1.2), Inches(5.7), Inches(0.4),
-        "Model-level", size=Pt(14), bold=True, color=WALMART_BLUE)
-    _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(4.8), [
-        "Joint sentiment + aspect head on a shared encoder  (~30 % inference saving)",
-        "Distil ModernBERT to ~50 M-parameter student  →  CPU-only edge inference",
-        "Reasoning-augmented VLM captioning  (LLaVA-Next 1.6 B or SmolVLM)",
-        "3-seed ensemble for tighter F1 variance",
-        "Blind 25-post recheck for defensibility",
-    ], size=Pt(12))
-    _rect(s, Inches(6.75), Inches(1.05), Inches(6.05), Inches(5.6),
-          PURPLE_TINT, line=PURPLE)
+        "What worked", size=Pt(15), bold=True, color=GREEN)
+    _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(5.0), [
+        "3-stage ModernBERT curriculum landed the sentiment win we set out for  (Macro-F1 0.62 → 0.76 on 5-fold OOF).",
+        "Long-post recovery  (0.28 → 1.00)  came for free once we switched off truncation.",
+        "Removing the image on the final vision merge step ended the 50 % hallucination problem  —  the mechanism, not just the number, is what makes it credible.",
+        "Trust score as flag-not-drop  matched the human annotator on 12 / 15 low-trust posts. Analysts trust it because they can override it.",
+        "HITL feedback table quietly turned into the most useful piece of infrastructure  —  drives few-shot on every click today, retraining tomorrow.",
+    ], size=Pt(11))
+    _rect(s, Inches(6.75), Inches(1.05), Inches(6.05), Inches(5.75),
+          AMBER_TINT, line=AMBER)
     _tx(s, Inches(6.95), Inches(1.2), Inches(5.7), Inches(0.4),
-        "Product-level", size=Pt(14), bold=True, color=PURPLE)
-    _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(4.8), [
-        "Auto-reply confidence gate  —  promote LLM drafts to \"queued to send\" when analyst edit-distance < threshold",
-        "Predictive P1 forecast  —  seasonal decomposition on daily counts (24–48 h ahead)",
-        "Bilingual (Hindi + English) taxonomy",
-        "Slack-bot inline notification responses",
-        "Automated retraining pipeline hook",
-    ], size=Pt(12))
+        "What's still open (honest)", size=Pt(15), bold=True, color=AMBER)
+    _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(5.0), [
+        "200-post gold set is small.  Numbers are OOF-CV, but a bigger blind held-out set is needed before I'd claim generalisation.",
+        "Vision eval is 32 images  —  enough to sanity-check the mechanism, not enough to claim production-grade quality.",
+        "Long-post F1 of 1.00 is on 7 posts  —  read it as evidence the truncation ceiling is gone, not that the model is perfect on long text.",
+        "Reply drafts still need an analyst edit  —  we track edit-distance but haven't shown it dropping consistently yet.",
+        "Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done  —  they're in the roadmap on the next slide.",
+    ], size=Pt(11))
     _footer(s, page[0], TOTAL)
 
-    # 21 · Future Work — Operational ────────────────────────────────────────
+    # 18 · Future work (grounded, 3-horizon) ────────────────────────────────
     s = new()
-    _header_bar(s, "Future Work  —  Operational",
-                "Path from local prototype to Walmart-production service")
-    ops = [
-        ("Kubernetes CronJob",
-         "Deploy the pipeline as a scheduled Kubernetes CronJob backed by a managed Postgres instance for multi-analyst concurrency.",
-         WALMART_BLUE),
-        ("Azure Cosmos DB migration",
-         "Swap SQLiteBackend for CosmosBackend (schema already mirrors partition design)  —  no calling-code change.",
+    _header_bar(s, "Future Work  —  Grounded 3-Horizon Roadmap",
+                "Only items with clear next steps; not a wishlist")
+    horizons = [
+        ("Now → 1 month",
+         "Grow the gold set to ~500 posts using the HITL feedback the team is already producing; rerun 5-fold OOF and check the F1 delta.",
          GREEN),
-        ("Walmart ticketing integration",
-         "P1 alerts open cases directly in Walmart's internal ticketing so the analyst never leaves the workflow.",
-         AMBER),
-        ("Broader ingestion",
-         "Extend beyond Reddit to Twitter / X, YouTube comments, and app-store reviews on the same trust + sentiment stack.",
+        ("1 → 3 months",
+         "Wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add promotion gate on OOF F1.",
+         WALMART_BLUE),
+        ("3 → 6 months",
+         "Migrate storage to managed Postgres or Cosmos so multiple analysts can use the same feedback table concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.",
          PURPLE),
     ]
     y = Inches(1.15)
-    for title, body, col in ops:
-        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.3),
+    for title, body, col in horizons:
+        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.6),
               LIGHT_GRAY, line=col)
-        _rect(s, Inches(0.5), y, Inches(0.2), Inches(1.3), col)
-        _tx(s, Inches(0.9), y + Inches(0.12), Inches(11.5), Inches(0.45),
-            title, size=Pt(14), bold=True, color=DARK_BLUE)
-        _tx(s, Inches(0.9), y + Inches(0.6), Inches(11.5), Inches(0.7),
-            body, size=Pt(11), color=DARK_GRAY)
-        y = y + Inches(1.42)
+        _rect(s, Inches(0.5), y, Inches(0.25), Inches(1.6), col)
+        _tx(s, Inches(0.9), y + Inches(0.15), Inches(11.4), Inches(0.4),
+            title, size=Pt(15), bold=True, color=DARK_BLUE)
+        _tx(s, Inches(0.9), y + Inches(0.65), Inches(11.4), Inches(0.9),
+            body, size=Pt(12), color=DARK_GRAY)
+        y = y + Inches(1.75)
+    _rect(s, Inches(0.5), Inches(6.4), Inches(12.3), Inches(0.5),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.45), Inches(12.0), Inches(0.4),
+        "Deliberately excluded  —  ideas without a clear next step  (auto-reply gate, seasonal P1 forecast, bilingual taxonomy)  —  covered in the report's Future Work chapter.",
+        size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
-    # 22 · Source Code + Deliverables ───────────────────────────────────────
+    # 19 · Source Code + Deliverables ───────────────────────────────────────
     s = new()
     _header_bar(s, "Source Code & Deliverables")
     _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.1),
@@ -1054,7 +964,7 @@ def build():
     ], first_col_bold=True, body_font=Pt(10))
     _footer(s, page[0], TOTAL)
 
-    # 23 · Thank You / Q&A ──────────────────────────────────────────────────
+    # 20 · Thank You / Q&A ──────────────────────────────────────────────────
     s = new()
     _set_bg(s, DARK_BLUE)
     _tx(s, Inches(0.5), Inches(1.9), Inches(12.3), Inches(1.2),

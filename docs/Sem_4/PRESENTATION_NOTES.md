@@ -2,7 +2,7 @@
 
 > Companion document for
 > [`FINAL_PRESENTATION_VishalSingh_2020AA05641.pptx`](./FINAL_PRESENTATION_VishalSingh_2020AA05641.pptx)
-> (25 slides). Use as a viva script and cheatsheet.
+> (22 slides). Use as a viva script and cheatsheet.
 >
 > **Deeper references**
 > - Smart Reply (slides 5–7): [SMART_REPLY_COMPOSER.md](./SMART_REPLY_COMPOSER.md)
@@ -14,36 +14,33 @@
 | Section | Slides | Focus |
 |---------|--------|-------|
 | Framing | 1 – 3 | Title, agenda, what's new since mid-sem |
-| Post-midsem features | 4 – 10 | HITL, Smart Reply, Learning Loop, Explorer, Lifecycle, Insights, Notifications |
-| Final results | 11 – 15 | ModernBERT, Vision, Trust score, Storage, Consolidated table |
-| Wrap-up | 16 – 25 | Contributions, live demo, conclusions, recommendations, future work, repo, Q&A |
+| Post-midsem features | 4 – 12 | HITL, Smart Reply, Learning Loop, Explorer, Lifecycle, Insights, Notifications |
+| Final results | 13 – 16 | ModernBERT, Vision, Trust score, Consolidated table |
+| Wrap-up | 17 – 22 | Contributions, live demo, honest conclusions, grounded future work, repo, Q&A |
 
 ---
 
 ## Slide 1 — Title
 
 **Content**
-- Title: *Retail Sentiment Intelligence — Trust-Aware Sentiment Analysis of Retail Feedback using LLMs*
+- Title: *Retail Sentiment Intelligence*
+- Sub-title: *Real-Time Social Media Mining and Trust-Aware Sentiment Analysis Using Large Language Models for Retail Feedback Optimization*
 - BITS ZG628T · Post Mid-Semester Presentation
-- Vishal Singh · 2020AA05641 · M.Tech (AI & ML)
-- Supervisor: Mr. Varunendra Pratap Singh (Walmart Global Tech)
-- Additional Examiner: Ms. Pradnya Kashikar (BITS Pilani)
+- **Faculty Mentor:** Ms. Pradnya Kashikar — BITS Pilani (WILP)
+- **Supervisor:** Mr. Varunendra Pratap Singh — Principal Software Engineer, Walmart Global Tech, Bengaluru
+- **Candidate:** Vishal Singh · 2020AA05641 — M.Tech (AI & ML), BITS Pilani (WILP)
 
 **Talking track**
-> "Good morning. I'm Vishal Singh, presenting the post mid-semester progress of my dissertation, *Retail Sentiment Intelligence*. Since mid-sem the focus has moved from *does the pipeline work?* to *can an analyst act on it, correct it, and feed the corrections back into the model?* The dissertation work was carried out at Walmart Global Tech under Mr. Varunendra Pratap Singh."
+> "Good morning. I'm Vishal Singh, presenting the post mid-semester progress of my dissertation, *Retail Sentiment Intelligence — Real-Time Social Media Mining and Trust-Aware Sentiment Analysis Using LLMs for Retail Feedback Optimization*. Since mid-sem the focus has moved from *does the pipeline work?* to *can an analyst act on it, correct it, and feed the corrections back into the model?* The dissertation is carried out at Walmart Global Tech under Mr. Varunendra Pratap Singh, and mentored on the BITS side by Ms. Pradnya Kashikar."
 
 ---
 
 ## Slide 2 — Agenda
 
-**Content** — a 16-item, 2-column grid grouped as:
-- Framing (1)
-- Feature stack (2 – 10)
-- Final numbers (11 – 15)
-- Wrap-up (16)
+**Content** — 15-item, 2-column grid grouped as: framing (1), feature stack (2 – 10), final numbers (11 – 13), wrap-up (14 – 15).
 
 **Talking track**
-> "The deck has three parts. First, what shipped after mid-sem — Review & Validate, Smart Reply, Learning Loop, and four new dashboard pages. Second, the final numbers for ModernBERT, Vision, and Trust. Third, conclusions and future work. About 25 slides, ~18 minutes."
+> "The deck has three parts. First, what shipped after mid-sem — Review & Validate, Smart Reply, Learning Loop, and four new dashboard pages. Second, the final numbers for ModernBERT, Vision, and Trust. Third, live demo and an honest conclusions + future work. About 22 slides, ~18 minutes."
 
 ---
 
@@ -62,7 +59,6 @@
 | | In-app Notification Centre |
 | | ModernBERT Stage 3 → F1 0.7642 |
 | | Trust-score end-to-end eval (n=200) |
-| | SQLite mirroring Cosmos DB partitioning |
 
 **Framing to close on** — *"Mid-sem answered can the pipeline produce trust-weighted sentiment? Post-midsem answers can an analyst act on it, correct it, and feed the corrections back."*
 
@@ -71,7 +67,7 @@
 ## Slide 4 — Review & Validate (HITL)
 
 **Content**
-- Bullets: queue sorted by priority (P1 first) · analyst overrides sentiment / aspect in one click · corrections written to `feedback` · Generate Drafts → two reply options · analyst edits + posts to Reddit · posted replies feed the few-shot pool.
+- Bullets: queue sorted by priority (P1 first) · analyst overrides sentiment / aspect in one click · corrections written to `feedback` · Generate Drafts → three reply options · analyst edits + posts to Reddit · posted replies feed the few-shot pool.
 - Right-hand screenshot: `docs/Sem_4/final/figures/ui/review_validate.png`
 
 **Talking track**
@@ -140,7 +136,6 @@
 - Two consumers:
   - **HOT loop (green)** — every Generate Drafts click queries `feedback` for the top-3 posted replies → injected as few-shot examples → effect visible on the next reply, no retraining.
   - **WARM loop (purple)** — monthly export of corrections → appended to Walmart-200 → ModernBERT Stage-3 rerun with 5-fold OOF CV → new checkpoint wins only if OOF F1 improves.
-- Failure modes eliminated: hot loop uses in-context learning (no catastrophic forgetting); warm loop uses 5-fold OOF CV (no train/eval leakage).
 
 **Talking track**
 > "The learning loop is what makes 'the system improves over time' concrete. Every human action — corrections, trust overrides, posted replies — writes one row to the `feedback` table. Two things consume that table. The hot loop, every click, uses the last three posted replies as few-shot examples for the reply generator. The warm loop, monthly, exports corrections into the ModernBERT Stage-3 training set for a supervised re-train. No black boxes — every row is queryable in SQLite."
@@ -154,7 +149,6 @@
 **Content**
 - Left: filter list — sentiment · confidence slider · trust-score slider · subreddit multi-select · aspect (8-item taxonomy) · date range · full-text.
 - Right screenshot: `docs/Sem_4/final/figures/ui/post_explorer.png`
-- Bottom: per-post card contents — title, sentiment badge, trust tier, aspect chips, subreddit, timestamp, actions.
 
 **Talking track**
 > "Post Explorer is the 'find me 20 posts I care about right now' page. Any combination of the filters can be applied simultaneously; results stream in ranked by priority × recency. Every card links back into Review & Validate."
@@ -164,12 +158,9 @@
 ## Slide 10 — Post Lifecycle (Kanban)
 
 **Content**
-- 4 states, left to right: **TRIAGED → ACKNOWLEDGED → IN PROGRESS → RESOLVED**.
+- 4 states: **TRIAGED → ACKNOWLEDGED → IN PROGRESS → RESOLVED**.
 - Screenshot: `docs/Sem_4/final/figures/ui/lifecycle_kanban.png`
-- Resolve modal — 2-step flow:
-  1. Save action note + optional LLM reply (a) Save & open Reddit (reply on clipboard) OR (b) Resolve (no reply needed).
-  2. Paste on Reddit → return → Mark Resolved.
-- Every transition timestamped for SLA analytics.
+- Resolve modal — 2-step flow (save action note + optional reply → paste on Reddit → Mark Resolved).
 
 **Talking track**
 > "Lifecycle Kanban tracks a complaint end-to-end. Cards move through four states. The Resolve modal is a two-step flow so posting to Reddit is decoupled from marking the card resolved — the analyst can't accidentally close a card without confirming the reply landed."
@@ -178,12 +169,7 @@
 
 ## Slide 11 — Insights & Competitor Analysis
 
-**Content** — 2 × 2 feature grid:
-
-| | |
-|---|---|
-| **Priority-Negatives** — top issues ranked by volume × severity × recency by aspect | **Competitor Pulse** — Walmart vs Costco / Target / Amazon on shared aspects |
-| **Weekly LLM Summaries** — natural-language digest + action items + emerging topics | **Aspect Drilldown** — 8-aspect taxonomy · per-aspect sentiment trend + volume · representative posts |
+**Content** — 2 × 2 feature grid: Priority-Negatives · Competitor Pulse · Weekly LLM Summaries · Aspect Drilldown.
 
 **Talking track**
 > "Where the other pages are operational, Insights is strategic. It answers 'what should the ops team focus on this week?' — the top issues weighted by volume, severity and recency, along with a cross-brand pulse and an LLM-generated weekly digest."
@@ -194,7 +180,6 @@
 
 **Content**
 - In-app mirror of the group-routed email / Slack digest.
-- Every P1 / P2 alert is mirrored in the app; grouped by subreddit ↔ team; read/unread persisted per analyst; deep-links to Review & Validate.
 - Screenshot: `docs/Sem_4/final/figures/ui/notifications.png`
 - Priority thresholds: **P1** — trust ≥ 0.70 ∧ conf ≥ 0.80  ·  **P2** — trust ≥ 0.50 ∧ conf ≥ 0.60.
 
@@ -207,17 +192,11 @@
 
 **Content**
 - Three KPI tiles: Overall Macro-F1 **0.6272 → 0.7642**  ·  Long-post F1 (> 256 tok) **0.28 → 1.00**  ·  Uplift **+13.7 pts**.
-- 3-stage curriculum table:
-  | Stage | Data | Macro-F1 | Δ |
-  |-------|------|----------|---|
-  | Baseline (Twitter-RoBERTa) | off-the-shelf | 0.6272 | — |
-  | Stage 1 | TweetEval sentiment (~45 k) | 0.6810 | +5.4 |
-  | Stage 2 | GoEmotions-3class Reddit (~54 k, pseudo) | 0.7285 | +10.1 |
-  | Stage 3 (final) | Walmart-200 hand-labelled | **0.7642** | **+13.7** |
-- Per-length-bucket F1: short (< 64) 0.75 → 0.78, medium 0.65 → 0.74, long (> 256) 0.28 → 1.00.
+- 3-stage curriculum table (Baseline → Stage 1 → Stage 2 → Stage 3 final).
+- Per-length-bucket F1: short 0.75 → 0.78, medium 0.65 → 0.74, long 0.28 → 1.00.
 
 **Talking track**
-> "Final ModernBERT numbers on 5-fold OOF CV of 200 hand-labelled retail Reddit posts. Macro-F1 climbs the curriculum monotonically. The most dramatic gain is on long posts — the Twitter-RoBERTa baseline is capped at 512 tokens, so long complaints get truncated and F1 collapses to 0.28. ModernBERT sees the full 1024 tokens and hits 1.0 on that bucket."
+> "Final ModernBERT numbers on 5-fold OOF CV of 200 hand-labelled retail Reddit posts. Macro-F1 climbs the curriculum monotonically. The most dramatic gain is on long posts — the Twitter-RoBERTa baseline is capped at 512 tokens, so long complaints get truncated and F1 collapses to 0.28. ModernBERT sees the full 1024 tokens and hits 1.0 on that bucket. A caveat: only 7 posts sit in that bucket — I read this as 'the truncation ceiling is gone', not 'the model is perfect'."
 
 ---
 
@@ -225,16 +204,10 @@
 
 **Content**
 - 4-pass architecture: **STRUCTURE → TILE → EXTRACT → MERGE** (image removed on the final merge → cannot invent visuals).
-- Evaluation on 32 retail screenshots:
-  | Metric | Single-pass | Multi-pass | Change |
-  |--------|-------------|-----------|--------|
-  | Hallucination rate | 50 % | **0 %** | eliminated |
-  | Text-extraction success | 25 % | **75 %** | 3× |
-  | Retail-signal recall | 40 % | **81 %** | 2× |
-  | Latency / image (warm) | ~5 s | ~15 s | accepted |
+- Eval on 32 retail screenshots — hallucination 50 → 0 %, text extraction 25 → 75 %, retail-signal recall 40 → 81 %.
 
 **Talking track**
-> "Vision was the biggest post-midsem win. Single-pass Gemma 3 4B was hallucinating on half of all images — inventing prices, order numbers, screenshots. The fix was structural: four passes where the last one is a text-only merge with the image removed, so the model physically cannot invent visual details. Zero hallucination on the 32-image gold set."
+> "Vision was the biggest post-midsem win. Single-pass Gemma 3 4B was hallucinating on half of all images — inventing prices, order numbers, screenshots. The fix was structural: four passes where the last one is a text-only merge with the image removed, so the model physically cannot invent visual details. Zero hallucination on the 32-image gold set. Same caveat as sentiment — 32 images is a pilot, not production evidence."
 
 ---
 
@@ -242,53 +215,40 @@
 
 **Content**
 - Three KPI tiles: Low-trust share **15 %**  ·  Human-agreed **12 / 15**  ·  Agreement rate **80 %**.
-- Formula banner: `trust_score = 0.4·metadata + 0.3·dedup + 0.3·llm_credibility`.
-- Design principle — *flag, don't drop*. Every low-trust post is surfaced with an explanatory chip and can be overridden in one click. Every constant has a stakeholder-arguable rationale in `config/models.yaml`.
+- Formula: `trust_score = 0.4·metadata + 0.3·dedup + 0.3·llm_credibility`.
+- *Flag, don't drop* — every low-trust post is surfaced with an explanatory chip and can be overridden in one click.
 
 **Talking track**
 > "On the 200-post gold set, 15 % of posts fell into the low-trust bucket. When a human annotator cross-checked those 15, they agreed with 12 — 80 % agreement. The score is decomposed into three named components in the dashboard so the analyst can see *why* a post is low-trust and override it if they disagree."
 
 ---
 
-## Slide 16 — Storage — SQLite → Cosmos DB Lift-and-Shift
+## Slide 16 — Evaluation Summary — Post-Midsem Numbers
 
-**Content**
-- 6-container schema table with partition keys (`raw_posts /subreddit`, `analyses /subreddit`, `aggregates /time_window`, `alerts /severity`, `feedback /analyst_id`, `notification_log /group_id`).
-- Left card: SQLite in WAL mode, `data JSON` column mirrors Cosmos doc, `StorageBackend` pluggable, nightly backup + JSONL cost ledger.
-- Right card: swap `SQLiteBackend → CosmosBackend`; same schema, partition keys already match production; zero change to pipeline / dashboard code.
-
-**Talking track**
-> "Storage is designed for a lift-and-shift to Azure Cosmos DB. Every SQLite container's partition key matches the production Cosmos partition, and the `data JSON` column mirrors the document body. The `StorageBackend` interface is a single Python file — swap it out and the pipeline runs unchanged."
-
----
-
-## Slide 17 — Evaluation Summary — Post-Midsem Numbers
-
-**Content** — combined 12-row metrics table covering sentiment (F1, long-post F1, CV method), vision (hallucination, extraction, recall), trust (low-trust share, annotator agreement), ops (25 subreddits, 6-h cadence, 8 dashboard pages).
+**Content** — combined 12-row metrics table (sentiment, vision, trust, ops) all measured against the same 200-post gold set.
 
 **Talking track**
 > "Consolidated numbers — one table, three subsystems, all evaluated on the same 200-post retail-Reddit gold set. Highlighted rows are the four post-midsem wins."
 
 ---
 
-## Slide 18 — Principal Contributions (C1 – C5)
+## Slide 17 — Principal Contributions (C1 – C5)
 
 **Content**
-- **C1** — Offline-first RSI pipeline (ingest → trust → sentiment → aspects → vision → aggregation → alerts → dashboard). Zero API cost, modular, Azure-deployable.
-- **C2** — Fine-tuned ModernBERT with 3-stage curriculum. Macro-F1 0.6272 → 0.7642, long-post 0.28 → 1.00, 5-fold OOF CV.
-- **C3** — Multi-pass vision technique on Gemma 3 4B. Hallucination 50 → 0 %, extraction 25 → 75 %.
-- **C4** — Interpretable trust score + admission gate. Flag, don't drop; every constant traceable to English rationale.
-- **C5** — HITL learning-loop dashboard. Review & Validate, Lifecycle, Insights, Notifications. Corrections + posted replies feed few-shot reply generation and future retraining.
+- **C1** — Offline-first RSI pipeline.
+- **C2** — Fine-tuned ModernBERT with 3-stage curriculum.
+- **C3** — Multi-pass vision technique on Gemma 3 4B.
+- **C4** — Interpretable trust score + admission gate.
+- **C5** — HITL learning-loop dashboard.
 
 **Talking track**
 > "Five principal contributions, mapped one-to-one to the sections of the report. C1 is the plumbing, C2 and C3 are the model wins, C4 is the trust design, and C5 is the analyst-facing surface that makes the pipeline usable."
 
 ---
 
-## Slide 19 — Live Demo — Dashboard Walkthrough
+## Slide 18 — Live Demo — Dashboard Walkthrough
 
-**Content** — 3 × 2 screenshot grid (embedded from `docs/Sem_4/final/figures/ui/`):
-Brand Health · Alert Feed · Post Explorer · Review & Validate · Lifecycle Kanban · Insights.
+**Content** — 3 × 2 screenshot grid (Brand Health · Alert Feed · Post Explorer · Review & Validate · Lifecycle Kanban · Insights).
 
 **Talking track**
 > "Rather than dropping into a live demo I'll walk through six screens: Brand Health for the top-line KPIs, Alert Feed for what's firing right now, Post Explorer for filtered search, Review & Validate for the correction loop, Lifecycle Kanban for the resolution workflow, and Insights for the strategic view."
@@ -297,98 +257,56 @@ Brand Health · Alert Feed · Post Explorer · Review & Validate · Lifecycle Ka
 
 ---
 
-## Slide 20 — Conclusions — Research Questions Answered
+## Slide 19 — Conclusions — What Worked, What's Still Open
 
-**Content** — 4-row RQ box, all green:
+Deliberately grounded — not a green wall of ticks.
 
-| RQ | Answer |
-|----|--------|
-| **RQ1** — Can a fine-tuned encoder beat baselines on Reddit retail sentiment? | **YES** — ModernBERT 3-stage curriculum: Macro-F1 0.6272 → 0.7642 overall; 0.2778 → 1.0000 on long posts. |
-| **RQ2** — Can a compliant open-weights VLM extract structured retail signal from screenshots? | **YES** — Multi-pass on Gemma 3 4B: hallucination 50 → 0 %, text extraction 25 → 75 %. |
-| **RQ3** — Can a defensible trust score filter low-credibility posts without silent drops? | **YES** — 3-part interpretable score flagged 15 %; 12 of 15 confirmed by annotator; posts remain visible + overridable. |
-| **RQ4** — Can a HITL workflow produce a re-training signal? | **YES** — Every correction and posted reply logged → feeds ModernBERT Stage-3 augmentation and reply few-shot pool. |
+**What worked**
+- 3-stage ModernBERT curriculum landed the sentiment win we set out for (0.62 → 0.76 on 5-fold OOF).
+- Long-post recovery came for free once we switched off truncation.
+- Removing the image on the vision merge step ended the 50 % hallucination problem — the mechanism, not just the number.
+- Trust score as *flag-not-drop* matched the annotator on 12 / 15 low-trust posts; analysts trust it because they can override it.
+- HITL feedback table quietly became the most useful piece of infrastructure — drives few-shot today, retraining tomorrow.
+
+**What's still open (honest)**
+- 200-post gold set is small; a bigger blind held-out set is needed before I'd claim generalisation.
+- Vision eval is 32 images — enough to sanity-check the mechanism, not to claim production-grade quality.
+- Long-post F1 = 1.00 is on 7 posts — evidence the truncation ceiling is gone, not that the model is perfect on long text.
+- Reply drafts still need an analyst edit — we track edit-distance but haven't shown it dropping consistently yet.
+- Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done.
 
 **Talking track**
-> "Every research question was answered with a measured YES. The evidence sits on the previous slides — RQ1 in the ModernBERT numbers, RQ2 in the vision numbers, RQ3 in the trust-score evaluation, and RQ4 in the learning loop."
+> "Two columns, deliberately. On the left, what worked. On the right, what's still open — because on 200 posts and 32 images, a 100 % green wall would be dishonest. The mechanism-level wins are what I want you to take away; the sample-size caveats are what the next horizon of work has to close."
 
 ---
 
-## Slide 21 — Recommendations — Immediate Follow-Ons
+## Slide 20 — Future Work — Grounded 3-Horizon Roadmap
+
+Only items with a clear next step. Everything else lives in the report's Future Work chapter.
+
+- **Now → 1 month** — grow the gold set to ~500 posts using HITL feedback already being produced; rerun 5-fold OOF and check the F1 delta.
+- **1 → 3 months** — wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add a promotion gate on OOF F1.
+- **3 → 6 months** — migrate storage to managed Postgres or Cosmos so multiple analysts can use the same feedback table concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.
+
+**Deliberately excluded** — auto-reply gate, seasonal P1 forecast, bilingual taxonomy — ideas without a clear next step at this scale. They're in the report's Future Work chapter.
+
+**Talking track**
+> "Three horizons, and I've been strict about only listing things that have a clear next step. Growing the gold set is the highest-leverage move at 200 posts. Automating the retrain unblocks the whole learning loop. Concurrency lets more than one analyst use the system without stepping on each other. Everything else — auto-reply, bilingual, P1 forecasting — is in the report; I'm not putting it on this slide because I don't have a first step for it yet."
+
+---
+
+## Slide 21 — Source Code & Deliverables
 
 **Content**
-1. **Monthly retraining cadence** — use the HITL feedback store as the incremental labelling stream.
-2. **Bilingual pass (Hindi + English)** — validate taxonomy with native-speaker analysts before extending to Indian retail communities.
-3. **Per-team SLA dashboards** — extend Lifecycle SLA analytics once analyst volume passes ~50 posts / day.
-
-**Talking track**
-> "Three follow-ons that could ship in the next quarter without any research risk. All three unlock existing infrastructure — the retraining pipeline is already scripted, the taxonomy is already extensible, and the lifecycle table already has the timestamps."
-
----
-
-## Slide 22 — Future Work — Model + Product
-
-**Content** — two columns.
-
-**Model-level**
-- Joint sentiment + aspect head on a shared encoder (~30 % inference saving).
-- Distil ModernBERT to ~50 M-parameter student → CPU-only edge inference.
-- Reasoning-augmented VLM captioning (LLaVA-Next 1.6 B / SmolVLM).
-- 3-seed ensemble for tighter F1 variance.
-- Blind 25-post recheck for defensibility.
-
-**Product-level**
-- Auto-reply confidence gate — promote LLM drafts to "queued for send" when analyst edit-distance falls below a threshold.
-- Predictive P1 forecast — seasonal decomposition on daily counts (24–48 h ahead).
-- Bilingual taxonomy.
-- Slack-bot inline responses.
-- Automated retraining pipeline hook.
-
-**Talking track**
-> "Model-level work is about efficiency — halve the inference cost with a joint head, then distil for CPU-only edge. Product-level work is about closing the last mile — promote LLM drafts to auto-send when they're consistently good, and forecast P1 volume so on-call gets a heads-up."
-
----
-
-## Slide 23 — Future Work — Operational
-
-**Content**
-- **Kubernetes CronJob** — deploy pipeline as a scheduled CronJob + managed Postgres for multi-analyst concurrency.
-- **Azure Cosmos DB migration** — schema already mirrors partition design; swap `SQLiteBackend → CosmosBackend`.
-- **Walmart ticketing integration** — P1 alerts open cases directly.
-- **Broader ingestion** — Twitter / X, YouTube comments, app-store reviews.
-
-**Talking track**
-> "Operational roadmap: containerise, migrate storage to Cosmos, wire alerts into Walmart's ticketing so the analyst never leaves the workflow, and extend beyond Reddit to Twitter, YouTube comments and app-store reviews on the same trust + sentiment stack."
-
----
-
-## Slide 24 — Source Code & Deliverables
-
-**Content**
-- Repository banner:
-  `https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence`
-- Deliverables table:
-  | Deliverable | Path in repo | Contents |
-  |-------------|--------------|----------|
-  | Final Report PDF | `docs/Sem_4/final/FINAL_REPORT_VishalSingh_2020AA05641.pdf` | 10 chapters + appendices + refs |
-  | Final Report LaTeX | `docs/Sem_4/final/latex/` | Reproducible xelatex source |
-  | Pipeline core | `src/pipeline.py`, `src/ingestion/`, `src/analysis/` | 6-layer async pipeline |
-  | Sentiment training | `scripts/train_modernbert_sentiment.py` | 3-stage curriculum runner |
-  | Evaluation notebook | `evaluation/trust_score_walmart200.ipynb` | Reproducible 5-fold OOF eval |
-  | Dashboard | `frontend/` (React + Vite + Tailwind) | 8 pages, live via WebSocket |
-  | Reproduction | Appendix B of the report + `start.sh` | Clone → conda → start |
+- Repository: `https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence`
+- Deliverables table (report PDF/LaTeX, pipeline core, training scripts, evaluation notebook, dashboard, reproduction guide in Appendix B).
 
 **Talking track**
 > "Everything is in the repo — the report LaTeX, the pipeline code, the training scripts, the evaluation notebook, the React dashboard, and the reproduction guide in Appendix B."
 
 ---
 
-## Slide 25 — Thank You / Q&A
-
-**Content**
-- Large "Thank You" header.
-- Repository URL card: `gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence`
-- Report path: `docs/Sem_4/final/FINAL_REPORT_VishalSingh_2020AA05641.pdf`
-- Bottom: Vishal Singh · 2020AA05641 · BITS Pilani (WILP) · Walmart Global Tech, Bengaluru
+## Slide 22 — Thank You / Q&A
 
 **Talking track**
 > "Thank you — happy to take any questions."
@@ -439,4 +357,4 @@ Use these to prep for cross-questioning.
 | 13 | `scripts/train_modernbert_sentiment.py`, `evaluation/trust_score_walmart200.ipynb` |
 | 14 | `src/analysis/vision.py` |
 | 15 | `src/trust/scorer.py`, `config/models.yaml` |
-| 16 | `src/storage/store.py` |
+
