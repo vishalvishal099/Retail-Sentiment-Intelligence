@@ -280,18 +280,21 @@ Deliberately grounded — not a green wall of ticks.
 
 ---
 
-## Slide 20 — Future Work — Grounded 3-Horizon Roadmap
+## Slide 20 — Future Work — 4-Horizon Roadmap
 
-Only items with a clear next step. Everything else lives in the report's Future Work chapter.
+Four horizons, each admissible only when the previous one is measurably successful. HITL is the ladder, not the ceiling — every stage produces the training signal that lets the next stage automate more.
 
-- **Now → 1 month** — grow the gold set to ~500 posts using HITL feedback already being produced; rerun 5-fold OOF and check the F1 delta.
-- **1 → 3 months** — wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add a promotion gate on OOF F1.
-- **3 → 6 months** — move the feedback table to a shared managed database so multiple analysts can work concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.
+| Horizon | Theme | HITL involvement | What |
+|---|---|---|---|
+| **Now → 1 month** | Grow the gold set | 100 % | Grow the labelled gold set to ~500 posts using the HITL feedback the team is already producing; rerun 5-fold OOF and check the F1 delta. |
+| **1 → 3 months** | Automate + go bilingual | 100 % | Wire the monthly ModernBERT retrain into a Cron / Airflow job with an OOF-F1 promotion gate. Add multi-language support (start with Hindi + English) — taxonomy validated with native-speaker analysts. |
+| **3 → 6 months** | Walmart-trained model + shared DB | ~80 % | Fine-tune Mistral 7B on our own posted-reply corpus → a *Walmart-trained replier* that drops the paid GPT-4o dependency, runs fully in-house and can be self-hosted. Move the feedback table to a shared managed database so multiple analysts can work concurrently. |
+| **6 → 12 months** | Confidence-gated auto-reply | ~30 % → eventually 0 % | Introduce a confidence gate on the reply generator: top-confidence drafts are queued for auto-send and the analyst only reviews the mid- and low-confidence tail. As agreement stays high, gradually raise the auto-send threshold — HITL winds down to sampling / audit only. |
 
-**Deliberately excluded** — auto-reply gate, seasonal P1 forecast, bilingual taxonomy — ideas without a clear next step at this scale. They're in the report's Future Work chapter.
+**Guiding principle** — HITL is the ladder, not the ceiling. Every stage produces the training signal that lets the next stage automate more.
 
 **Talking track**
-> "Three horizons, and I've been strict about only listing things that have a clear next step. Growing the gold set is the highest-leverage move at 200 posts. Automating the retrain unblocks the whole learning loop. Concurrency lets more than one analyst use the system without stepping on each other. Everything else — auto-reply, bilingual, P1 forecasting — is in the report; I'm not putting it on this slide because I don't have a first step for it yet."
+> "Four horizons, and each one is admissible only when the previous one is measurably successful. Near-term is data — grow the gold set from 200 to 500. Then automate the retrain and add bilingual support. In the medium term we fine-tune Mistral on our own posted-reply corpus to give us a Walmart-trained replier that drops the paid GPT-4o dependency. And the long-term direction is a confidence-gated auto-reply: analysts stop reviewing the top-confidence drafts, then progressively more of them — HITL winds down to sampling and audit. The whole point is that today's HITL isn't a permanent cost; it's the training signal that lets us shed it stage by stage."
 
 ---
 

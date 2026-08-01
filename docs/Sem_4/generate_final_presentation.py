@@ -1001,40 +1001,55 @@ def build():
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 18 · Future work (grounded, 3-horizon) ────────────────────────────────
+    # 18 · Future work (grounded, 4-horizon roadmap) ──────────────────────
     s = new()
-    _header_bar(s, "Future Work  —  Grounded 3-Horizon Roadmap",
-                "Only items with clear next steps; not a wishlist")
+    _header_bar(s, "Future Work  —  4-Horizon Roadmap",
+                "From today's HITL to a Walmart-trained, mostly-autonomous replier")
     horizons = [
-        ("Now → 1 month",
-         "Grow the gold set to ~500 posts using the HITL feedback the team is already producing; rerun 5-fold OOF and check the F1 delta.",
+        ("Now → 1 month",   "Grow the gold set",  "HITL: 100 %",
+         "Grow the labelled gold set to ~500 posts using the HITL feedback the team is already producing; "
+         "rerun 5-fold OOF to check the F1 delta.",
          GREEN),
-        ("1 → 3 months",
-         "Wire the monthly ModernBERT retrain into a Cron / Airflow job so it stops being a manual notebook run; add promotion gate on OOF F1.",
+        ("1 → 3 months",    "Automate + go bilingual",  "HITL: 100 %",
+         "Wire the monthly ModernBERT retrain into a Cron / Airflow job with an OOF-F1 promotion gate.  "
+         "Add multi-language support (start with Hindi + English) — taxonomy validated with native-speaker analysts.",
          WALMART_BLUE),
-        ("3 → 6 months",
-         "Move the feedback table to a shared managed database so multiple analysts can work concurrently; extend ingestion beyond Reddit only if the demand from the analyst team is real.",
+        ("3 → 6 months",    "Walmart-trained model + shared DB",  "HITL: ~80 %",
+         "Fine-tune Mistral 7B on our own posted-reply corpus  →  a Walmart-trained replier that drops the paid "
+         "GPT-4o dependency, runs fully in-house, and can be self-hosted.  Move the feedback table to a shared "
+         "managed database so multiple analysts can work concurrently.",
          PURPLE),
+        ("6 → 12 months",   "Confidence-gated auto-reply",  "HITL: ~30 %  →  eventually 0 %",
+         "Introduce a confidence gate on the reply generator: top-confidence drafts are queued for auto-send "
+         "and the analyst only reviews the mid- and low-confidence tail.  As agreement stays high, gradually "
+         "raise the auto-send threshold — HITL winds down to sampling / audit only.",
+         AMBER),
     ]
-    y = Inches(1.15)
-    for title, body, col in horizons:
-        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.25),
+    y = Inches(1.05)
+    for horizon, title, hitl, body, col in horizons:
+        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.15),
               LIGHT_GRAY, line=col)
-        _rect(s, Inches(0.5), y, Inches(0.25), Inches(1.25), col)
-        _tx(s, Inches(0.9), y + Inches(0.12), Inches(11.4), Inches(0.4),
-            title, size=Pt(15), bold=True, color=DARK_BLUE)
-        _tx(s, Inches(0.9), y + Inches(0.55), Inches(11.4), Inches(0.7),
-            body, size=Pt(12), color=DARK_GRAY)
-        y = y + Inches(1.4)
-    _rect(s, Inches(0.5), Inches(5.55), Inches(12.3), Inches(1.35),
+        # Left colour stripe with horizon label
+        _rect(s, Inches(0.5), y, Inches(1.75), Inches(1.15), col)
+        _tx(s, Inches(0.5), y + Inches(0.16), Inches(1.75), Inches(0.4),
+            horizon, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, Inches(0.5), y + Inches(0.55), Inches(1.75), Inches(0.5),
+            hitl, size=Pt(10), color=WHITE, align=PP_ALIGN.CENTER)
+        # Right title + body
+        _tx(s, Inches(2.4), y + Inches(0.1), Inches(10.2), Inches(0.4),
+            title, size=Pt(14), bold=True, color=DARK_BLUE)
+        _tx(s, Inches(2.4), y + Inches(0.5), Inches(10.2), Inches(0.65),
+            body, size=Pt(10.5), color=DARK_GRAY)
+        y = y + Inches(1.24)
+    # Guiding principle — replaces the old 'deliberately excluded' bar
+    _rect(s, Inches(0.5), Inches(5.95), Inches(12.3), Inches(0.95),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.65), Inches(12.0), Inches(0.35),
-        "DELIBERATELY EXCLUDED", size=Pt(11), bold=True, color=WALMART_BLUE)
-    _bullets(s, Inches(0.7), Inches(6.0), Inches(12.0), Inches(0.9), [
-        "Auto-reply confidence gate  —  waiting for edit-distance evidence on more replies",
-        "Predictive P1 forecast (seasonal decomposition)  —  needs at least 6 months of daily counts",
-        "Bilingual (Hindi + English) taxonomy  —  needs native-speaker validation first",
-    ], size=Pt(10))
+    _tx(s, Inches(0.7), Inches(6.05), Inches(12.0), Inches(0.35),
+        "GUIDING PRINCIPLE", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.4), Inches(12.0), Inches(0.5),
+        "HITL is the ladder, not the ceiling — every stage produces the training signal that lets the next "
+        "stage automate more.  Each horizon is admissible only when the previous one is measurably successful.",
+        size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
     # 19 · Source Code + Deliverables ───────────────────────────────────────
