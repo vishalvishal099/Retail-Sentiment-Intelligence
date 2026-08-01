@@ -516,39 +516,71 @@ def fig13_alert_routing():
 
 
 # ---------------------------------------------------------------------------
-# Figure 14 — Sentiment F1 results (grouped bar chart)
+# Figure 14 — Sentiment results (grouped bar chart)
+#
+# Left panel  = Macro-F1 on the buckets where F1 is meaningful
+#               (overall, and the short-to-medium bucket that carries
+#                193 / 200 posts and covers all three sentiment classes).
+# Right panel = Long bucket reported as raw correct-count out of 7 posts;
+#               a per-class F1 would collapse to a single-class score
+#               here because all 7 gold-set long posts happen to be
+#               negative-class, so the honest metric is "how many did
+#               the model classify correctly".
 # ---------------------------------------------------------------------------
 
 def fig14_sentiment_results():
     import numpy as np
-    fig, ax = plt.subplots(figsize=(9.5, 5.2))
+    fig, (ax_f1, ax_ct) = plt.subplots(1, 2, figsize=(11.0, 5.2),
+                                       gridspec_kw={"width_ratios": [2, 1]})
 
-    groups = ["Overall\n(200 posts)", "Long posts\n(≥512 tok)", "< 512 tok\n(193 posts)"]
-    roberta = [0.6272, 0.2778, 0.65]
-    modernbert = [0.7642, 1.0000, 0.75]
+    # ── Left: Macro-F1 on the two meaningful buckets ────────────────────
+    groups = ["Overall\n(n = 200)", "Short-to-medium\n(< 512 tok, n = 193)"]
+    roberta_f1    = [0.6272, 0.6360]
+    modernbert_f1 = [0.7642, 0.7619]
 
     x = np.arange(len(groups))
     bw = 0.36
-    b1 = ax.bar(x - bw / 2, roberta, bw, label="RoBERTa baseline", color=GREY, edgecolor=NAVY)
-    b2 = ax.bar(x + bw / 2, modernbert, bw, label="Fine-tuned ModernBERT", color=BLUE, edgecolor=NAVY)
-
+    b1 = ax_f1.bar(x - bw / 2, roberta_f1,    bw, label="RoBERTa baseline",
+                   color=GREY, edgecolor=NAVY)
+    b2 = ax_f1.bar(x + bw / 2, modernbert_f1, bw, label="Fine-tuned ModernBERT",
+                   color=BLUE, edgecolor=NAVY)
     for bars in (b1, b2):
         for r in bars:
-            ax.text(r.get_x() + r.get_width() / 2, r.get_height() + 0.02,
-                    f"{r.get_height():.2f}", ha="center", va="bottom",
-                    fontsize=9, color=NAVY, weight="bold")
+            ax_f1.text(r.get_x() + r.get_width() / 2, r.get_height() + 0.015,
+                       f"{r.get_height():.2f}", ha="center", va="bottom",
+                       fontsize=9, color=NAVY, weight="bold")
+    ax_f1.set_ylim(0, 1.0)
+    ax_f1.set_ylabel("Macro-F1 (5-fold out-of-fold CV)", fontsize=10, color=NAVY)
+    ax_f1.set_xticks(x)
+    ax_f1.set_xticklabels(groups, fontsize=9.5)
+    ax_f1.legend(loc="upper left", fontsize=9, frameon=True)
+    ax_f1.set_title("Macro-F1 by bucket", fontsize=10.5, weight="bold", color=NAVY)
+    ax_f1.spines["top"].set_visible(False)
+    ax_f1.spines["right"].set_visible(False)
+    ax_f1.grid(axis="y", linestyle=":", alpha=0.5)
 
-    ax.set_ylim(0, 1.15)
-    ax.set_ylabel("Macro-F1 (out-of-fold CV)", fontsize=10, color=NAVY)
-    ax.set_xticks(x)
-    ax.set_xticklabels(groups, fontsize=9.5)
-    ax.legend(loc="upper left", fontsize=9, frameon=True)
-    ax.set_title("Figure 14 — Sentiment Macro-F1: RoBERTa vs Fine-Tuned ModernBERT",
-                 fontsize=11.5, weight="bold", color=NAVY, pad=10)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", linestyle=":", alpha=0.5)
+    # ── Right: Long-post bucket as raw correct count ────────────────────
+    labels = ["RoBERTa", "ModernBERT"]
+    correct = [5, 7]
+    xr = np.arange(len(labels))
+    br = ax_ct.bar(xr, correct, 0.55,
+                   color=[GREY, BLUE], edgecolor=NAVY)
+    for r, c in zip(br, correct):
+        ax_ct.text(r.get_x() + r.get_width() / 2, c + 0.1,
+                   f"{c} / 7", ha="center", va="bottom",
+                   fontsize=10, color=NAVY, weight="bold")
+    ax_ct.set_ylim(0, 8.2)
+    ax_ct.set_ylabel("Posts classified correctly", fontsize=10, color=NAVY)
+    ax_ct.set_xticks(xr)
+    ax_ct.set_xticklabels(labels, fontsize=9.5)
+    ax_ct.set_title("Long posts  (≥ 512 tok,  n = 7,  all negative-class)",
+                    fontsize=10.5, weight="bold", color=NAVY)
+    ax_ct.spines["top"].set_visible(False)
+    ax_ct.spines["right"].set_visible(False)
+    ax_ct.grid(axis="y", linestyle=":", alpha=0.5)
 
+    fig.suptitle("Figure 14 — Sentiment: RoBERTa vs Fine-Tuned ModernBERT",
+                 fontsize=12, weight="bold", color=NAVY, y=1.02)
     fig.tight_layout()
     out = OUT / "fig14_sentiment_results.png"
     fig.savefig(out, dpi=180, bbox_inches="tight", facecolor=WHITE)
