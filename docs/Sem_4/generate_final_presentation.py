@@ -177,7 +177,8 @@ def _stage_card(slide, x, y, w, h, label, title, body, color):
     _tx(slide, x, y + Inches(0.55), w, Inches(0.4),
         title, size=Pt(13), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER)
     _tx(slide, x, y + Inches(1.0), w, h - Inches(1.05),
-        body, size=Pt(11), color=DARK_GRAY, align=PP_ALIGN.CENTER)
+        body, size=Pt(11), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+        anchor=MSO_ANCHOR.MIDDLE)
 
 
 def _image(slide, path: Path, left, top, width=None, height=None):
@@ -230,36 +231,38 @@ def build():
     # 1 · Title ──────────────────────────────────────────────────────────────
     s = new()
     _set_bg(s, DARK_BLUE)
-    _rect(s, Inches(0), Inches(2.3), Inches(0.4), Inches(2.7), YELLOW)
-    _tx(s, Inches(0.9), Inches(0.85), Inches(11.5), Inches(0.9),
-        "Retail Sentiment Intelligence", size=Pt(38), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(1.75), Inches(11.5), Inches(1.4),
+    _rect(s, Inches(0), Inches(1.8), Inches(0.4), Inches(3.4), YELLOW)
+    _tx(s, Inches(0.9), Inches(0.7), Inches(11.5), Inches(0.9),
+        "Retail Sentiment Intelligence", size=Pt(40), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(1.6), Inches(11.5), Inches(1.4),
         "Real-Time Social Media Mining and Trust-Aware Sentiment Analysis\n"
         "Using Large Language Models for Retail Feedback Optimization",
-        size=Pt(18), color=YELLOW)
-    _tx(s, Inches(0.9), Inches(3.15), Inches(11.5), Inches(0.4),
-        "BITS ZG628T  ·  Dissertation  ·  Post Mid-Semester Presentation",
+        size=Pt(19), color=YELLOW)
+    _tx(s, Inches(0.9), Inches(2.95), Inches(11.5), Inches(0.4),
+        "BITS ZG628T   ·   Dissertation   ·   Post Mid-Semester Presentation",
         size=Pt(14), bold=True, color=WHITE)
+    # Yellow separator between framing and people block
+    _rect(s, Inches(0.9), Inches(3.55), Inches(4.0), Inches(0.04), YELLOW)
     # People — Faculty Mentor → Supervisor → Candidate (candidate at the end)
-    _tx(s, Inches(0.9), Inches(4.15), Inches(11.5), Inches(0.4),
+    _tx(s, Inches(0.9), Inches(3.85), Inches(11.5), Inches(0.4),
         "Faculty Mentor:   Ms. Pradnya Kashikar",
-        size=Pt(15), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(4.6), Inches(11.5), Inches(0.4),
+        size=Pt(16), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(4.3), Inches(11.5), Inches(0.4),
         "BITS Pilani (WILP)",
         size=Pt(12), color=LIGHT_BLUE)
-    _tx(s, Inches(0.9), Inches(5.15), Inches(11.5), Inches(0.4),
+    _tx(s, Inches(0.9), Inches(4.9), Inches(11.5), Inches(0.4),
         "Supervisor:   Mr. Varunendra Pratap Singh",
-        size=Pt(15), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(5.6), Inches(11.5), Inches(0.4),
+        size=Pt(16), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(5.35), Inches(11.5), Inches(0.4),
         "Principal Software Engineer  ·  Walmart Global Tech, Bengaluru",
         size=Pt(12), color=LIGHT_BLUE)
-    _tx(s, Inches(0.9), Inches(6.15), Inches(11.5), Inches(0.4),
+    _tx(s, Inches(0.9), Inches(5.95), Inches(11.5), Inches(0.4),
         "Candidate:   Vishal Singh   ·   2020AA05641",
-        size=Pt(15), bold=True, color=WHITE)
-    _tx(s, Inches(0.9), Inches(6.6), Inches(11.5), Inches(0.4),
+        size=Pt(16), bold=True, color=WHITE)
+    _tx(s, Inches(0.9), Inches(6.4), Inches(11.5), Inches(0.4),
         "M.Tech (AI & ML)  ·  Birla Institute of Technology & Science, Pilani (WILP)",
         size=Pt(12), color=LIGHT_BLUE)
-    _tx(s, Inches(0.9), Inches(7.05), Inches(11.5), Inches(0.3),
+    _tx(s, Inches(0.9), Inches(7.1), Inches(11.5), Inches(0.3),
         "August 2026", size=Pt(10), color=MED_GRAY)
 
     # 2 · Agenda ─────────────────────────────────────────────────────────────
@@ -303,36 +306,43 @@ def build():
     s = new()
     _header_bar(s, "Since Mid-Sem — What's New",
                 "Mid-sem shipped the pipeline; post-midsem made it usable for analysts")
-    _tx(s, Inches(0.5), Inches(1.05), Inches(6.0), Inches(0.35),
-        "Delivered at mid-sem", size=Pt(13), bold=True, color=AMBER)
-    _bullets(s, Inches(0.5), Inches(1.4), Inches(6.0), Inches(3.8), [
+    _tx(s, Inches(0.5), Inches(1.0), Inches(6.0), Inches(0.35),
+        "DELIVERED AT MID-SEM", size=Pt(11), bold=True, color=AMBER)
+    _rect(s, Inches(0.4), Inches(1.35), Inches(6.3), Inches(4.1),
+          AMBER_TINT, line=AMBER)
+    _bullets(s, Inches(0.6), Inches(1.5), Inches(6.0), Inches(3.85), [
         "6-layer offline-first pipeline (25 subreddits)",
         "ModernBERT fine-tuning up to Stage 2  (F1 0.7285)",
         "Multi-pass vision with 0% hallucination on pilot",
         "Trust-score design + weighted formula",
         "Brand-Health + Alert Feed dashboard pages",
         "Group-routed email / Slack notifications",
-    ], size=Pt(12))
-    _tx(s, Inches(6.85), Inches(1.05), Inches(6.0), Inches(0.35),
-        "Added post-midsem  (this deck)", size=Pt(13), bold=True, color=GREEN)
-    _bullets(s, Inches(6.85), Inches(1.4), Inches(6.0), Inches(3.8), [
+    ], size=Pt(13))
+    _tx(s, Inches(6.85), Inches(1.0), Inches(6.0), Inches(0.35),
+        "ADDED POST-MIDSEM  (this deck)", size=Pt(11), bold=True, color=GREEN)
+    _rect(s, Inches(6.75), Inches(1.35), Inches(6.15), Inches(4.1),
+          GREEN_TINT, line=GREEN)
+    _bullets(s, Inches(6.95), Inches(1.5), Inches(5.85), Inches(3.85), [
         "Review & Validate  —  human-in-the-loop UI + backend",
-        "Smart Reply Composer  —  triple-draft (GPT-4o + Mistral + Smart Composer)",
+        "Smart Reply Composer  —  triple-draft (GPT-4o + Mistral + Smart)",
         "Learning-loop store  —  corrections & posted replies",
         "Post Explorer  —  multi-facet search",
         "Post Lifecycle  —  Kanban with 2-step Resolve",
         "Insights & Competitor Analysis page",
         "In-app Notification Centre mirroring the digest",
-        "ModernBERT Stage 3 (final)  —  Macro-F1 0.7285 → 0.7642  (5-fold OOF)",
+        "ModernBERT Stage 3 (final)  —  0.7285 → 0.7642  (5-fold OOF)",
         "Trust-score end-to-end evaluation (n = 200)",
     ], size=Pt(12))
-    _rect(s, Inches(0.5), Inches(5.55), Inches(12.3), Inches(1.35),
+    _rect(s, Inches(0.5), Inches(5.7), Inches(12.3), Inches(1.35),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.7), Inches(12.0), Inches(0.4),
-        "Framing", size=Pt(13), bold=True, color=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(6.1), Inches(12.0), Inches(0.8),
-        "Mid-sem answered can the pipeline produce trust-weighted sentiment?    "
-        "Post-midsem answers can an analyst act on it, correct it, and feed the corrections back into the model?",
+    _tx(s, Inches(0.7), Inches(5.75), Inches(0.6), Inches(1.2),
+        "“", size=Pt(52), bold=True, color=WALMART_BLUE,
+        anchor=MSO_ANCHOR.MIDDLE)
+    _tx(s, Inches(1.3), Inches(5.82), Inches(11.4), Inches(0.35),
+        "THE FRAMING QUESTION", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(1.3), Inches(6.15), Inches(11.4), Inches(0.85),
+        "Mid-sem answered  can the pipeline produce trust-weighted sentiment?    "
+        "Post-midsem answers  can an analyst act on it, correct it, and feed the corrections back into the model?",
         size=Pt(12), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
@@ -340,23 +350,35 @@ def build():
     s = new()
     _header_bar(s, "Review & Validate  —  Human-in-the-Loop",
                 "Every prediction can be corrected; every correction is logged")
-    _bullets(s, Inches(0.5), Inches(1.05), Inches(6.0), Inches(2.8), [
+    _tx(s, Inches(0.5), Inches(1.0), Inches(6.0), Inches(0.35),
+        "WORKFLOW", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(2.7), [
         "Queue sorted by  priority (P1 first)  ·  trust × confidence",
         "Analyst can override sentiment and aspect tags in one click",
         "Corrections written to  feedback table  with analyst + timestamp",
-        "Generate Drafts  →  three reply options  (GPT-4o + Mistral + Smart Composer)",
+        "Generate Drafts  →  three reply options  (GPT-4o + Mistral + Smart)",
         "Analyst picks A, B or C, edits inline, and posts to Reddit",
         "Posted replies also captured  →  future few-shot pool",
     ], size=Pt(12))
     _image(s, UI_DIR / "review_validate.png",
            Inches(6.75), Inches(1.05), width=Inches(6.2))
-    _rect(s, Inches(0.5), Inches(5.7), Inches(6.0), Inches(1.2),
+    # Why it matters — raised
+    _rect(s, Inches(0.5), Inches(4.15), Inches(6.0), Inches(1.3),
           GREEN_TINT, line=GREEN)
-    _tx(s, Inches(0.7), Inches(5.85), Inches(5.6), Inches(0.35),
-        "Why it matters", size=Pt(12), bold=True, color=GREEN)
-    _tx(s, Inches(0.7), Inches(6.2), Inches(5.6), Inches(0.7),
+    _tx(s, Inches(0.7), Inches(4.28), Inches(5.6), Inches(0.35),
+        "WHY IT MATTERS", size=Pt(11), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(4.6), Inches(5.6), Inches(0.85),
         "Turns a passive dashboard into a training signal — corrections harvested here "
         "drive the ModernBERT re-training loop and reply few-shot pool.",
+        size=Pt(11), color=DARK_GRAY)
+    # Numbers-today card fills the space that used to be empty
+    _rect(s, Inches(0.5), Inches(5.6), Inches(6.0), Inches(1.4),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(5.72), Inches(5.6), Inches(0.35),
+        "NUMBERS TODAY  (live capture)", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.05), Inches(5.6), Inches(0.9),
+        "18 posted replies logged  ·  60 total feedback rows  ·  ≈90 % analyst \u2013 model "
+        "agreement on the last 30 reviews.",
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
@@ -384,13 +406,16 @@ def build():
         _rect(s, x, y, w, Inches(0.5), col)
         _tx(s, x, y + Inches(0.08), w, Inches(0.35),
             label, size=Pt(13), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        _tx(s, x, y + Inches(0.6), w, Inches(0.4),
-            model, size=Pt(16), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER)
-        _tx(s, x, y + Inches(1.05), w, Inches(0.35),
+        _tx(s, x, y + Inches(0.65), w, Inches(0.4),
+            model, size=Pt(17), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER)
+        _tx(s, x, y + Inches(1.1), w, Inches(0.3),
             transport, size=Pt(10), color=MED_GRAY, align=PP_ALIGN.CENTER)
-        _tx(s, x + Inches(0.2), y + Inches(1.5), w - Inches(0.4), Inches(1.8),
-            body, size=Pt(11), color=DARK_GRAY, align=PP_ALIGN.CENTER,
-            anchor=MSO_ANCHOR.MIDDLE)
+        # Divider between meta and body
+        _rect(s, x + Inches(0.5), y + Inches(1.5), w - Inches(1.0),
+              Inches(0.02), col)
+        _tx(s, x + Inches(0.2), y + Inches(1.65), w - Inches(0.4), h - Inches(1.75),
+            body, size=Pt(12), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+            anchor=MSO_ANCHOR.TOP)
         x = x + w + Inches(0.15)
     # Cascade + fallback logic
     _rect(s, Inches(0.5), Inches(4.6), Inches(12.3), Inches(2.3),
@@ -414,29 +439,47 @@ def build():
         "Prompt template  (built in  _build_reply_prompt)",
         size=Pt(13), bold=True, color=DARK_BLUE)
     prompt_box_top = Inches(1.4)
-    _rect(s, Inches(0.5), prompt_box_top, Inches(12.3), Inches(3.55),
+    _rect(s, Inches(0.5), prompt_box_top, Inches(8.15), Inches(3.65),
           RGBColor(0x1E, 0x29, 0x3B), line=DARK_BLUE)
     prompt_text = (
         "You are a senior Walmart customer-care analyst replying on Reddit.\n"
         "Write ONE reply to the customer below. Keep it 2-4 sentences,\n"
         "empathetic, specific to their complaint, no corporate jargon,\n"
         "no hashtags, no emojis. Do NOT promise refunds you can't verify;\n"
-        "invite them to DM order details if action is needed. Sign off as\n"
-        "a real person, not a brand.\n"
+        "invite them to DM order details if action is needed.\n"
+        "Sign off as a real person, not a brand.\n"
         "\n"
         "Example customer post: {past_post_1}\n"
         "Example analyst reply: {past_reply_1}\n"
-        "Example customer post: {past_post_2}\n"
-        "Example analyst reply: {past_reply_2}\n"
+        " …  (three example pairs total)\n"
         "\n"
         "Subreddit: r/{subreddit}\n"
         "Customer ({author}) complaint about: {aspect_1}, {aspect_2}\n"
-        "Customer post:\n{post_title + post_body, ≤ 1200 chars}\n"
+        "Customer post: {post_title + post_body, ≤ 1200 chars}\n"
         "\n"
         "Reply:"
     )
-    _tx(s, Inches(0.7), prompt_box_top + Inches(0.15), Inches(11.9), Inches(3.25),
-        prompt_text, size=Pt(10), color=RGBColor(0xE6, 0xED, 0xF7))
+    _tx(s, Inches(0.7), prompt_box_top + Inches(0.15), Inches(7.75), Inches(3.35),
+        prompt_text, size=Pt(11), color=RGBColor(0xE6, 0xED, 0xF7))
+    # Prompt anatomy — right-side annotation column
+    _rect(s, Inches(8.9), prompt_box_top, Inches(3.9), Inches(3.65),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(9.1), prompt_box_top + Inches(0.12), Inches(3.5), Inches(0.35),
+        "PROMPT ANATOMY", size=Pt(11), bold=True, color=WALMART_BLUE)
+    anatomy = [
+        ("① SYSTEM ROLE", "who the model is + tone rules",           WALMART_BLUE),
+        ("② FEW-SHOT",    "3 past validated reply pairs\nfrom the feedback table", PURPLE),
+        ("③ CONTEXT",     "subreddit · author · top-2 aspects",       AMBER),
+        ("④ POST",        "title + body,  truncated to 1 200 chars",   GREEN),
+        ("⑤ TRIGGER",     "\"Reply:\"  cues the model to generate",   RED),
+    ]
+    ay = prompt_box_top + Inches(0.55)
+    for label, note, col in anatomy:
+        _tx(s, Inches(9.1), ay, Inches(3.5), Inches(0.2),
+            label, size=Pt(10), bold=True, color=col)
+        _tx(s, Inches(9.1), ay + Inches(0.22), Inches(3.5), Inches(0.35),
+            note, size=Pt(9), color=DARK_GRAY)
+        ay = ay + Inches(0.58)
     # Few-shot source
     _rect(s, Inches(0.5), Inches(5.15), Inches(6.0), Inches(1.75),
           GREEN_TINT, line=GREEN)
@@ -510,22 +553,24 @@ def build():
     x = Inches(0.4)
     y = Inches(3.05)
     w = Inches(4.15)
-    h = Inches(3.15)
+    h = Inches(2.65)
     for label, col, tint, body in drafts:
         _rect(s, x, y, w, h, tint, line=col)
         _rect(s, x, y, w, Inches(0.42), col)
         _tx(s, x, y + Inches(0.05), w, Inches(0.35),
             label, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        _tx(s, x + Inches(0.15), y + Inches(0.5), w - Inches(0.3), h - Inches(0.6),
-            body, size=Pt(9), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
+        _tx(s, x + Inches(0.15), y + Inches(0.52), w - Inches(0.3), h - Inches(0.6),
+            body, size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
         x = x + w + Inches(0.15)
-    # Bottom explainer bar
-    _rect(s, Inches(0.5), Inches(6.35), Inches(12.3), Inches(0.6),
+    # Bottom explainer bar — raised
+    _rect(s, Inches(0.5), Inches(5.9), Inches(12.3), Inches(1.05),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(6.4), Inches(12.0), Inches(0.5),
+    _tx(s, Inches(0.7), Inches(5.98), Inches(12.0), Inches(0.35),
+        "WHAT HAPPENS NEXT", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.3), Inches(12.0), Inches(0.6),
         "One prompt fed to all three engines.  Analyst picks the best draft, edits inline, clicks Save & Open Reddit  →  "
         "the posted reply is written to  feedback  and becomes the next post's top few-shot example.",
-        size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
+        size=Pt(11), color=DARK_GRAY, anchor=MSO_ANCHOR.TOP)
     _footer(s, page[0], TOTAL)
 
     # 6 · Learning Loop ─────────────────────────────────────────────────────
@@ -594,9 +639,9 @@ def build():
     s = new()
     _header_bar(s, "Post Explorer  —  Multi-Facet Search",
                 "Find the exact 20 posts an analyst needs to look at today")
-    _tx(s, Inches(0.5), Inches(1.05), Inches(6.0), Inches(0.35),
-        "Facets", size=Pt(13), bold=True, color=DARK_BLUE)
-    _bullets(s, Inches(0.5), Inches(1.4), Inches(6.0), Inches(3.8), [
+    _tx(s, Inches(0.5), Inches(1.0), Inches(6.0), Inches(0.35),
+        "FACETS", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(2.7), [
         "Sentiment  ·  neg / neu / pos",
         "Confidence slider  (0.50 – 1.00)",
         "Trust-score slider  (0.00 – 1.00)",
@@ -606,14 +651,23 @@ def build():
         "Full-text search  —  title + body",
     ], size=Pt(12))
     _image(s, UI_DIR / "post_explorer.png",
-           Inches(6.75), Inches(1.05), width=Inches(6.2))
-    _rect(s, Inches(0.5), Inches(5.55), Inches(12.3), Inches(1.35),
+           Inches(6.75), Inches(1.0), width=Inches(6.2))
+    # Per-post card raised into what was empty space
+    _rect(s, Inches(0.5), Inches(4.2), Inches(6.0), Inches(1.5),
           LIGHT_GRAY, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.7), Inches(12.0), Inches(0.35),
-        "Per-post card", size=Pt(12), bold=True, color=DARK_BLUE)
-    _tx(s, Inches(0.7), Inches(6.05), Inches(12.0), Inches(0.8),
-        "Title + body excerpt · sentiment badge with confidence % · trust tier (H / M / L) · aspect chips · "
-        "subreddit + timestamp · actions:  Review  ·  Add to Lifecycle  ·  View Details.",
+    _tx(s, Inches(0.7), Inches(4.32), Inches(5.6), Inches(0.35),
+        "PER-POST CARD", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(4.65), Inches(5.6), Inches(1.0),
+        "Title + body excerpt  ·  sentiment badge with confidence %  ·  trust tier (H / M / L)  ·  "
+        "aspect chips  ·  subreddit + timestamp  ·  actions:  Review · Add to Lifecycle · View Details.",
+        size=Pt(11), color=DARK_GRAY)
+    # Live-numbers card fills the remaining bottom-left space
+    _rect(s, Inches(0.5), Inches(5.85), Inches(6.0), Inches(1.15),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(5.95), Inches(5.6), Inches(0.35),
+        "CATALOG TODAY  (live capture)", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.28), Inches(5.6), Inches(0.7),
+        "83 006 analysed posts  ·  25 subreddits  ·  8 aspects  ·  results paginated at 50 / query.",
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
@@ -644,12 +698,12 @@ def build():
                    y + Inches(0.75), Inches(0.15), Inches(0.4))
         x = x + w + Inches(0.15)
     _image(s, UI_DIR / "lifecycle_kanban.png",
-           Inches(0.5), Inches(3.55), width=Inches(7.5))
-    _rect(s, Inches(8.3), Inches(3.55), Inches(4.5), Inches(3.15),
+           Inches(0.5), Inches(3.55), width=Inches(7.5), height=Inches(3.3))
+    _rect(s, Inches(8.3), Inches(3.55), Inches(4.5), Inches(3.3),
           LIGHT_BLUE, line=WALMART_BLUE)
     _tx(s, Inches(8.5), Inches(3.7), Inches(4.2), Inches(0.35),
-        "Resolve modal  —  2-step flow", size=Pt(12), bold=True, color=WALMART_BLUE)
-    _bullets(s, Inches(8.5), Inches(4.05), Inches(4.2), Inches(2.6), [
+        "RESOLVE MODAL  —  2-step flow", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(8.5), Inches(4.05), Inches(4.2), Inches(2.75), [
         "Step 1 · save action note + optional LLM reply",
         "(a) Save & open Reddit  →  reply copied to clipboard",
         "(b) OR  Resolve (no-reply)  →  close without posting",
@@ -668,40 +722,57 @@ def build():
         ("Weekly LLM Summaries",   "Natural-language weekly\ndigest + action items\n+ emerging topics", GREEN),
         ("Aspect Drilldown",       "8-aspect taxonomy\nper-aspect sentiment trend\n+ representative posts", AMBER),
     ]
-    positions = [(0.5, 1.05), (6.9, 1.05), (0.5, 3.55), (6.9, 3.55)]
+    positions = [(0.5, 1.0), (6.75, 1.0), (0.5, 3.85), (6.75, 3.85)]
     for (t, body, col), (lx, ly) in zip(features, positions):
-        _rect(s, Inches(lx), Inches(ly), Inches(6.0), Inches(2.35),
+        _rect(s, Inches(lx), Inches(ly), Inches(6.05), Inches(2.65),
               LIGHT_GRAY, line=col)
-        _rect(s, Inches(lx), Inches(ly), Inches(6.0), Inches(0.45), col)
-        _tx(s, Inches(lx), Inches(ly + 0.06), Inches(6.0), Inches(0.35),
-            t, size=Pt(13), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        _tx(s, Inches(lx + 0.2), Inches(ly + 0.55), Inches(5.6), Inches(1.7),
-            body, size=Pt(12), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+        _rect(s, Inches(lx), Inches(ly), Inches(6.05), Inches(0.5), col)
+        _tx(s, Inches(lx), Inches(ly + 0.08), Inches(6.05), Inches(0.4),
+            t, size=Pt(14), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, Inches(lx + 0.2), Inches(ly + 0.65), Inches(5.65), Inches(1.9),
+            body, size=Pt(13), color=DARK_GRAY, align=PP_ALIGN.CENTER,
             anchor=MSO_ANCHOR.MIDDLE)
-    _tx(s, Inches(0.5), Inches(6.15), Inches(12.3), Inches(0.75),
-        "Screenshot on Slide 17 (Live Demo grid) — insights_competitor page.",
-        size=Pt(10), color=MED_GRAY, align=PP_ALIGN.CENTER)
+    # Fact bar filling the bottom
+    _rect(s, Inches(0.5), Inches(6.7), Inches(12.3), Inches(0.4),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.72), Inches(12.0), Inches(0.35),
+        "Weekly summaries powered by GPT-4o via Walmart Gateway  ·  see Live Demo grid on slide 15 for the actual page.",
+        size=Pt(10), color=DARK_GRAY, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
     # 10 · Notification Centre ──────────────────────────────────────────────
     s = new()
     _header_bar(s, "Notification Centre",
                 "In-app mirror of the group-routed email / Slack digest")
-    _bullets(s, Inches(0.5), Inches(1.05), Inches(6.0), Inches(3.5), [
+    _tx(s, Inches(0.5), Inches(1.0), Inches(6.0), Inches(0.35),
+        "WHAT IT DOES", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(2.5), [
         "Every P1 / P2 email or Slack alert is mirrored in the app",
         "Notifications grouped by  subreddit ↔ business team",
         "Read / unread state persisted per analyst",
-        "Deep-links open the post directly in Review & Validate",
+        "Deep-links open the post in Review & Validate",
         "Powered by the same  alerts  rows that drive email/Slack",
     ], size=Pt(12))
     _image(s, UI_DIR / "notifications.png",
-           Inches(6.75), Inches(1.05), width=Inches(6.2))
-    _rect(s, Inches(0.5), Inches(5.05), Inches(6.0), Inches(1.8),
+           Inches(6.75), Inches(1.0), width=Inches(6.2))
+    # Priority thresholds — raised
+    _rect(s, Inches(0.5), Inches(4.05), Inches(6.0), Inches(1.5),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.2), Inches(5.6), Inches(0.35),
-        "Priority thresholds", size=Pt(12), bold=True, color=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.55), Inches(5.6), Inches(1.25),
-        "P1 — trust ≥ 0.70  and  confidence ≥ 0.80\nP2 — trust ≥ 0.50  and  confidence ≥ 0.60\nSource: config/models.yaml + dispatcher.py",
+    _tx(s, Inches(0.7), Inches(4.15), Inches(5.6), Inches(0.35),
+        "PRIORITY THRESHOLDS", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(4.5), Inches(5.6), Inches(1.0),
+        "P1 — trust ≥ 0.70  and  confidence ≥ 0.80\n"
+        "P2 — trust ≥ 0.50  and  confidence ≥ 0.60\n"
+        "Source: config/models.yaml + dispatcher.py",
+        size=Pt(11), color=DARK_GRAY)
+    # Groups today card fills what used to be empty
+    _rect(s, Inches(0.5), Inches(5.7), Inches(6.0), Inches(1.35),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(5.82), Inches(5.6), Inches(0.35),
+        "GROUPS TODAY  (live capture)", size=Pt(11), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(6.15), Inches(5.6), Inches(0.85),
+        "4 routing groups configured  ·  DriverRelatedPost, GIF_, SAMSClub, W+ Membership  ·  "
+        "delivery status tracked per row in  notification_log.",
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
@@ -792,15 +863,25 @@ def build():
         "trust_score  =  0.4 × metadata  +  0.3 × dedup  +  0.3 × llm_credibility",
         size=Pt(18), bold=True, color=DARK_BLUE, align=PP_ALIGN.CENTER,
         anchor=MSO_ANCHOR.MIDDLE)
-    _rect(s, Inches(0.5), Inches(4.65), Inches(12.3), Inches(2.15),
+    _rect(s, Inches(0.5), Inches(4.65), Inches(6.05), Inches(2.3),
           GREEN_TINT, line=GREEN)
-    _tx(s, Inches(0.7), Inches(4.8), Inches(12.0), Inches(0.35),
-        "Design principle — flag, don't drop", size=Pt(13), bold=True, color=GREEN)
-    _tx(s, Inches(0.7), Inches(5.15), Inches(12.0), Inches(1.6),
-        "Low-trust posts are surfaced with an explanatory chip (\"promotional / duplicate / thin-metadata\") and can be "
-        "overridden by an analyst in one click — the override is captured for the learning loop. "
-        "Every constant in the formula has a stakeholder-arguable English rationale in config/models.yaml.",
-        size=Pt(12), color=DARK_GRAY)
+    _tx(s, Inches(0.7), Inches(4.78), Inches(5.7), Inches(0.35),
+        "DESIGN PRINCIPLE  —  flag, don't drop", size=Pt(12), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(5.15), Inches(5.7), Inches(1.7),
+        "Low-trust posts are surfaced with an explanatory chip "
+        "(promotional / duplicate / thin-metadata) and can be overridden by an "
+        "analyst in one click — the override is captured for the learning loop.",
+        size=Pt(11), color=DARK_GRAY)
+    _rect(s, Inches(6.75), Inches(4.65), Inches(6.05), Inches(2.3),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(6.95), Inches(4.78), Inches(5.7), Inches(0.35),
+        "WHY IT'S DEFENSIBLE", size=Pt(12), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(6.95), Inches(5.15), Inches(5.7), Inches(1.75), [
+        "Every constant has a plain-English rationale in config/models.yaml",
+        "Three named components  →  analyst can see WHY a post is low-trust",
+        "12 / 15 confirmed by human annotator on the cross-check",
+        "LLM component only invoked in ambiguous zone (cost-controlled)",
+    ], size=Pt(11))
     _footer(s, page[0], TOTAL)
 
     # 14 · Evaluation summary ───────────────────────────────────────────────
@@ -832,7 +913,7 @@ def build():
         ("C1", "Offline-first RSI pipeline",
          "Ingestion → trust → sentiment → aspects → vision → aggregation → alerts → dashboard.  Zero API cost, modular, deployable to Azure."),
         ("C2", "Fine-tuned ModernBERT (3-stage curriculum)",
-         "Macro-F1 0.6272 → 0.7642 overall; 0.28 → 1.00 on long posts.  5-fold OOF cross-validation, offline training."),
+         "Macro-F1 0.6272 → 0.7642 overall; recovers all long posts (≥ 512 tok, n = 7): RoBERTa 5/7 vs ModernBERT 7/7 correct.  5-fold OOF cross-validation, offline training."),
         ("C3", "Multi-pass vision technique on Gemma 3 4B",
          "Hallucination 50 % → 0 %,  extraction 25 % → 75 %.  Adapts techniques from 5 recent VLM papers without vendor-blocked models."),
         ("C4", "Interpretable trust score + admission gate",
@@ -886,28 +967,38 @@ def build():
     s = new()
     _header_bar(s, "Conclusions  —  What Worked, What's Still Open",
                 "Honest read on 5 months of post-midsem work")
-    _rect(s, Inches(0.5), Inches(1.05), Inches(6.05), Inches(5.75),
+    # Two side-by-side cards — tightened to the actual bullet height
+    _rect(s, Inches(0.5), Inches(1.05), Inches(6.05), Inches(4.9),
           GREEN_TINT, line=GREEN)
     _tx(s, Inches(0.7), Inches(1.2), Inches(5.7), Inches(0.4),
-        "What worked", size=Pt(15), bold=True, color=GREEN)
-    _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(5.0), [
+        "WHAT WORKED", size=Pt(13), bold=True, color=GREEN)
+    _bullets(s, Inches(0.7), Inches(1.65), Inches(5.7), Inches(4.15), [
         "3-stage ModernBERT curriculum landed the sentiment win we set out for  (Macro-F1 0.62 → 0.76 on 5-fold OOF).",
-        "Long-post recovery came for free once we switched off truncation  (≥1024-tok context):  5/7 → 7/7 correct on the ≥ 512-token bucket.",
-        "Removing the image on the final vision merge step ended the 50 % hallucination problem  —  the mechanism, not just the number, is what makes it credible.",
+        "Long-post recovery came for free once we switched off truncation  (≥1024-tok context):  5/7 → 7/7 correct on the ≥ 512-tok bucket.",
+        "Removing the image on the final vision merge step ended the 50 % hallucination problem — the mechanism, not just the number, makes it credible.",
         "Trust score as flag-not-drop  matched the human annotator on 12 / 15 low-trust posts. Analysts trust it because they can override it.",
-        "HITL feedback table quietly turned into the most useful piece of infrastructure  —  drives few-shot on every click today, retraining tomorrow.",
+        "HITL feedback table quietly turned into the most useful piece of infrastructure — drives few-shot on every click today, retraining tomorrow.",
     ], size=Pt(11))
-    _rect(s, Inches(6.75), Inches(1.05), Inches(6.05), Inches(5.75),
+    _rect(s, Inches(6.75), Inches(1.05), Inches(6.05), Inches(4.9),
           AMBER_TINT, line=AMBER)
     _tx(s, Inches(6.95), Inches(1.2), Inches(5.7), Inches(0.4),
-        "What's still open (honest)", size=Pt(15), bold=True, color=AMBER)
-    _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(5.0), [
+        "WHAT'S STILL OPEN  (honest)", size=Pt(13), bold=True, color=AMBER)
+    _bullets(s, Inches(6.95), Inches(1.65), Inches(5.7), Inches(4.15), [
         "200-post gold set is small.  Numbers are OOF-CV, but a bigger blind held-out set is needed before I'd claim generalisation.",
         "Vision eval is 32 images  —  enough to sanity-check the mechanism, not enough to claim production-grade quality.",
         "Long bucket has only 7 posts and they are all negative-class  —  7/7 correct is evidence the truncation ceiling is gone, not proof of long-text mastery.",
         "Reply drafts still need an analyst edit  —  we track edit-distance but haven't shown it dropping consistently yet.",
-        "Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done  —  they're in the roadmap on the next slide.",
+        "Everything runs on one Mac. Multi-analyst concurrency and retraining automation aren't done  —  in the roadmap on next slide.",
     ], size=Pt(11))
+    # Takeaway bar filling the bottom
+    _rect(s, Inches(0.5), Inches(6.1), Inches(12.3), Inches(0.9),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.2), Inches(12.0), Inches(0.35),
+        "THE TAKEAWAY", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.55), Inches(12.0), Inches(0.4),
+        "Mechanism-level wins are what carry the argument; sample-size caveats "
+        "are what the next horizon of work has to close.",
+        size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
     # 18 · Future work (grounded, 3-horizon) ────────────────────────────────
@@ -927,19 +1018,23 @@ def build():
     ]
     y = Inches(1.15)
     for title, body, col in horizons:
-        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.6),
+        _rect(s, Inches(0.5), y, Inches(12.3), Inches(1.25),
               LIGHT_GRAY, line=col)
-        _rect(s, Inches(0.5), y, Inches(0.25), Inches(1.6), col)
-        _tx(s, Inches(0.9), y + Inches(0.15), Inches(11.4), Inches(0.4),
+        _rect(s, Inches(0.5), y, Inches(0.25), Inches(1.25), col)
+        _tx(s, Inches(0.9), y + Inches(0.12), Inches(11.4), Inches(0.4),
             title, size=Pt(15), bold=True, color=DARK_BLUE)
-        _tx(s, Inches(0.9), y + Inches(0.65), Inches(11.4), Inches(0.9),
+        _tx(s, Inches(0.9), y + Inches(0.55), Inches(11.4), Inches(0.7),
             body, size=Pt(12), color=DARK_GRAY)
-        y = y + Inches(1.75)
-    _rect(s, Inches(0.5), Inches(6.4), Inches(12.3), Inches(0.5),
+        y = y + Inches(1.4)
+    _rect(s, Inches(0.5), Inches(5.55), Inches(12.3), Inches(1.35),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(6.45), Inches(12.0), Inches(0.4),
-        "Deliberately excluded  —  ideas without a clear next step  (auto-reply gate, seasonal P1 forecast, bilingual taxonomy)  —  covered in the report's Future Work chapter.",
-        size=Pt(10), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
+    _tx(s, Inches(0.7), Inches(5.65), Inches(12.0), Inches(0.35),
+        "DELIBERATELY EXCLUDED", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(0.7), Inches(6.0), Inches(12.0), Inches(0.9), [
+        "Auto-reply confidence gate  —  waiting for edit-distance evidence on more replies",
+        "Predictive P1 forecast (seasonal decomposition)  —  needs at least 6 months of daily counts",
+        "Bilingual (Hindi + English) taxonomy  —  needs native-speaker validation first",
+    ], size=Pt(10))
     _footer(s, page[0], TOTAL)
 
     # 19 · Source Code + Deliverables ───────────────────────────────────────
@@ -952,7 +1047,7 @@ def build():
     _tx(s, Inches(0.7), Inches(1.55), Inches(12.0), Inches(0.55),
         "https://gecgithub01.walmart.com/v0s01jh/Retail_Sentiment_Intelligence",
         size=Pt(16), bold=True, color=DARK_BLUE, anchor=MSO_ANCHOR.MIDDLE)
-    _table(s, Inches(0.5), Inches(2.35), Inches(12.3), Inches(4.5), [
+    _table(s, Inches(0.5), Inches(2.35), Inches(12.3), Inches(3.4), [
         ["Deliverable",              "Path in repo",                                                   "Contents"],
         ["Final Report (PDF)",       "docs/Sem_4/final/FINAL_REPORT_VishalSingh_2020AA05641.pdf",       "10 chapters + appendices + refs"],
         ["Final Report (LaTeX)",     "docs/Sem_4/final/latex/",                                        "Reproducible xelatex source"],
@@ -962,6 +1057,14 @@ def build():
         ["Dashboard",                "frontend/  (React + Vite + Tailwind)",                           "8 pages, live via WebSocket"],
         ["Reproduction",             "Appendix B of the report  ·  start.sh",                          "Clone → conda → start"],
     ], first_col_bold=True, body_font=Pt(10))
+    # Reproduction callout fills the space below the table
+    _rect(s, Inches(0.5), Inches(5.95), Inches(12.3), Inches(1.05),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(6.05), Inches(12.0), Inches(0.35),
+        "REPRODUCE IN 3 STEPS", size=Pt(11), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(6.4), Inches(12.0), Inches(0.55),
+        "git clone <repo>   →   conda create -n rsi python=3.11 && pip install -r requirements.txt   →   ./start.sh",
+        size=Pt(11), color=DARK_GRAY, anchor=MSO_ANCHOR.MIDDLE)
     _footer(s, page[0], TOTAL)
 
     # 20 · Thank You / Q&A ──────────────────────────────────────────────────
