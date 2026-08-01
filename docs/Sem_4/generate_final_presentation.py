@@ -345,8 +345,8 @@ def build():
         "Queue sorted by  priority (P1 first)  ·  trust × confidence",
         "Analyst can override sentiment and aspect tags in one click",
         "Corrections written to  feedback table  with analyst + timestamp",
-        "Generate Drafts  →  two reply options  (rule + LLM)",
-        "Analyst picks A or B, edits, and posts to Reddit",
+        "Generate Drafts  →  three reply options  (GPT-4o + Mistral + Smart Composer)",
+        "Analyst picks A, B or C, edits inline, and posts to Reddit",
         "Posted replies also captured  →  future few-shot pool",
     ], size=Pt(12))
     _image(s, UI_DIR / "review_validate.png",
