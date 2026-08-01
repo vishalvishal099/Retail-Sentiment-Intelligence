@@ -317,7 +317,7 @@ def build():
         "Added post-midsem  (this deck)", size=Pt(13), bold=True, color=GREEN)
     _bullets(s, Inches(6.85), Inches(1.4), Inches(6.0), Inches(3.8), [
         "Review & Validate  —  human-in-the-loop UI + backend",
-        "Smart Reply Composer  —  dual-draft (rule + FLAN-T5)",
+        "Smart Reply Composer  —  triple-draft (GPT-4o + Mistral + Smart Composer)",
         "Learning-loop store  —  corrections & posted replies",
         "Post Explorer  —  multi-facet search",
         "Post Lifecycle  —  Kanban with 2-step Resolve",
