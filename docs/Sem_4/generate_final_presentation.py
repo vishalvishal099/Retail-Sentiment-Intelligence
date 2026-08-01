@@ -282,20 +282,21 @@ def build():
         ("14", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
         ("15", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + realistic roadmap"),
     ]
-    x0, y0 = Inches(0.5), Inches(1.0)
-    col_w, row_h = Inches(6.15), Inches(0.38)
+    x0, y0 = Inches(0.5), Inches(1.05)
+    col_w, row_h = Inches(6.15), Inches(0.62)
     for i, (n, title, sub) in enumerate(items):
         col = i // 8
         row = i % 8
         lx = x0 + col * (col_w + Inches(0.15))
-        ly = y0 + row * (row_h + Inches(0.1))
+        ly = y0 + row * (row_h + Inches(0.12))
         _rect(s, lx, ly, col_w, row_h, LIGHT_BLUE, line=WALMART_BLUE)
-        _tx(s, lx + Inches(0.1), ly + Inches(0.05), Inches(0.55), Inches(0.28),
-            n, size=Pt(12), bold=True, color=WALMART_BLUE)
-        _tx(s, lx + Inches(0.7), ly + Inches(0.03), col_w - Inches(0.8), Inches(0.2),
-            title, size=Pt(11), bold=True, color=DARK_BLUE)
-        _tx(s, lx + Inches(0.7), ly + Inches(0.2), col_w - Inches(0.8), Inches(0.2),
-            sub, size=Pt(9), color=MED_GRAY)
+        _tx(s, lx + Inches(0.1), ly, Inches(0.6), row_h,
+            n, size=Pt(14), bold=True, color=WALMART_BLUE,
+            align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.MIDDLE)
+        _tx(s, lx + Inches(0.75), ly + Inches(0.07), col_w - Inches(0.85), Inches(0.28),
+            title, size=Pt(12), bold=True, color=DARK_BLUE)
+        _tx(s, lx + Inches(0.75), ly + Inches(0.34), col_w - Inches(0.85), Inches(0.26),
+            sub, size=Pt(10), color=MED_GRAY)
     _footer(s, page[0], TOTAL)
 
     # 3 · What's new since mid-sem ──────────────────────────────────────────
