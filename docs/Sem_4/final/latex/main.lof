@@ -13,7 +13,7 @@
 \contentsline {figure}{\numberline {5.6}{\ignorespaces Zero-shot NLI aspect tagging.}}{17}{figure.caption.14}%
 \contentsline {figure}{\numberline {5.7}{\ignorespaces Vision multi-pass anti-hallucination pipeline.}}{19}{figure.caption.15}%
 \contentsline {figure}{\numberline {5.8}{\ignorespaces Alert engine and notification routing.}}{21}{figure.caption.16}%
-\contentsline {figure}{\numberline {5.9}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}.}}{21}{figure.caption.17}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}; the timeline and cards below are filtered to the last 30 days.}}{22}{figure.caption.17}%
 \contentsline {figure}{\numberline {5.10}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{23}{figure.caption.18}%
 \contentsline {figure}{\numberline {5.11}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{25}{figure.caption.19}%
 \contentsline {figure}{\numberline {5.12}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{26}{figure.caption.20}%
