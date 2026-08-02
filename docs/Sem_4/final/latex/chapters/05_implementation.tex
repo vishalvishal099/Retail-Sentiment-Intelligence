@@ -7,16 +7,16 @@ from mathematics to Python to a rendered UI.  All listings are verbatim
 extracts from files under \texttt{src/}; comments and blank lines were
 trimmed only where they carried no explanatory value.
 
-Sections \S\ref{sec:ingest}--\S\ref{sec:vision} form the six-stage per-post
-analysis pipeline (Figure~\ref{fig:ch5:pipeline}); \S\ref{sec:agg} aggregates
-those per-post outputs and routes P1/P2 alerts; \S\S\ref{sec:dash}--\ref{sec:insights}
+Sections~\ref{sec:ingest}--\ref{sec:vision} form the six-stage per-post
+analysis pipeline (Figure~\ref{fig:ch5:pipeline}); Section~\ref{sec:agg} aggregates
+those per-post outputs and routes P1/P2 alerts; Sections~\ref{sec:dash}--\ref{sec:insights}
 document the analyst-facing UI that sits on top of the pipeline.
 
 \begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig_ch5_pipeline_overview}
-\caption{Chapter 5 pipeline overview.  \S5.1--\S5.5 build the per-post
-analysis; \S5.6 aggregates and routes; the analyst-facing UI documented
-in \S\S5.7--5.13 sits on top of these outputs.}\label{fig:ch5:pipeline}
+\caption{Chapter 5 pipeline overview.  Sections 5.1--5.5 build the per-post
+analysis; Section 5.6 aggregates and routes; the analyst-facing UI documented
+in Sections 5.7--5.13 sits on top of these outputs.}\label{fig:ch5:pipeline}
 \end{figure}
 
 The Pipeline dashboard in Figure~\ref{fig:ui:pipeline} is the live counterpart
@@ -342,7 +342,7 @@ detectors that drive the majority of P1/P2 traffic: a volume-spike detector
 that fires when today's post count crosses $\mu + \sigma\!\cdot\!\theta$ of
 the trailing 7-day mean, and a sentiment-crash detector that fires when
 the negative share jumps by more than 0.30 versus yesterday.  Alerts flow
-to the dashboard's Alert Feed (\S\ref{sec:dash}) and, optionally, to an
+to the dashboard's Alert Feed (Section~\ref{sec:dash}) and, optionally, to an
 email digest.  Figure~\ref{fig:alerts} shows the routing.
 
 \begin{lstlisting}[caption={Volume-spike and sentiment-crash detectors ({\tt src/alerts/engine.py}).},label={lst:alerts}]
@@ -511,7 +511,7 @@ The reply composer offers two drafts side-by-side: a rule-based template
 that guarantees policy compliance, and an LLM-generated draft that
 personalises to the post's aspects and sentiment.  Few-shot examples come
 from the last analyst-posted replies pulled straight from the feedback
-store --- this is what closes the learning loop of \S\ref{sec:loop}
+store --- this is what closes the learning loop of Section~\ref{sec:loop}
 without any offline retraining.  Listing~\ref{lst:reply} shows the endpoint
 that ties it together.  See Figure~\ref{fig:reply}.
 

@@ -5,7 +5,7 @@
 \contentsline {figure}{\numberline {4.1}{\ignorespaces Layered System Architecture --- ingestion, storage, AI engine, aggregation, dashboard, and HITL feedback loop.}}{8}{figure.caption.6}%
 \contentsline {figure}{\numberline {4.2}{\ignorespaces End-to-End Pipeline Flow --- ingestion $\to $ trust $\to $ AI engine $\to $ aggregation $\to $ alerts $\to $ dashboard $\to $ analyst action $\to $ feedback loop.}}{9}{figure.caption.7}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces Chapter 5 pipeline overview. \S 5.1--\S 5.5 build the per-post analysis; \S 5.6 aggregates and routes; the analyst-facing UI documented in \S \S 5.7--5.13 sits on top of these outputs.}}{10}{figure.caption.8}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Chapter 5 pipeline overview. Sections 5.1--5.5 build the per-post analysis; Section 5.6 aggregates and routes; the analyst-facing UI documented in Sections 5.7--5.13 sits on top of these outputs.}}{10}{figure.caption.8}%
 \contentsline {figure}{\numberline {5.2}{\ignorespaces Pipeline dashboard --- live view of the six-stage flow. Top bar shows last-run status and stage progress (Ingest $\to $ Vision $\to $ Trust $\to $ Analyze $\to $ Aggregate); below are data-health signals, ingestion funnel, media-type breakdown, source coverage across the 25 subreddits, and the recent run history.}}{11}{figure.caption.9}%
 \contentsline {figure}{\numberline {5.3}{\ignorespaces Data ingestion and pre-processing flow.}}{13}{figure.caption.10}%
 \contentsline {figure}{\numberline {5.4}{\ignorespaces Trust-Score composition and P1/P2 tier rules.}}{14}{figure.caption.11}%

@@ -651,10 +651,10 @@ def fig_ch5_pipeline_overview():
 
     # bottom summary strip
     _box(ax, 0.4, 0.35, 23.1, 0.90,
-         "\u00a75.1 \u2013 \u00a75.5 build the per-post analysis;  \u00a75.6 aggregates and routes;  \u00a7\u00a75.7\u20135.13 (next) show the analyst-facing UI on top.",
+         "Sections 5.1 \u2013 5.5 build the per-post analysis;  Section 5.6 aggregates and routes;  Sections 5.7\u20135.13 (next) show the analyst-facing UI on top.",
          face=LIGHT, edge=NAVY, fontsize=9.5)
 
-    _title(ax, "Chapter 5 Pipeline Overview  (sections \u00a75.1 \u2013 \u00a75.6)")
+    _title(ax, "Chapter 5 Pipeline Overview  (sections 5.1 \u2013 5.6)")
     fig.tight_layout()
     out = OUT / "fig_ch5_pipeline_overview.png"
     fig.savefig(out, dpi=180, bbox_inches="tight", facecolor=WHITE)
