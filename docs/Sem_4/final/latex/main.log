@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 13:38
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 13:50
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -844,35 +844,40 @@ File: ../figures/ui/review_validate.png Graphic file (type bmp)
 [23]
 
 [24]
-File: figures/fig6_reply_cascade.png Graphic file (type bmp)
-<figures/fig6_reply_cascade.png>
-
 
 [25]
+File: figures/fig6_reply_cascade.png Graphic file (type bmp)
+<figures/fig6_reply_cascade.png>
 File: figures/fig7_learning_loop.png Graphic file (type bmp)
 <figures/fig7_learning_loop.png>
 File: ../figures/ui/post_explorer.png Graphic file (type bmp)
 <../figures/ui/post_explorer.png>
+
+
+[26]
 File: figures/fig8_lifecycle_kanban.png Graphic file (type bmp)
 <figures/fig8_lifecycle_kanban.png>
 File: ../figures/ui/lifecycle_kanban.png Graphic file (type bmp)
 <../figures/ui/lifecycle_kanban.png>
-
-
-[26]
-
-[27]
 File: ../figures/ui/insights_competitor.png Graphic file (type bmp)
 <../figures/ui/insights_competitor.png>
 File: ../figures/ui/notifications.png Graphic file (type bmp)
 <../figures/ui/notifications.png>
 
 
+[27]
+
 [28]
 
-[29]) (./chapters/06_evaluation.tex
+[29]
 
 [30]
+
+[31]
+
+[32]) (./chapters/06_evaluation.tex
+
+[33]
 Chapter 6.
 
 Overfull \hbox (70.0041pt too wide) in paragraph at lines 33--38
@@ -883,11 +888,11 @@ File: figures/fig14_sentiment_results.png Graphic file (type bmp)
 <figures/fig14_sentiment_results.png>
 
 
-[31
+[34
 
 ]) (./chapters/07_tools.tex
 
-[32]
+[35]
 Chapter 7.
 ) (./chapters/08_problems.tex
 Overfull \hbox (1.04001pt too wide) in paragraph at lines 26--1
@@ -898,7 +903,7 @@ ig/models.yaml\TU/TimesNewRoman(0)/m/n/12 :
 
 
 
-[33
+[36
 
 ]
 Chapter 8.
@@ -919,23 +924,23 @@ Underfull \hbox (badness 1043) in paragraph at lines 23--23
 
 ) (./chapters/09_conclusions.tex
 
-[34
+[37
 
 ]
 Chapter 9.
 ) (./chapters/10_future.tex
 
-[35
+[38
 
 ]
 Chapter 10.
 
 
-[36
+[39
 
 ]) (./appendices/A_subreddits.tex
 
-[37]
+[40]
 Appendix A.
 
 Underfull \hbox (badness 3803) in paragraph at lines 11--12
@@ -951,7 +956,7 @@ Asshole (retail-
 
 ) (./appendices/B_reproduction.tex
 
-[38
+[41
 
 ]
 Appendix B.
@@ -969,7 +974,7 @@ ite (:3003)[]
 
 
 
-[39
+[42
 
 ]
 Overfull \hbox (46.25533pt too wide) in paragraph at lines 40--40
@@ -985,16 +990,16 @@ _report.py[]
 
 )
 
-[40] (./main.bbl
+[43] (./main.bbl
 
-[41
+[44
 
 
 ]) (./frontmatter/glossary.tex
 
-[42]
+[45]
 
-[43
+[46
 
 ]) (./frontmatter/checklist.tex
 Underfull \hbox (badness 1107) in paragraph at lines 27--27
@@ -1004,7 +1009,7 @@ port,
 
 
 
-[44
+[47
 
 
 ])
@@ -1019,7 +1024,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 44--165
 
 
 
-[45] (./main.aux)
+[48] (./main.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -1036,4 +1041,4 @@ Here is how much of TeX's memory you used:
  319 hyphenation exceptions out of 8191
  79i,14n,93p,377b,1918s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.pdf (55 pages).
+Output written on main.pdf (58 pages).

@@ -383,7 +383,7 @@ The rendered Alert Feed is shown in Figure~\ref{fig:ui:alerts}; each row
 is one entry from the JSON returned by the detectors above.
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/alert_feed.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/alert_feed.png}
 \caption{Alert Feed --- live P1/P2 stream sourced from the volume-spike
 and sentiment-crash detectors of Listing~\ref{lst:alerts}.}\label{fig:ui:alerts}
 \end{figure}
@@ -401,7 +401,7 @@ the dashboard is always the same view of the world that the alert engine
 scored.
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/brand_health.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/brand_health.png}
 \caption{Brand Health --- sentiment gauge, distribution donut, volume trend
 and priority breakdown driven by the daily aggregates.}\label{fig:ui:brand}
 \end{figure}
@@ -473,7 +473,7 @@ def submit_review(post_id: str, correction: dict):
 \end{figure}
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/review_validate.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/review_validate.png}
 \caption{Review \& Validate queue --- posts flagged by the model land here;
 analysts re-label sentiment/aspects and either compose a reply or resolve
 in place.  Corrections are POSTed to the endpoint in
@@ -557,7 +557,7 @@ and Review queues also read, so an analyst can navigate freely between
 the three views without ever seeing an inconsistent post state.
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/post_explorer.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/post_explorer.png}
 \caption{Post Explorer --- multi-facet search over subreddit, aspect,
 sentiment, trust bucket, priority tier and free text.}\label{fig:ui:posts}
 \end{figure}
@@ -576,7 +576,7 @@ time-to-resolve.
 \end{figure}
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/lifecycle_kanban.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/lifecycle_kanban.png}
 \caption{Post Lifecycle --- Kanban board with SLA timestamps for every
 transition.}\label{fig:ui:kanban}
 \end{figure}
@@ -588,7 +588,7 @@ Aldi) so analysts can distinguish a company-specific issue from an
 industry trend.  Figure~\ref{fig:ui:insights} shows the rendered view.
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/insights_competitor.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/insights_competitor.png}
 \caption{Insights \& Competitor --- aspect-level negative-share for Walmart
 vs.\ curated competitor communities.}\label{fig:ui:insights}
 \end{figure}
@@ -598,7 +598,7 @@ notification centre.  The rendered notification centre is shown in
 Figure~\ref{fig:ui:notif}.
 
 \begin{figure}[htbp]
-\centering\includegraphics[width=\linewidth]{ui/notifications.png}
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/notifications.png}
 \caption{Notification centre --- in-app mirror of the email digest;
 sourced from the same alert rows that drive
 Figure~\ref{fig:ui:alerts}.}\label{fig:ui:notif}

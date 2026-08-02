@@ -29,34 +29,34 @@
 \contentsline {section}{\numberline {5.6}Aggregation, Alerts and Notifications}{18}{section.5.6}%
 \contentsline {section}{\numberline {5.7}Dashboard Overview}{20}{section.5.7}%
 \contentsline {section}{\numberline {5.8}Human-in-the-Loop Review \& Validate}{20}{section.5.8}%
-\contentsline {section}{\numberline {5.9}Smart Reply Composer --- Dual-Draft (Rule + LLM)}{24}{section.5.9}%
+\contentsline {section}{\numberline {5.9}Smart Reply Composer --- Dual-Draft (Rule + LLM)}{25}{section.5.9}%
 \contentsline {section}{\numberline {5.10}Learning Loop --- Feedback for Future Retraining}{26}{section.5.10}%
 \contentsline {section}{\numberline {5.11}Post Explorer and Multi-Facet Search}{26}{section.5.11}%
 \contentsline {section}{\numberline {5.12}Post Lifecycle (Kanban Workflow)}{26}{section.5.12}%
-\contentsline {section}{\numberline {5.13}Insights and Competitor Analysis}{28}{section.5.13}%
-\contentsline {section}{\numberline {5.14}Storage Layer}{28}{section.5.14}%
-\contentsline {chapter}{\numberline {6}Evaluation and Results}{31}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Sentiment Model Evaluation}{31}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Vision Module Evaluation}{32}{section.6.2}%
-\contentsline {section}{\numberline {6.3}Trust-Score Behaviour}{32}{section.6.3}%
-\contentsline {chapter}{\numberline {7}Tools, Technologies, and Configuration}{33}{chapter.7}%
-\contentsline {section}{\numberline {7.1}Configuration}{33}{section.7.1}%
-\contentsline {chapter}{\numberline {8}Problems Encountered and Mitigations}{34}{chapter.8}%
-\contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{35}{chapter.9}%
-\contentsline {section}{\numberline {9.1}Recommendations}{35}{section.9.1}%
-\contentsline {chapter}{\numberline {10}Future Work}{36}{chapter.10}%
-\contentsline {section}{\numberline {10.1}Model-Level Extensions}{36}{section.10.1}%
-\contentsline {section}{\numberline {10.2}Product-Level Extensions}{36}{section.10.2}%
-\contentsline {section}{\numberline {10.3}Operational Extensions}{36}{section.10.3}%
-\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{38}{appendix.A}%
-\contentsline {chapter}{\numberline {B}Reproduction Commands}{39}{appendix.B}%
-\contentsline {section}{\numberline {B.1}Source Code Repository}{39}{section.B.1}%
-\contentsline {section}{\numberline {B.2}Environment}{39}{section.B.2}%
-\contentsline {section}{\numberline {B.3}Full pipeline}{39}{section.B.3}%
-\contentsline {section}{\numberline {B.4}Regenerate figures}{40}{section.B.4}%
-\contentsline {section}{\numberline {B.5}Retrain sentiment model}{40}{section.B.5}%
-\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{40}{section.B.6}%
-\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{40}{section.B.7}%
-\contentsline {chapter}{References}{41}{section*.33}%
-\contentsline {chapter}{Glossary}{43}{appendix*.35}%
-\contentsline {chapter}{Checklist}{44}{appendix*.36}%
+\contentsline {section}{\numberline {5.13}Insights and Competitor Analysis}{27}{section.5.13}%
+\contentsline {section}{\numberline {5.14}Storage Layer}{27}{section.5.14}%
+\contentsline {chapter}{\numberline {6}Evaluation and Results}{34}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Sentiment Model Evaluation}{34}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Vision Module Evaluation}{35}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Trust-Score Behaviour}{35}{section.6.3}%
+\contentsline {chapter}{\numberline {7}Tools, Technologies, and Configuration}{36}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Configuration}{36}{section.7.1}%
+\contentsline {chapter}{\numberline {8}Problems Encountered and Mitigations}{37}{chapter.8}%
+\contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{38}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Recommendations}{38}{section.9.1}%
+\contentsline {chapter}{\numberline {10}Future Work}{39}{chapter.10}%
+\contentsline {section}{\numberline {10.1}Model-Level Extensions}{39}{section.10.1}%
+\contentsline {section}{\numberline {10.2}Product-Level Extensions}{39}{section.10.2}%
+\contentsline {section}{\numberline {10.3}Operational Extensions}{39}{section.10.3}%
+\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{41}{appendix.A}%
+\contentsline {chapter}{\numberline {B}Reproduction Commands}{42}{appendix.B}%
+\contentsline {section}{\numberline {B.1}Source Code Repository}{42}{section.B.1}%
+\contentsline {section}{\numberline {B.2}Environment}{42}{section.B.2}%
+\contentsline {section}{\numberline {B.3}Full pipeline}{42}{section.B.3}%
+\contentsline {section}{\numberline {B.4}Regenerate figures}{43}{section.B.4}%
+\contentsline {section}{\numberline {B.5}Retrain sentiment model}{43}{section.B.5}%
+\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{43}{section.B.6}%
+\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{43}{section.B.7}%
+\contentsline {chapter}{References}{44}{section*.33}%
+\contentsline {chapter}{Glossary}{46}{appendix*.35}%
+\contentsline {chapter}{Checklist}{47}{appendix*.36}%
