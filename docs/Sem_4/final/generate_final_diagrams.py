@@ -160,7 +160,7 @@ def fig6_reply_cascade():
          face=YELLOW, fontsize=10)
     _arrow(ax, 5.0, 7.3, 5.6, 7.0, color=NAVY)
     _arrow(ax, 5.0, 5.55, 5.6, 5.8, color=PURPLE, lw=1.8,
-           label="injected as\nexamples", label_off=(0, 0.55))
+           label="injected as\nexamples", label_off=(-0.9, 0.35))
 
     # Three draft engines (right column, top to bottom)
     _box(ax, 9.4, 7.1, 4.2, 1.0,
@@ -291,7 +291,8 @@ def fig8_lifecycle_kanban():
         xs.append(x)
         _box(ax, x, 4.2, w, 1.7, f"{title}\n\n{body}", face=color, fontsize=9)
         if i < len(states) - 1:
-            _arrow(ax, x + w, 5.05, x + w + 0.55, 5.05, color=NAVY, lw=1.8)
+            # Small overshoot on both ends to bridge the FancyBboxPatch rounded corners.
+            _arrow(ax, x + w - 0.02, 5.05, x + w + 0.57, 5.05, color=NAVY, lw=1.8)
 
     # transition labels (moved ABOVE the boxes so they don't overlap the state cards)
     ax.text(xs[0] + w + 0.27, 6.05, "acknowledge", ha="center", fontsize=7.5, color=GREY, style="italic")
@@ -414,18 +415,25 @@ def fig11_aspect_nli():
 
     _box(ax, 0.4, 3.0, 3.2, 1.2, "Post text\n(+ vision caption)", face=SKY, fontsize=9)
 
+    # Container that groups the 5 hypothesis templates so one arrow goes IN and one goes OUT.
+    _box(ax, 4.4, 1.55, 3.6, 5.10, "",
+         face="#F5F7FA", edge=GREY, fontsize=8)
+    ax.text(6.2, 6.30, "5 hypothesis templates",
+            ha="center", fontsize=8.4, color=NAVY, weight="bold", style="italic")
+
     hyps = ["pricing", "delivery_pickup", "returns", "online_app", "workforce_hr"]
     for i, h in enumerate(hyps):
-        # Start higher so the 5 hypothesis boxes don't collide with the bottom caption.
-        y = 6.05 - i * 0.98
-        _box(ax, 4.6, y, 3.2, 0.75,
-             f"\u201cThis post is about {h}\u201d", face=LIGHT, fontsize=8.2)
-        _arrow(ax, 3.6, 3.6, 4.6, y + 0.37, color=GREY, lw=1.0)
-        _arrow(ax, 7.8, y + 0.37, 9.0, 3.6, color=GREY, lw=1.0)
+        y = 5.55 - i * 0.82
+        _box(ax, 4.6, y, 3.2, 0.65,
+             f"\u201cThis post is about {h}\u201d", face=WHITE, edge=NAVY, fontsize=8.2)
 
     _box(ax, 9.0, 3.0, 2.8, 1.2, "DeBERTa-v3\nNLI entailment", face=YELLOW, fontsize=9)
     _box(ax, 12.2, 3.0, 2.5, 1.2, "score ≥ τ →\nmulti-aspect tags", face=NAVY,
          edge=NAVY, text_color=WHITE, fontsize=8.8)
+
+    # Single arrows: Post text -> container, container -> DeBERTa, DeBERTa -> scores.
+    _arrow(ax, 3.6, 3.6, 4.4, 4.10, color=NAVY, lw=1.6)
+    _arrow(ax, 8.0, 4.10, 9.0, 3.60, color=NAVY, lw=1.6)
     _arrow(ax, 11.8, 3.6, 12.2, 3.6, color=NAVY, lw=1.6)
 
     _box(ax, 4.6, 0.3, 7.2, 1.0,
@@ -465,7 +473,7 @@ def fig12_vision_multipass():
         _box(ax, x, 3.5, w, 1.3, title, face=color, fontsize=9)
         _box(ax, x, 1.9, w, 1.4, body, face=LIGHT, fontsize=7.8)
         if i == 0:
-            _arrow(ax, 2.8, 3.55, x, 4.15, color=NAVY, lw=1.6)
+            _arrow(ax, 2.8, 4.15, x, 4.15, color=NAVY, lw=1.6)
         else:
             _arrow(ax, x - 0.35, 4.15, x, 4.15, color=NAVY, lw=1.6)
 
@@ -514,7 +522,9 @@ def fig13_alert_routing():
     _box(ax, 4.2, 1.1, 7.0, 1.0,
          "One-click from feed → Post Explorer → Review & Validate → Lifecycle",
          face=NAVY, edge=NAVY, text_color=WHITE, fontsize=8.8)
-    _arrow(ax, 11.3, 5.2, 8.0, 2.1, color=GREEN)
+    # Route curved arrow around Notification groups (which sits at x=8.0..11.1, y=3.2..4.7)
+    # instead of straight through it.
+    _arrow(ax, 8.0, 5.2, 4.2, 2.1, color=GREEN, lw=1.6, rad=-0.35)
 
     _title(ax, "Figure 13 — Alert Engine and Group-Based Notification Routing")
     fig.tight_layout()
