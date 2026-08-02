@@ -61,10 +61,5 @@
 \contentsline {section}{\numberline {B.1}Source Code Repository}{48}{section.B.1}%
 \contentsline {section}{\numberline {B.2}Environment}{48}{section.B.2}%
 \contentsline {section}{\numberline {B.3}Full pipeline}{48}{section.B.3}%
-\contentsline {section}{\numberline {B.4}Regenerate figures}{49}{section.B.4}%
-\contentsline {section}{\numberline {B.5}Retrain sentiment model}{49}{section.B.5}%
-\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{49}{section.B.6}%
-\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{49}{section.B.7}%
-\contentsline {chapter}{References}{50}{section*.47}%
-\contentsline {chapter}{Glossary}{52}{appendix*.49}%
-\contentsline {chapter}{Checklist}{53}{appendix*.50}%
+\contentsline {chapter}{References}{49}{section*.47}%
+\contentsline {chapter}{Glossary}{51}{appendix*.49}%

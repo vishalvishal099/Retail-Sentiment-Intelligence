@@ -11,6 +11,9 @@
 \setstretch{1.08}
 
 \begin{center}
+{\normalsize\bfseries BIRLA INSTITUTE OF TECHNOLOGY \& SCIENCE, PILANI}\par
+{\small \submdate}\par
+\vspace{4pt}
 {\normalsize\bfseries BIRLA INSTITUTE OF TECHNOLOGY AND SCIENCE, PILANI}\par
 {\small\bfseries (RAJASTHAN) --- WILP Division}\par
 \end{center}
@@ -18,8 +21,8 @@
 
 \noindent\begin{tabular}{@{}p{0.48\linewidth}p{0.48\linewidth}@{}}
 \textbf{Organization:} \org       & \textbf{Location:} \orgloc\\[2pt]
-\textbf{Duration:} Two semesters (approximately 4 months) &
-\textbf{Date of Start:} 1 April 2026\\[2pt]
+\textbf{Duration:} Approximately four (4) months &
+\textbf{Date of Start:} 01 April 2026\\[2pt]
 \textbf{Date of Submission:} \submdate & \\
 \end{tabular}
 \vspace{4pt}
@@ -30,10 +33,12 @@
 \noindent\textbf{ID No.\ / Name of the Student:} \studentid\ --- \student
 
 \vspace{4pt}
-\noindent\textbf{Supervisor:} \supervisor, \supervisordesig, Bengaluru.
-\quad \textbf{Additional Examiner:} As assigned by the organisation.
+\noindent\textbf{Name(s) and Designation(s) of your Supervisor and Additional Examiner:}
+\begin{itemize}\setlength\itemsep{0pt}
+\item \textbf{Supervisor:} \supervisor, \supervisordesig, Bengaluru.
+\item \textbf{Additional Examiner:} \examiner, \examinerdesig, Bengaluru.
+\end{itemize}
 
-\vspace{2pt}
 \noindent\textbf{Faculty Mentor:} \faculty, BITS Pilani --- WILP Division.
 
 \vspace{4pt}
@@ -48,7 +53,7 @@ Learning; Data Engineering; Human-in-the-Loop Analytics.
 \noindent\textbf{Abstract:}
 {\footnotesize
 Every day, customers, store associates, and Walmart delivery drivers describe what actually
-happens inside retail --- not on the retailer's app, but on Reddit --- yet
+happens inside retail --- not on the retailer's app, but on social media (Reddit) --- yet
 almost none of that signal is captured today: off-the-shelf sentiment
 services choke on sarcasm, treat every post as equally trustworthy, and
 never touch the screenshots that carry half of the evidence.  This
@@ -68,21 +73,23 @@ $\to$ OCR $\to$ discard captions whose entities are absent from the
 OCR).  A React/FastAPI dashboard exposes Brand Health, Alert Feed, Post
 Explorer, a Kanban Post Lifecycle, Insights and Competitor Analysis, and
 Notifications, backed by a human-in-the-loop \emph{Review \& Validate}
-workflow, a dual-draft (rule + LLM) smart-reply composer, and a
-learning-loop store that becomes the next round of training data.
+workflow, a triple-draft (GPT-4o + Mistral 7B + Smart Composer) reply
+composer, and a learning-loop store that becomes the next round of
+training data.
 Evaluated 5-fold out-of-fold on the 200-post gold set, sentiment
 macro-F1 climbs from a Twitter-RoBERTa baseline of \textbf{0.6272} to
-\textbf{0.7642} overall; on the small long-post bucket
-($\ge 512$~tokens, $n{=}7$, all negative-class) the baseline classifies
-5/7 correctly and the fine-tuned model \textbf{7/7}, showing the
-truncation ceiling that limited the baseline is removed.  On a 32-image benchmark the multi-pass vision
-pipeline drops hallucination from \textbf{50\% to 0\%}, lifts text
-extraction from \textbf{25\% to 75\%}, and retail-signal recall from
-\textbf{40\% to 81\%}; the trust module correctly flags \textbf{12 of 15}
-low-trust posts confirmed by human annotators.  All inference runs
-locally, so the reference pipeline carries
-\textbf{zero commercial API cost}, uses only public data, and ships as a
-reproducible artefact backed by SQLite (WAL) and a JSONL cost log.
+\textbf{0.7642} overall, with the largest gains on long posts the
+baseline could not model: on the small $\ge 512$-token bucket
+($n{=}7$, all negative-class) the baseline classifies 5/7 correctly
+and the fine-tuned model \textbf{7/7}.  On a 32-image benchmark the
+multi-pass vision pipeline drops hallucination from \textbf{50\% to
+0\%}, lifts text extraction from \textbf{25\% to 75\%}, and
+retail-signal recall from \textbf{40\% to 81\%}; the trust module
+correctly flags \textbf{12 of 15} low-trust posts confirmed by human
+annotators.  All inference runs locally, so the reference pipeline
+carries \textbf{zero commercial API cost}, uses only public data, and
+ships as a reproducible artefact backed by SQLite (WAL) and a JSONL
+cost log.
 \par}
 
 \vspace{6pt}
