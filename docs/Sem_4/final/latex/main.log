@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 14:41
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 14:50
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -221,7 +221,15 @@ Package graphics Info: Driver file: xetex.def on input line 106.
 )
 \Gin@req@height=\dimen155
 \Gin@req@width=\dimen156
-) (/usr/local/texlive/2025basic/texmf-dist/tex/latex/booktabs/booktabs.sty
+) (/usr/local/texlive/2025basic/texmf-dist/tex/latex/float/float.sty
+Package: float 2001/11/08 v1.3d Float enhancements (AL)
+\c@float@type=\count285
+\float@exts=\toks21
+\float@box=\box55
+\@float@everytoks=\toks22
+\@floatcapt=\box56
+)
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/booktabs/booktabs.sty
 Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 \heavyrulewidth=\dimen157
 \lightrulewidth=\dimen158
@@ -233,12 +241,12 @@ Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 \cmidrulesep=\dimen164
 \cmidrulekern=\dimen165
 \defaultaddspace=\dimen166
-\@cmidla=\count285
-\@cmidlb=\count286
+\@cmidla=\count286
+\@cmidlb=\count287
 \@aboverulesep=\dimen167
 \@belowrulesep=\dimen168
-\@thisruleclass=\count287
-\@lastruleclass=\count288
+\@thisruleclass=\count288
+\@lastruleclass=\count289
 \@thisrulewidth=\dimen169
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/tools/longtable.sty
@@ -247,18 +255,18 @@ Package: longtable 2024-10-27 v4.22 Multi-page Table package (DPC)
 \LTright=\skip55
 \LTpre=\skip56
 \LTpost=\skip57
-\LTchunksize=\count289
+\LTchunksize=\count290
 \LTcapwidth=\dimen170
-\LT@head=\box55
-\LT@firsthead=\box56
-\LT@foot=\box57
-\LT@lastfoot=\box58
-\LT@gbox=\box59
-\LT@cols=\count290
-\LT@rows=\count291
-\c@LT@tables=\count292
-\c@LT@chunks=\count293
-\LT@p@ftn=\toks21
+\LT@head=\box57
+\LT@firsthead=\box58
+\LT@foot=\box59
+\LT@lastfoot=\box60
+\LT@gbox=\box61
+\LT@cols=\count291
+\LT@rows=\count292
+\c@LT@tables=\count293
+\c@LT@chunks=\count294
+\LT@p@ftn=\toks23
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/tools/tabularx.sty
 Package: tabularx 2023/12/11 v2.12a `tabularx' package (DPC)
@@ -267,8 +275,8 @@ Package: tabularx 2023/12/11 v2.12a `tabularx' package (DPC)
 \TX@old@col=\dimen173
 \TX@target=\dimen174
 \TX@delta=\dimen175
-\TX@cols=\count294
-\TX@ftn=\toks22
+\TX@cols=\count295
+\TX@ftn=\toks24
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/caption/caption.sty
 Package: caption 2023/08/05 v3.6o Customizing captions (AR)
@@ -285,25 +293,26 @@ Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
 \caption@hangindent=\dimen183
 Package caption Info: Standard document class detected.
 )
-\c@caption@flags=\count295
-\c@continuedfloat=\count296
+\c@caption@flags=\count296
+\c@continuedfloat=\count297
+Package caption Info: float package is loaded.
 Package caption Info: longtable package is loaded.
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/caption/ltcaption.sty
 Package: ltcaption 2021/01/08 v1.4c longtable captions (AR)
 ))
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/listings/listings.sty
-\lst@mode=\count297
-\lst@gtempboxa=\box60
-\lst@token=\toks23
-\lst@length=\count298
+\lst@mode=\count298
+\lst@gtempboxa=\box62
+\lst@token=\toks25
+\lst@length=\count299
 \lst@currlwidth=\dimen184
-\lst@column=\count299
-\lst@pos=\count300
+\lst@column=\count300
+\lst@pos=\count301
 \lst@lostspace=\dimen185
 \lst@width=\dimen186
-\lst@newlines=\count301
-\lst@lineno=\count302
+\lst@newlines=\count302
+\lst@lineno=\count303
 \lst@maxwidth=\dimen187
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/listings/lstpatch.sty
@@ -311,9 +320,9 @@ File: lstpatch.sty 2024/09/23 1.10c (Carsten Heinz)
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/listings/lstmisc.sty
 File: lstmisc.sty 2024/09/23 1.10c (Carsten Heinz)
-\c@lstnumber=\count303
-\lst@skipnumbers=\count304
-\lst@framebox=\box61
+\c@lstnumber=\count304
+\lst@skipnumbers=\count305
+\lst@framebox=\box63
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/listings/listings.cfg
 File: listings.cfg 2024/09/23 1.10c listings configuration
@@ -328,7 +337,7 @@ Package: natbib 2010/09/13 8.31b (PWD, AO)
 \bibhang=\skip58
 \bibsep=\skip59
 LaTeX Info: Redefining \cite on input line 694.
-\c@NAT@ctr=\count305
+\c@NAT@ctr=\count306
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/fancyhdr/fancyhdr.sty
 Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
@@ -347,7 +356,7 @@ Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
 \f@nch@widthL=\skip71
 \f@nch@widthC=\skip72
 \f@nch@widthR=\skip73
-\@temptokenb=\toks24
+\@temptokenb=\toks26
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/hyperref.sty
 Package: hyperref 2024-11-05 v7.01l Hypertext links for LaTeX
@@ -391,19 +400,19 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/kvoptions/kvoptions.sty
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
-\c@section@level=\count306
+\c@section@level=\count307
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/etoolbox/etoolbox.sty
 Package: etoolbox 2025/02/11 v2.5l e-TeX tools for LaTeX (JAW)
-\etb@tempcnta=\count307
+\etb@tempcnta=\count308
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/generic/stringenc/stringenc.sty
 Package: stringenc 2019/11/29 v1.12 Convert strings between diff. encodings (HO
 )
 )
 \@linkdim=\dimen188
-\Hy@linkcounter=\count308
-\Hy@pagecounter=\count309
+\Hy@linkcounter=\count309
+\Hy@pagecounter=\count310
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/pd1enc.def
 File: pd1enc.def 2024-11-05 v7.01l Hyperref: PDFDocEncoding definition (HO)
@@ -411,7 +420,7 @@ File: pd1enc.def 2024-11-05 v7.01l Hyperref: PDFDocEncoding definition (HO)
 (/usr/local/texlive/2025basic/texmf-dist/tex/generic/intcalc/intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
-\Hy@SavedSpaceFactor=\count310
+\Hy@SavedSpaceFactor=\count311
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/puenc.def
 File: puenc.def 2024-11-05 v7.01l Hyperref: PDF Unicode definition (HO)
@@ -427,7 +436,7 @@ Package hyperref Info: Plain pages OFF on input line 4172.
 Package hyperref Info: Backreferencing OFF on input line 4177.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
 Package hyperref Info: Bookmarks ON on input line 4424.
-\c@Hy@tempcnt=\count311
+\c@Hy@tempcnt=\count312
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/url/url.sty
 \Urlmuskip=\muskip17
@@ -443,7 +452,7 @@ Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
 Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
 )
 ))
-\Fld@menulength=\count312
+\Fld@menulength=\count313
 \Field@Width=\dimen190
 \Fld@charsize=\dimen191
 Package hyperref Info: Hyper figures OFF on input line 6042.
@@ -457,19 +466,19 @@ Package hyperref Info: PDF/A mode OFF on input line 6072.
 Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
 package with kernel methods
 )
-\Hy@abspage=\count313
-\c@Item=\count314
-\c@Hfootnote=\count315
+\Hy@abspage=\count314
+\c@Item=\count315
+\c@Hfootnote=\count316
 )
 Package hyperref Info: Driver (autodetected): hxetex.
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/hxetex.def
 File: hxetex.def 2024-11-05 v7.01l Hyperref driver for XeTeX
-\pdfm@box=\box62
-\c@Hy@AnnotLevel=\count316
-\HyField@AnnotCount=\count317
-\Fld@listcount=\count318
-\c@bookmark@seq@number=\count319
+\pdfm@box=\box64
+\c@Hy@AnnotLevel=\count317
+\HyField@AnnotCount=\count318
+\Fld@listcount=\count319
+\c@bookmark@seq@number=\count320
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/rerunfilecheck/rerunfilechec
 k.sty
@@ -490,26 +499,26 @@ Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
 ) (./main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 103.
-LaTeX Font Info:    ... okay on input line 103.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 104.
+LaTeX Font Info:    ... okay on input line 104.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: xetex
@@ -552,73 +561,73 @@ Package fontspec Info:
 
 \symlegacymaths=\mathgroup4
 LaTeX Font Info:    Overwriting symbol font `legacymaths' in version `bold'
-(Font)                  OT1/cmr/m/n --> OT1/cmr/bx/n on input line 103.
-LaTeX Font Info:    Redeclaring math accent \acute on input line 103.
-LaTeX Font Info:    Redeclaring math accent \grave on input line 103.
-LaTeX Font Info:    Redeclaring math accent \ddot on input line 103.
-LaTeX Font Info:    Redeclaring math accent \tilde on input line 103.
-LaTeX Font Info:    Redeclaring math accent \bar on input line 103.
-LaTeX Font Info:    Redeclaring math accent \breve on input line 103.
-LaTeX Font Info:    Redeclaring math accent \check on input line 103.
-LaTeX Font Info:    Redeclaring math accent \hat on input line 103.
-LaTeX Font Info:    Redeclaring math accent \dot on input line 103.
-LaTeX Font Info:    Redeclaring math accent \mathring on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \colon on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Gamma on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Delta on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Theta on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Lambda on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Xi on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Pi on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Sigma on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Upsilon on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Phi on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Psi on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \Omega on input line 103.
-LaTeX Font Info:    Redeclaring math symbol \mathdollar on input line 103.
-LaTeX Font Info:    Redeclaring symbol font `operators' on input line 103.
+(Font)                  OT1/cmr/m/n --> OT1/cmr/bx/n on input line 104.
+LaTeX Font Info:    Redeclaring math accent \acute on input line 104.
+LaTeX Font Info:    Redeclaring math accent \grave on input line 104.
+LaTeX Font Info:    Redeclaring math accent \ddot on input line 104.
+LaTeX Font Info:    Redeclaring math accent \tilde on input line 104.
+LaTeX Font Info:    Redeclaring math accent \bar on input line 104.
+LaTeX Font Info:    Redeclaring math accent \breve on input line 104.
+LaTeX Font Info:    Redeclaring math accent \check on input line 104.
+LaTeX Font Info:    Redeclaring math accent \hat on input line 104.
+LaTeX Font Info:    Redeclaring math accent \dot on input line 104.
+LaTeX Font Info:    Redeclaring math accent \mathring on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \colon on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Gamma on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Delta on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Theta on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Lambda on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Xi on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Pi on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Sigma on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Upsilon on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Phi on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Psi on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \Omega on input line 104.
+LaTeX Font Info:    Redeclaring math symbol \mathdollar on input line 104.
+LaTeX Font Info:    Redeclaring symbol font `operators' on input line 104.
 LaTeX Font Info:    Encoding `OT1' has changed to `TU' for symbol font
-(Font)              `operators' in the math version `normal' on input line 103.
+(Font)              `operators' in the math version `normal' on input line 104.
 
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
 (Font)                  OT1/cmr/m/n --> TU/TimesNewRoman(0)/m/n on input line 1
-03.
+04.
 LaTeX Font Info:    Encoding `OT1' has changed to `TU' for symbol font
-(Font)              `operators' in the math version `bold' on input line 103.
+(Font)              `operators' in the math version `bold' on input line 104.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
 (Font)                  OT1/cmr/bx/n --> TU/TimesNewRoman(0)/m/n on input line 
-103.
+104.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
 (Font)                  TU/TimesNewRoman(0)/m/n --> TU/TimesNewRoman(0)/m/n on 
-input line 103.
+input line 104.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
 (Font)                  OT1/cmr/m/it --> TU/TimesNewRoman(0)/m/it on input line
- 103.
+ 104.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
 (Font)                  OT1/cmr/bx/n --> TU/TimesNewRoman(0)/b/n on input line 
-103.
+104.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
-(Font)                  OT1/cmss/m/n --> TU/Helvetica(0)/m/n on input line 103.
+(Font)                  OT1/cmss/m/n --> TU/Helvetica(0)/m/n on input line 104.
 
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
-(Font)                  OT1/cmtt/m/n --> TU/Menlo(0)/m/n on input line 103.
+(Font)                  OT1/cmtt/m/n --> TU/Menlo(0)/m/n on input line 104.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
 (Font)                  TU/TimesNewRoman(0)/m/n --> TU/TimesNewRoman(0)/b/n on 
-input line 103.
+input line 104.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
 (Font)                  OT1/cmr/bx/it --> TU/TimesNewRoman(0)/b/it on input lin
-e 103.
+e 104.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/bx/n --> TU/Helvetica(0)/b/n on input line 103
+(Font)                  OT1/cmss/bx/n --> TU/Helvetica(0)/b/n on input line 104
 .
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> TU/Menlo(0)/b/n on input line 103.
+(Font)                  OT1/cmtt/m/n --> TU/Menlo(0)/b/n on input line 104.
 Package caption Info: Begin \AtBeginDocument code.
 Package caption Info: hyperref package is loaded.
 Package caption Info: listings package is loaded.
 Package caption Info: End \AtBeginDocument code.
-\c@lstlisting=\count320
-Package hyperref Info: Link coloring ON on input line 103.
+\c@lstlisting=\count321
+Package hyperref Info: Link coloring ON on input line 104.
 (./main.out) (./main.out)
 \@outlinefile=\write3
 \openout3 = `main.out'.
@@ -796,6 +805,8 @@ File: figures/fig3_trust_composition.png Graphic file (type bmp)
 File: figures/fig10_modernbert_curriculum.png Graphic file (type bmp)
 <figures/fig10_modernbert_curriculum.png>
 
+
+[14]
 Overfull \hbox (106.40605pt too wide) in paragraph at lines 178--188
 \TU/TimesNewRoman(0)/m/n/12 Aspects are extracted with a zero-shot NLI classifi
 er (\TU/Menlo(0)/m/n/12 mDeBERTa-v3-base-xnli-multilingual-nli-2mil7\TU/TimesNe
@@ -804,12 +815,10 @@ wRoman(0)/m/n/12 )
 
 
 
-[14]
+[15]
 File: figures/fig11_aspect_nli.png Graphic file (type bmp)
 <figures/fig11_aspect_nli.png>
 
-
-[15]
 
 [16]
 
@@ -819,65 +828,70 @@ File: figures/fig12_vision_multipass.png Graphic file (type bmp)
 
 
 [18]
-File: figures/fig13_alert_routing.png Graphic file (type bmp)
-<figures/fig13_alert_routing.png>
-
 
 [19]
+File: figures/fig13_alert_routing.png Graphic file (type bmp)
+<figures/fig13_alert_routing.png>
 File: ../figures/ui/alert_feed.png Graphic file (type bmp)
 <../figures/ui/alert_feed.png>
+
+
+[20]
 File: ../figures/ui/brand_health.png Graphic file (type bmp)
 <../figures/ui/brand_health.png>
 
 
-[20]
-
 [21]
+
+[22]
+
+[23]
 File: figures/fig5_review_validate_flow.png Graphic file (type bmp)
 <figures/fig5_review_validate_flow.png>
 File: ../figures/ui/review_validate.png Graphic file (type bmp)
 <../figures/ui/review_validate.png>
 
 
-[22]
-
-[23]
-
 [24]
 
 [25]
+
+[26]
 File: figures/fig6_reply_cascade.png Graphic file (type bmp)
 <figures/fig6_reply_cascade.png>
 File: figures/fig7_learning_loop.png Graphic file (type bmp)
 <figures/fig7_learning_loop.png>
+
+
+[27]
 File: ../figures/ui/post_explorer.png Graphic file (type bmp)
 <../figures/ui/post_explorer.png>
 
 
-[26]
+[28]
+
+[29]
 File: figures/fig8_lifecycle_kanban.png Graphic file (type bmp)
 <figures/fig8_lifecycle_kanban.png>
 File: ../figures/ui/lifecycle_kanban.png Graphic file (type bmp)
 <../figures/ui/lifecycle_kanban.png>
+
+
+[30]
 File: ../figures/ui/insights_competitor.png Graphic file (type bmp)
 <../figures/ui/insights_competitor.png>
+
+
+[31]
 File: ../figures/ui/notifications.png Graphic file (type bmp)
 <../figures/ui/notifications.png>
 
 
-[27]
+[32]
 
-[28]
+[33]) (./chapters/06_evaluation.tex
 
-[29]
-
-[30]
-
-[31]
-
-[32]) (./chapters/06_evaluation.tex
-
-[33]
+[34]
 Chapter 6.
 
 Overfull \hbox (70.0041pt too wide) in paragraph at lines 33--38
@@ -888,11 +902,11 @@ File: figures/fig14_sentiment_results.png Graphic file (type bmp)
 <figures/fig14_sentiment_results.png>
 
 
-[34
+[35
 
 ]) (./chapters/07_tools.tex
 
-[35]
+[36]
 Chapter 7.
 ) (./chapters/08_problems.tex
 Overfull \hbox (1.04001pt too wide) in paragraph at lines 26--1
@@ -903,7 +917,7 @@ ig/models.yaml\TU/TimesNewRoman(0)/m/n/12 :
 
 
 
-[36
+[37
 
 ]
 Chapter 8.
@@ -924,13 +938,13 @@ Underfull \hbox (badness 1043) in paragraph at lines 23--23
 
 ) (./chapters/09_conclusions.tex
 
-[37
+[38
 
 ]
 Chapter 9.
 ) (./chapters/10_future.tex
 
-[38
+[39
 
 ]
 Chapter 10.
@@ -1003,11 +1017,11 @@ eindia \TU/TimesNewRoman(0)/m/n/12 — account for an estimated 30% of
 
 
 
-[39
+[40
 
 ]
 
-[40]
+[41]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 148.
@@ -1022,15 +1036,15 @@ Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 
 
 
-[41]
+[42]
 
-LaTeX Warning: Reference `sec:alerts' on page 42 undefined on input line 189.
+LaTeX Warning: Reference `sec:alerts' on page 43 undefined on input line 189.
 
 
 
-[42]) (./appendices/A_subreddits.tex
+[43]) (./appendices/A_subreddits.tex
 
-[43]
+[44]
 Appendix A.
 
 Underfull \hbox (badness 3803) in paragraph at lines 11--12
@@ -1046,7 +1060,7 @@ Asshole (retail-
 
 ) (./appendices/B_reproduction.tex
 
-[44
+[45
 
 ]
 Appendix B.
@@ -1064,7 +1078,7 @@ ite (:3003)[]
 
 
 
-[45
+[46
 
 ]
 Overfull \hbox (46.25533pt too wide) in paragraph at lines 40--40
@@ -1080,16 +1094,16 @@ _report.py[]
 
 )
 
-[46] (./main.bbl
+[47] (./main.bbl
 
-[47
+[48
 
 
 ]) (./frontmatter/glossary.tex
 
-[48]
+[49]
 
-[49
+[50
 
 ]) (./frontmatter/checklist.tex
 Underfull \hbox (badness 1107) in paragraph at lines 27--27
@@ -1099,22 +1113,22 @@ port,
 
 
 
-[50
+[51
 
 
 ])
-Overfull \hbox (41.99998pt too wide) in paragraph at lines 44--165
+Overfull \hbox (41.99998pt too wide) in paragraph at lines 44--166
 [][]
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 44--165
+Underfull \hbox (badness 10000) in paragraph at lines 44--166
 
  []
 
 
 
-[51] (./main.aux)
+[52] (./main.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -1127,12 +1141,12 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: C1855595569020B364BEC87DE99E3882;12735.
  ) 
 Here is how much of TeX's memory you used:
- 16244 strings out of 475366
- 316005 string characters out of 5762340
- 961279 words of memory out of 5000000
- 38922 multiletter control sequences out of 15000+600000
+ 16301 strings out of 475366
+ 316943 string characters out of 5762340
+ 973615 words of memory out of 5000000
+ 38975 multiletter control sequences out of 15000+600000
  564211 words of font info for 108 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
  79i,14n,93p,530b,1918s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.pdf (61 pages).
+Output written on main.pdf (62 pages).

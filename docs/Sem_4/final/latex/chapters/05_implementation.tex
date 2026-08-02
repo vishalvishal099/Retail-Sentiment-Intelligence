@@ -51,7 +51,7 @@ def fetch_posts_arctic(subreddit, since_utc=0.0, limit=500,
         time.sleep(0.5)                            # be polite
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig9_ingestion_flow}
 \caption{Data ingestion and pre-processing flow.}\label{fig:ingest}
 \end{figure}
@@ -104,7 +104,7 @@ def score(self, unit: dict) -> dict:
     return unit
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig3_trust_composition}
 \caption{Trust-Score composition and P1/P2 tier rules.}\label{fig:trust}
 \end{figure}
@@ -169,7 +169,7 @@ def _build_analysis_record(self, unit, result):
     }
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig10_modernbert_curriculum}
 \caption{ModernBERT three-stage fine-tuning curriculum.}\label{fig:curriculum}
 \end{figure}
@@ -235,7 +235,7 @@ Account / login       & ``locked out'', ``password reset''\\\bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=0.95\linewidth]{fig11_aspect_nli}
 \caption{Zero-shot NLI aspect tagging.}\label{fig:aspect}
 \end{figure}
@@ -301,7 +301,7 @@ def caption_enhanced(self, image_path: Path) -> str:
     return merged or self.caption(image_path)
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig12_vision_multipass}
 \caption{Vision multi-pass anti-hallucination pipeline.}\label{fig:vision}
 \end{figure}
@@ -374,7 +374,7 @@ def detect_sentiment_crash(self, drop_threshold: float = 0.3):
     }]
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig13_alert_routing}
 \caption{Alert engine and notification routing.}\label{fig:alerts}
 \end{figure}
@@ -382,7 +382,7 @@ def detect_sentiment_crash(self, drop_threshold: float = 0.3):
 The rendered Alert Feed is shown in Figure~\ref{fig:ui:alerts}; each row
 is one entry from the JSON returned by the detectors above.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/alert_feed.png}
 \caption{Alert Feed --- live P1/P2 stream sourced from the volume-spike
 and sentiment-crash detectors of Listing~\ref{lst:alerts}.}\label{fig:ui:alerts}
@@ -400,7 +400,7 @@ Listing~\ref{lst:alerts} also reads from, so what the analyst sees on
 the dashboard is always the same view of the world that the alert engine
 scored.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/brand_health.png}
 \caption{Brand Health --- sentiment gauge, distribution donut, volume trend
 and priority breakdown driven by the daily aggregates.}\label{fig:ui:brand}
@@ -467,12 +467,12 @@ def submit_review(post_id: str, correction: dict):
             "analysis_updated": analysis is not None}
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig5_review_validate_flow}
 \caption{Human-in-the-loop Review \& Validate flow.}\label{fig:hitl}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/review_validate.png}
 \caption{Review \& Validate queue --- posts flagged by the model land here;
 analysts re-label sentiment/aspects and either compose a reply or resolve
@@ -528,7 +528,7 @@ def draft_reply(post_id: str, payload: dict | None = None):
             "examples_used": len(examples)}
 \end{lstlisting}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig6_reply_cascade}
 \caption{Smart Reply Composer --- dual-draft with few-shot.}\label{fig:reply}
 \end{figure}
@@ -543,7 +543,7 @@ future auto-reply --- the same few-shot pull in Listing~\ref{lst:reply}
 means the composer becomes measurably better every week without touching
 the model weights.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig7_learning_loop}
 \caption{Feedback learning loop and path to auto-reply.}\label{fig:loop}
 \end{figure}
@@ -556,7 +556,7 @@ query parameter on the same \texttt{/api/posts} endpoint that the Kanban
 and Review queues also read, so an analyst can navigate freely between
 the three views without ever seeing an inconsistent post state.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/post_explorer.png}
 \caption{Post Explorer --- multi-facet search over subreddit, aspect,
 sentiment, trust bucket, priority tier and free text.}\label{fig:ui:posts}
@@ -570,12 +570,12 @@ Figure~\ref{fig:ui:kanban} for the rendered board.  State transitions
 carry SLA timestamps so we can compute time-to-acknowledge and
 time-to-resolve.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig8_lifecycle_kanban}
 \caption{Post Lifecycle Kanban workflow.}\label{fig:kanban}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/lifecycle_kanban.png}
 \caption{Post Lifecycle --- Kanban board with SLA timestamps for every
 transition.}\label{fig:ui:kanban}
@@ -587,7 +587,7 @@ curated set of competitor communities (Target, Costco, Amazon, Kroger,
 Aldi) so analysts can distinguish a company-specific issue from an
 industry trend.  Figure~\ref{fig:ui:insights} shows the rendered view.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/insights_competitor.png}
 \caption{Insights \& Competitor --- aspect-level negative-share for Walmart
 vs.\ curated competitor communities.}\label{fig:ui:insights}
@@ -597,7 +597,7 @@ Notifications route the same alerts to email digests and the in-app
 notification centre.  The rendered notification centre is shown in
 Figure~\ref{fig:ui:notif}.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/notifications.png}
 \caption{Notification centre --- in-app mirror of the email digest;
 sourced from the same alert rows that drive

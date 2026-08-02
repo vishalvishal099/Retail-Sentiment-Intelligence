@@ -7,23 +7,23 @@
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {5.1}{\ignorespaces Data ingestion and pre-processing flow.}}{11}{figure.caption.8}%
 \contentsline {figure}{\numberline {5.2}{\ignorespaces Trust-Score composition and P1/P2 tier rules.}}{13}{figure.caption.9}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces ModernBERT three-stage fine-tuning curriculum.}}{14}{figure.caption.10}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces ModernBERT three-stage fine-tuning curriculum.}}{15}{figure.caption.10}%
 \contentsline {figure}{\numberline {5.4}{\ignorespaces Zero-shot NLI aspect tagging.}}{16}{figure.caption.12}%
 \contentsline {figure}{\numberline {5.5}{\ignorespaces Vision multi-pass anti-hallucination pipeline.}}{18}{figure.caption.13}%
 \contentsline {figure}{\numberline {5.6}{\ignorespaces Alert engine and notification routing.}}{20}{figure.caption.14}%
-\contentsline {figure}{\numberline {5.7}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}.}}{21}{figure.caption.15}%
-\contentsline {figure}{\numberline {5.8}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{21}{figure.caption.16}%
-\contentsline {figure}{\numberline {5.9}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{23}{figure.caption.17}%
-\contentsline {figure}{\numberline {5.10}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{24}{figure.caption.18}%
-\contentsline {figure}{\numberline {5.11}{\ignorespaces Smart Reply Composer --- dual-draft with few-shot.}}{26}{figure.caption.19}%
-\contentsline {figure}{\numberline {5.12}{\ignorespaces Feedback learning loop and path to auto-reply.}}{27}{figure.caption.20}%
-\contentsline {figure}{\numberline {5.13}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{28}{figure.caption.21}%
-\contentsline {figure}{\numberline {5.14}{\ignorespaces Post Lifecycle Kanban workflow.}}{29}{figure.caption.22}%
-\contentsline {figure}{\numberline {5.15}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{30}{figure.caption.23}%
-\contentsline {figure}{\numberline {5.16}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{31}{figure.caption.24}%
-\contentsline {figure}{\numberline {5.17}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{32}{figure.caption.25}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}.}}{20}{figure.caption.15}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{22}{figure.caption.16}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{24}{figure.caption.17}%
+\contentsline {figure}{\numberline {5.10}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{25}{figure.caption.18}%
+\contentsline {figure}{\numberline {5.11}{\ignorespaces Smart Reply Composer --- dual-draft with few-shot.}}{27}{figure.caption.19}%
+\contentsline {figure}{\numberline {5.12}{\ignorespaces Feedback learning loop and path to auto-reply.}}{28}{figure.caption.20}%
+\contentsline {figure}{\numberline {5.13}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{29}{figure.caption.21}%
+\contentsline {figure}{\numberline {5.14}{\ignorespaces Post Lifecycle Kanban workflow.}}{30}{figure.caption.22}%
+\contentsline {figure}{\numberline {5.15}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{31}{figure.caption.23}%
+\contentsline {figure}{\numberline {5.16}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{32}{figure.caption.24}%
+\contentsline {figure}{\numberline {5.17}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{33}{figure.caption.25}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{35}{figure.caption.28}%
+\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{36}{figure.caption.28}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
