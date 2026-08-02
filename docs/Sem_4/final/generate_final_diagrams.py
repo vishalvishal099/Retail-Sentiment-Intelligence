@@ -614,6 +614,54 @@ def fig14_sentiment_results():
     print("wrote", out)
 
 
+# ---------------------------------------------------------------------------
+# Chapter 5 pipeline overview — landing figure at the top of Chapter 5.
+# Shows sections 5.1 -> 5.6 as a single horizontal pipeline so the reader
+# sees the whole story before diving into each stage.
+# ---------------------------------------------------------------------------
+
+def fig_ch5_pipeline_overview():
+    fig, ax = plt.subplots(figsize=(12, 3.6))
+    ax.set_xlim(0, 24)
+    ax.set_ylim(0, 6)
+    ax.axis("off")
+
+    stages = [
+        ("5.1", "Ingest &\nPre-process",  "Reddit \u2192 clean text\n+ image cache",             SKY),
+        ("5.2", "Trust score",             "Metadata heuristics\n\u2192 trust_score \u2208 [0,1]", YELLOW),
+        ("5.3", "Sentiment\n(ModernBERT)", "3-stage curriculum\nmacro-F1 0.7642",                  YELLOW),
+        ("5.4", "Aspects\n(NLI)",          "8-aspect taxonomy\nDeBERTa-v3 zero-shot",              YELLOW),
+        ("5.5", "Vision\n(multi-pass)",    "Gemma 3 4B: structure\n\u2192 tile-OCR \u2192 merge",  YELLOW),
+        ("5.6", "Aggregate &\nalert",      "Time-series rollups\n\u2192 P1 / P2 routing",         GREEN),
+    ]
+    w, h = 3.6, 2.4
+    gap = 0.32
+    x = 0.4
+    for tag, title, body, color in stages:
+        # section tag pill above each stage
+        _box(ax, x + 0.15, 4.55, 0.85, 0.55, tag,
+             face=NAVY, edge=NAVY, text_color=WHITE, fontsize=10)
+        # main stage box
+        _box(ax, x, 1.6, w, 2.8, f"{title}\n\n{body}",
+             face=color, fontsize=9.2)
+        # arrow to next
+        if tag != stages[-1][0]:
+            _arrow(ax, x + w, 3.0, x + w + gap, 3.0, color=NAVY, lw=1.8)
+        x += w + gap
+
+    # bottom summary strip
+    _box(ax, 0.4, 0.35, 23.1, 0.90,
+         "\u00a75.1 \u2013 \u00a75.5 build the per-post analysis;  \u00a75.6 aggregates and routes;  \u00a7\u00a75.7\u20135.13 (next) show the analyst-facing UI on top.",
+         face=LIGHT, edge=NAVY, fontsize=9.5)
+
+    _title(ax, "Chapter 5 Pipeline Overview  (sections \u00a75.1 \u2013 \u00a75.6)")
+    fig.tight_layout()
+    out = OUT / "fig_ch5_pipeline_overview.png"
+    fig.savefig(out, dpi=180, bbox_inches="tight", facecolor=WHITE)
+    plt.close(fig)
+    print("wrote", out)
+
+
 if __name__ == "__main__":
     fig5_review_validate_flow()
     fig6_reply_cascade()
@@ -625,4 +673,5 @@ if __name__ == "__main__":
     fig12_vision_multipass()
     fig13_alert_routing()
     fig14_sentiment_results()
+    fig_ch5_pipeline_overview()
     print("done")

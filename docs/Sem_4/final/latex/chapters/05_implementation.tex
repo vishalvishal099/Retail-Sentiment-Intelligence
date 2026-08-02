@@ -7,6 +7,18 @@ from mathematics to Python to a rendered UI.  All listings are verbatim
 extracts from files under \texttt{src/}; comments and blank lines were
 trimmed only where they carried no explanatory value.
 
+Sections \S\ref{sec:ingest}--\S\ref{sec:vision} form the six-stage per-post
+analysis pipeline (Figure~\ref{fig:ch5:pipeline}); \S\ref{sec:agg} aggregates
+those per-post outputs and routes P1/P2 alerts; \S\S\ref{sec:dash}--\ref{sec:insights}
+document the analyst-facing UI that sits on top of the pipeline.
+
+\begin{figure}[H]
+\centering\includegraphics[width=\linewidth]{fig_ch5_pipeline_overview}
+\caption{Chapter 5 pipeline overview.  \S5.1--\S5.5 build the per-post
+analysis; \S5.6 aggregates and routes; the analyst-facing UI documented
+in \S\S5.7--5.13 sits on top of these outputs.}\label{fig:ch5:pipeline}
+\end{figure}
+
 \section{Data Ingestion and Pre-processing}\label{sec:ingest}
 Ingestion runs on a scheduler that polls each subreddit's public RSS feed at
 a configurable cadence (default: hourly).  Historical dumps are pulled from

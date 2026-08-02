@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 14:50
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 15:13
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -684,27 +684,29 @@ LaTeX Font Info:    External font `cmex10' loaded for size
 
 
 
-[5] (./main.lof)
+[5] (./main.lof
+
+[6
+
+
+])
 \tf@lof=\write5
 \openout5 = `main.lof'.
 
 
 
-[6
-
-
-] (./main.lot)
+[7] (./main.lot)
 \tf@lot=\write6
 \openout6 = `main.lot'.
 
 
 
-[7
+[8
 
 
 ] (./frontmatter/abbreviations.tex
 
-[8
+[9
 
 
 ]) (./chapters/01_introduction.tex
@@ -775,39 +777,41 @@ File: figures/fig2_pipeline_flow.png Graphic file (type bmp)
 
 [9]
 Chapter 5.
-Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
-nput line 22.
-LaTeX Font Info:    Font shape `TU/Menlo(0)/m/n' will be
-(Font)              scaled to size 8.99994pt on input line 22.
-LaTeX Font Info:    Font shape `TU/Menlo(0)/b/n' will be
-(Font)              scaled to size 8.99994pt on input line 23.
+File: figures/fig_ch5_pipeline_overview.png Graphic file (type bmp)
+<figures/fig_ch5_pipeline_overview.png>
 
 
 [10
 
 ]
-LaTeX Font Info:    Font shape `TU/Menlo(0)/m/it' will be
-(Font)              scaled to size 8.99994pt on input line 41.
+Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
+nput line 34.
 LaTeX Font Info:    Font shape `TU/Menlo(0)/m/n' will be
-(Font)              scaled to size 9.85492pt on input line 52.
+(Font)              scaled to size 8.99994pt on input line 34.
+LaTeX Font Info:    Font shape `TU/Menlo(0)/b/n' will be
+(Font)              scaled to size 8.99994pt on input line 35.
+LaTeX Font Info:    Font shape `TU/Menlo(0)/m/it' will be
+(Font)              scaled to size 8.99994pt on input line 53.
+LaTeX Font Info:    Font shape `TU/Menlo(0)/m/n' will be
+(Font)              scaled to size 9.85492pt on input line 64.
 File: figures/fig9_ingestion_flow.png Graphic file (type bmp)
 <figures/fig9_ingestion_flow.png>
 
 
 [11]
+
+[12]
 File: figures/fig3_trust_composition.png Graphic file (type bmp)
 <figures/fig3_trust_composition.png>
 
 
-[12]
-
 [13]
+
+[14]
 File: figures/fig10_modernbert_curriculum.png Graphic file (type bmp)
 <figures/fig10_modernbert_curriculum.png>
 
-
-[14]
-Overfull \hbox (106.40605pt too wide) in paragraph at lines 178--188
+Overfull \hbox (106.40605pt too wide) in paragraph at lines 190--200
 \TU/TimesNewRoman(0)/m/n/12 Aspects are extracted with a zero-shot NLI classifi
 er (\TU/Menlo(0)/m/n/12 mDeBERTa-v3-base-xnli-multilingual-nli-2mil7\TU/TimesNe
 wRoman(0)/m/n/12 )
@@ -1138,15 +1142,15 @@ L3 programming layer <2025-01-18>
 LaTeX Warning: There were undefined references.
 
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: C1855595569020B364BEC87DE99E3882;12735.
+(rerunfilecheck)             Checksum: 3B2FC6719FA53A16E2C6A0C3B1C55DF0;12735.
  ) 
 Here is how much of TeX's memory you used:
- 16301 strings out of 475366
- 316943 string characters out of 5762340
+ 16321 strings out of 475366
+ 317688 string characters out of 5762340
  973615 words of memory out of 5000000
- 38975 multiletter control sequences out of 15000+600000
+ 38995 multiletter control sequences out of 15000+600000
  564211 words of font info for 108 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
- 79i,14n,93p,530b,1918s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,14n,93p,530b,1800s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.pdf (62 pages).
+Output written on main.pdf (63 pages).
