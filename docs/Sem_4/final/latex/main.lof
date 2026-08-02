@@ -2,31 +2,31 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Layered System Architecture --- ingestion, storage, AI engine, aggregation, dashboard, and HITL feedback loop.}}{8}{figure.caption.6}%
-\contentsline {figure}{\numberline {4.2}{\ignorespaces End-to-End Pipeline Flow --- ingestion $\to $ trust $\to $ AI engine $\to $ aggregation $\to $ alerts $\to $ dashboard $\to $ analyst action $\to $ feedback loop.}}{9}{figure.caption.7}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Layered System Architecture --- ingestion, storage, AI engine, aggregation, dashboard, and HITL feedback loop.}}{8}{figure.caption.7}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces End-to-End Pipeline Flow --- ingestion $\to $ trust $\to $ AI engine $\to $ aggregation $\to $ alerts $\to $ dashboard $\to $ analyst action $\to $ feedback loop.}}{9}{figure.caption.8}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces Chapter 5 pipeline overview. Sections 5.1--5.5 build the per-post analysis; Section 5.6 aggregates and routes; the analyst-facing UI documented in Sections 5.7--5.13 sits on top of these outputs.}}{10}{figure.caption.8}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Pipeline dashboard --- live view of the six-stage flow. Top bar shows last-run status and stage progress (Ingest $\to $ Vision $\to $ Trust $\to $ Analyze $\to $ Aggregate); below are data-health signals, ingestion funnel, media-type breakdown, source coverage across the 25 subreddits, and the recent run history.}}{11}{figure.caption.9}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Data ingestion and pre-processing flow.}}{13}{figure.caption.10}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces Trust-Score composition and P1/P2 tier rules.}}{14}{figure.caption.11}%
-\contentsline {figure}{\numberline {5.5}{\ignorespaces ModernBERT three-stage fine-tuning curriculum.}}{16}{figure.caption.12}%
-\contentsline {figure}{\numberline {5.6}{\ignorespaces Zero-shot NLI aspect tagging.}}{17}{figure.caption.14}%
-\contentsline {figure}{\numberline {5.7}{\ignorespaces Vision multi-pass anti-hallucination pipeline.}}{19}{figure.caption.15}%
-\contentsline {figure}{\numberline {5.8}{\ignorespaces Alert engine and notification routing.}}{21}{figure.caption.16}%
-\contentsline {figure}{\numberline {5.9}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}; the timeline and cards below are filtered to the last 30 days.}}{22}{figure.caption.17}%
-\contentsline {figure}{\numberline {5.10}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{23}{figure.caption.18}%
-\contentsline {figure}{\numberline {5.11}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{25}{figure.caption.19}%
-\contentsline {figure}{\numberline {5.12}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{26}{figure.caption.20}%
-\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- triple-draft with few-shot.}}{28}{figure.caption.21}%
-\contentsline {figure}{\numberline {5.14}{\ignorespaces Smart Reply Composer in action on a negative r/instacart post. \emph {Advanced} is expanded (aspect override + trust slider); \emph {Generate Drafts} has produced Draft~A (GPT-4o), Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer, content-aware); the selected draft populates the editable reply box; an internal action note is generated alongside for the Lifecycle board.}}{29}{figure.caption.22}%
-\contentsline {figure}{\numberline {5.15}{\ignorespaces Feedback learning loop and path to auto-reply.}}{30}{figure.caption.23}%
-\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{31}{figure.caption.24}%
-\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle Kanban workflow.}}{32}{figure.caption.25}%
-\contentsline {figure}{\numberline {5.18}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{33}{figure.caption.26}%
-\contentsline {figure}{\numberline {5.19}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{34}{figure.caption.27}%
-\contentsline {figure}{\numberline {5.20}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{35}{figure.caption.28}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Chapter 5 pipeline overview. Sections 5.1--5.5 build the per-post analysis; Section 5.6 aggregates and routes; the analyst-facing UI documented in Sections 5.7--5.13 sits on top of these outputs.}}{10}{figure.caption.9}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Pipeline dashboard --- live view of the six-stage flow. Top bar shows last-run status and stage progress (Ingest $\to $ Vision $\to $ Trust $\to $ Analyze $\to $ Aggregate); below are data-health signals, ingestion funnel, media-type breakdown, source coverage across the 25 subreddits, and the recent run history.}}{11}{figure.caption.10}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Data ingestion and pre-processing flow.}}{13}{figure.caption.11}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Trust-Score composition and P1/P2 tier rules.}}{14}{figure.caption.12}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces ModernBERT three-stage fine-tuning curriculum.}}{16}{figure.caption.13}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Zero-shot NLI aspect tagging.}}{17}{figure.caption.15}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Vision multi-pass anti-hallucination pipeline.}}{19}{figure.caption.16}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Alert engine and notification routing.}}{21}{figure.caption.17}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Alert Feed --- live P1/P2 stream sourced from the volume-spike and sentiment-crash detectors of Listing~\ref {lst:alerts}; the timeline and cards below are filtered to the last 30 days.}}{22}{figure.caption.18}%
+\contentsline {figure}{\numberline {5.10}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{23}{figure.caption.19}%
+\contentsline {figure}{\numberline {5.11}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{25}{figure.caption.20}%
+\contentsline {figure}{\numberline {5.12}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{26}{figure.caption.21}%
+\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- triple-draft with few-shot.}}{28}{figure.caption.22}%
+\contentsline {figure}{\numberline {5.14}{\ignorespaces Smart Reply Composer in action on a negative r/instacart post. \emph {Advanced} is expanded (aspect override + trust slider); \emph {Generate Drafts} has produced Draft~A (GPT-4o), Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer, content-aware); the selected draft populates the editable reply box; an internal action note is generated alongside for the Lifecycle board.}}{29}{figure.caption.23}%
+\contentsline {figure}{\numberline {5.15}{\ignorespaces Feedback learning loop and path to auto-reply.}}{30}{figure.caption.24}%
+\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{31}{figure.caption.25}%
+\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle Kanban workflow.}}{32}{figure.caption.26}%
+\contentsline {figure}{\numberline {5.18}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{33}{figure.caption.27}%
+\contentsline {figure}{\numberline {5.19}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{34}{figure.caption.28}%
+\contentsline {figure}{\numberline {5.20}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{35}{figure.caption.29}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{38}{figure.caption.31}%
+\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{38}{figure.caption.32}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }

@@ -1,6 +1,6 @@
 \contentsline {chapter}{Acknowledgements}{i}{chapter*.1}%
-\contentsline {chapter}{Abstract Sheet}{ii}{chapter*.1}%
-\contentsline {chapter}{List of Abbreviations}{ix}{chapter*.5}%
+\contentsline {chapter}{Abstract Sheet}{ii}{section*.2}%
+\contentsline {chapter}{List of Abbreviations}{x}{chapter*.6}%
 \contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
 \contentsline {section}{\numberline {1.1}Broad Area of Work}{1}{section.1.1}%
 \contentsline {section}{\numberline {1.2}Motivation}{1}{section.1.2}%
@@ -46,20 +46,21 @@
 \contentsline {section}{\numberline {9.1}Recommendations}{41}{section.9.1}%
 \contentsline {chapter}{\numberline {10}Future Work}{42}{chapter.10}%
 \contentsline {section}{\numberline {10.1}Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{42}{section.10.1}%
-\contentsline {paragraph}{Guiding principle.}{42}{section*.36}%
+\contentsline {paragraph}{Guiding principle.}{42}{section*.37}%
 \contentsline {section}{\numberline {10.2}Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{43}{section.10.2}%
-\contentsline {paragraph}{Why now.}{43}{section*.37}%
-\contentsline {paragraph}{Concrete deliverables.}{43}{section*.38}%
-\contentsline {paragraph}{How this track ties into Track 1.}{44}{section*.39}%
+\contentsline {paragraph}{Why now.}{43}{section*.38}%
+\contentsline {paragraph}{Concrete deliverables.}{43}{section*.39}%
+\contentsline {paragraph}{How this track ties into Track 1.}{44}{section*.40}%
 \contentsline {section}{\numberline {10.3}Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{44}{section.10.3}%
-\contentsline {paragraph}{Why now.}{44}{section*.40}%
-\contentsline {paragraph}{Concrete deliverables.}{45}{section*.41}%
-\contentsline {paragraph}{Known risks.}{45}{section*.42}%
+\contentsline {paragraph}{Why now.}{44}{section*.41}%
+\contentsline {paragraph}{Concrete deliverables.}{45}{section*.42}%
+\contentsline {paragraph}{Known risks.}{45}{section*.43}%
 \contentsline {section}{\numberline {10.4}Beyond the Three Tracks}{45}{section.10.4}%
 \contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{47}{appendix.A}%
 \contentsline {chapter}{\numberline {B}Reproduction Commands}{48}{appendix.B}%
 \contentsline {section}{\numberline {B.1}Source Code Repository}{48}{section.B.1}%
 \contentsline {section}{\numberline {B.2}Environment}{48}{section.B.2}%
 \contentsline {section}{\numberline {B.3}Full pipeline}{48}{section.B.3}%
-\contentsline {chapter}{References}{49}{section*.47}%
-\contentsline {chapter}{Glossary}{51}{appendix*.49}%
+\contentsline {chapter}{References}{49}{section*.48}%
+\contentsline {chapter}{Glossary}{51}{appendix*.50}%
+\contentsline {chapter}{Checklist of Items}{52}{section*.51}%

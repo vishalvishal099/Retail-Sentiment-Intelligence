@@ -27,6 +27,7 @@
 \usepackage{graphicx}
 \graphicspath{{figures/}{../figures/}{../../figures/}}
 \usepackage{float}                     % gives [H] specifier to lock figures in place
+\usepackage{pdfpages}                  % \includepdf for Abstract-sheet and Checklist scans
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
@@ -119,7 +120,14 @@
 \input{frontmatter/acknowledgements.tex}
 
 % ================= (iv) ABSTRACT SHEET (contains signatures) =========
-\input{frontmatter/abstract_sheet.tex}
+% Externally-signed scan supplied as abstract_sheet.pdf (two pages).
+% The earlier LaTeX-rendered abstract sheet (frontmatter/abstract_sheet.tex)
+% is preserved on disk but no longer input; edit that file only if the
+% signed PDF ever needs to be regenerated from source.
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Abstract Sheet}
+\includepdf[pages=-,pagecommand={\thispagestyle{empty}}]{abstract_sheet.pdf}
 
 % ================= (v) TOC / LOF / LOT ===============================
 \tableofcontents
@@ -162,5 +170,11 @@
 
 % ---------- Glossary ----------
 \input{frontmatter/glossary.tex}
+
+% ---------- BITS Checklist (externally-signed scan appended at the end) ----------
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Checklist of Items}
+\includepdf[pages=-,pagecommand={\thispagestyle{empty}}]{checklist.pdf}
 
 \end{document}
