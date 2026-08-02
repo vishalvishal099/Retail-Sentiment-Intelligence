@@ -1,34 +1,104 @@
 \chapter{Future Work}\label{ch:future}
 
-Future extensions divide into three groups:
+The roadmap below is deliberately structured as \emph{four horizons of
+declining human-in-the-loop (HITL) involvement}.  Every horizon is
+admissible only when the previous one is measurably successful, and each
+horizon produces the training signal that unlocks the next one --- so the
+roadmap is a ladder from today's fully-supervised workflow to a
+Walmart-trained, mostly-autonomous replier.
 
-\section{Model-Level Extensions}
+\section{Four-Horizon Roadmap}\label{sec:future:roadmap}
+
+\definecolor{hzGreen}{HTML}{2E7D32}
+\definecolor{hzBlue}{HTML}{0071DC}
+\definecolor{hzPurple}{HTML}{6A1B9A}
+\definecolor{hzAmber}{HTML}{E65100}
+
+\renewcommand{\arraystretch}{1.35}
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}p{2.6cm} p{2.1cm} X@{}}
+\toprule
+\textbf{Horizon} & \textbf{HITL} & \textbf{Deliverable} \\
+\midrule
+\rowcolor{zebra}
+\textcolor{hzGreen}{\textbf{Now $\to$ 1 month}} &
+100\,\% &
+\textbf{Grow the gold set.}  Grow the labelled gold set to
+$\sim$500 posts using the HITL feedback the team is already producing;
+rerun 5-fold OOF to check the F1 delta. \\
+
+\textcolor{hzBlue}{\textbf{1 $\to$ 3 months}} &
+100\,\% &
+\textbf{Automate + go bilingual.}  Wire the monthly ModernBERT retrain
+into a Cron / Airflow job with an OOF-F1 promotion gate.  Add
+multi-language support (start with Hindi + English) --- taxonomy
+validated with native-speaker analysts. \\
+
+\rowcolor{zebra}
+\textcolor{hzPurple}{\textbf{3 $\to$ 6 months}} &
+$\sim$80\,\% &
+\textbf{Walmart-trained model + shared DB.}  Fine-tune Mistral 7B on
+our own posted-reply corpus $\to$ a Walmart-trained replier that drops
+the paid GPT-4o dependency, runs fully in-house, and can be self-hosted.
+Move the feedback table to a shared managed database so multiple
+analysts can work concurrently. \\
+
+\textcolor{hzAmber}{\textbf{6 $\to$ 12 months}} &
+$\sim$30\,\% $\to$ 0\,\% &
+\textbf{Confidence-gated auto-reply.}  Introduce a confidence gate on
+the reply generator: top-confidence drafts are queued for auto-send and
+the analyst only reviews the mid- and low-confidence tail.  As
+agreement stays high, gradually raise the auto-send threshold --- HITL
+winds down to sampling / audit only. \\
+\bottomrule
+\end{tabularx}
+\caption{Four-horizon roadmap: from today's fully-supervised HITL
+workflow to a Walmart-trained, mostly-autonomous replier.  Each row
+lists the target HITL involvement and the deliverable that unlocks the
+next horizon.}\label{tab:future:horizons}
+\end{table}
+\renewcommand{\arraystretch}{1.0}
+
+\paragraph{Guiding principle.}
+\emph{HITL is the ladder, not the ceiling} --- every stage produces the
+training signal that lets the next stage automate more.  A horizon is
+declared complete only when its OOF-F1 (for classification) or
+analyst-edit-distance (for replies) meets the promotion gate on a
+statistically meaningful sample; otherwise the horizon is extended
+rather than skipped.
+
+\section{Beyond the Four Horizons}\label{sec:future:beyond}
+
+The following items are on the wishlist but were deliberately excluded
+from the four horizons above because they lack a clear next step
+grounded in the current pipeline.  They are documented here for
+completeness and to give reviewers a sense of the design space we chose
+\emph{not} to commit to.
+
+\subsection*{Model-Level Extensions}
 \begin{itemize}
 \item Train a joint sentiment + aspect head with a shared encoder to reduce
-      inference cost by a further $\sim$30\%.
+      inference cost by a further $\sim$30\,\%.
 \item Distil ModernBERT into a $\sim$50M-parameter student for CPU-only
       inference at the edge.
 \item Add reasoning-augmented VLM captioning (LLaVA-Next 1.6B or SmolVLM) to
       the vision layer.
 \end{itemize}
 
-\section{Product-Level Extensions}
+\subsection*{Product-Level Extensions}
 \begin{itemize}
-\item Auto-reply confidence gate: promote LLM drafts from ``suggested'' to
-      ``queued for send'' when analyst edit-distance falls below a
-      threshold on the past 200 posts.
 \item Predictive P1 forecast: seasonal-decomposition on daily P1 counts to
       forecast alert volume 24--48 hours ahead.
-\item Bilingual (Hindi + English) taxonomy validated against Indian retail
-      communities.
+\item Extend the ingestion set to Twitter / X, YouTube comments, and
+      app-store reviews.
 \end{itemize}
 
-\section{Operational Extensions}
+\subsection*{Operational Extensions}
 \begin{itemize}
-\item Deploy the pipeline as a scheduled Kubernetes CronJob backed by a
-      managed Postgres instance for multi-analyst concurrency.
+\item Deploy the pipeline as a scheduled Kubernetes CronJob backed by the
+      shared managed database introduced in horizon three.
 \item Integrate with Walmart's internal ticketing so P1 alerts open cases
       directly.
-\item Extend the ingestion set to Twitter/X, YouTube comments, and app-store
-      reviews.
 \end{itemize}

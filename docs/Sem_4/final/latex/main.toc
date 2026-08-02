@@ -45,9 +45,9 @@
 \contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{38}{chapter.9}%
 \contentsline {section}{\numberline {9.1}Recommendations}{38}{section.9.1}%
 \contentsline {chapter}{\numberline {10}Future Work}{39}{chapter.10}%
-\contentsline {section}{\numberline {10.1}Model-Level Extensions}{39}{section.10.1}%
-\contentsline {section}{\numberline {10.2}Product-Level Extensions}{39}{section.10.2}%
-\contentsline {section}{\numberline {10.3}Operational Extensions}{39}{section.10.3}%
+\contentsline {section}{\numberline {10.1}Four-Horizon Roadmap}{39}{section.10.1}%
+\contentsline {paragraph}{Guiding principle.}{40}{section*.33}%
+\contentsline {section}{\numberline {10.2}Beyond the Four Horizons}{40}{section.10.2}%
 \contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{41}{appendix.A}%
 \contentsline {chapter}{\numberline {B}Reproduction Commands}{42}{appendix.B}%
 \contentsline {section}{\numberline {B.1}Source Code Repository}{42}{section.B.1}%
@@ -57,6 +57,6 @@
 \contentsline {section}{\numberline {B.5}Retrain sentiment model}{43}{section.B.5}%
 \contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{43}{section.B.6}%
 \contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{43}{section.B.7}%
-\contentsline {chapter}{References}{44}{section*.33}%
-\contentsline {chapter}{Glossary}{46}{appendix*.35}%
-\contentsline {chapter}{Checklist}{47}{appendix*.36}%
+\contentsline {chapter}{References}{44}{section*.38}%
+\contentsline {chapter}{Glossary}{46}{appendix*.40}%
+\contentsline {chapter}{Checklist}{47}{appendix*.41}%
