@@ -3,18 +3,18 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.1}{\ignorespaces Eight-aspect retail taxonomy.}}{16}{table.caption.12}%
+\contentsline {table}{\numberline {5.1}{\ignorespaces Eight-aspect retail taxonomy.}}{17}{table.caption.13}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {6.1}{\ignorespaces Sentiment model comparison (5-fold out-of-fold cross-validation).}}{35}{table.caption.27}%
-\contentsline {table}{\numberline {6.2}{\ignorespaces Per-length-bucket sentiment results (5-fold out-of-fold predictions).}}{35}{table.caption.28}%
-\contentsline {table}{\numberline {6.3}{\ignorespaces Vision module --- before vs after multi-pass anti-hallucination pipeline.}}{36}{table.caption.30}%
+\contentsline {table}{\numberline {6.1}{\ignorespaces Sentiment model comparison (5-fold out-of-fold cross-validation).}}{36}{table.caption.28}%
+\contentsline {table}{\numberline {6.2}{\ignorespaces Per-length-bucket sentiment results (5-fold out-of-fold predictions).}}{36}{table.caption.29}%
+\contentsline {table}{\numberline {6.3}{\ignorespaces Vision module --- before vs after multi-pass anti-hallucination pipeline.}}{37}{table.caption.31}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {7.1}{\ignorespaces Tools and technologies.}}{37}{table.caption.31}%
+\contentsline {table}{\numberline {7.1}{\ignorespaces Tools and technologies.}}{38}{table.caption.32}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {8.1}{\ignorespaces Problems encountered and mitigations.}}{38}{table.caption.32}%
+\contentsline {table}{\numberline {8.1}{\ignorespaces Problems encountered and mitigations.}}{39}{table.caption.33}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {10.1}{\ignorespaces Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon.}}{41}{table.caption.33}%
+\contentsline {table}{\numberline {10.1}{\ignorespaces Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon.}}{42}{table.caption.34}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {A.1}{\ignorespaces Curated subreddit coverage.}}{45}{table.caption.44}%
+\contentsline {table}{\numberline {A.1}{\ignorespaces Curated subreddit coverage.}}{46}{table.caption.45}%
 \addvspace {10\p@ }

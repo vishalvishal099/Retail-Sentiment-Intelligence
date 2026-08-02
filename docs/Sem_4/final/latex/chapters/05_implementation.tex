@@ -19,6 +19,20 @@ analysis; \S5.6 aggregates and routes; the analyst-facing UI documented
 in \S\S5.7--5.13 sits on top of these outputs.}\label{fig:ch5:pipeline}
 \end{figure}
 
+The Pipeline dashboard in Figure~\ref{fig:ui:pipeline} is the live counterpart
+of that overview: it shows the current run's stage progress, the ingestion
+funnel, media-type breakdown, source coverage, and the recent job history for
+the same six-stage flow.
+
+\begin{figure}[H]
+\centering\includegraphics[width=\linewidth,height=0.82\textheight,keepaspectratio]{ui/pipeline.png}
+\caption{Pipeline dashboard --- live view of the six-stage flow.  Top bar
+shows last-run status and stage progress (Ingest $\to$ Vision $\to$ Trust
+$\to$ Analyze $\to$ Aggregate); below are data-health signals, ingestion
+funnel, media-type breakdown, source coverage across the 25 subreddits,
+and the recent run history.}\label{fig:ui:pipeline}
+\end{figure}
+
 \section{Data Ingestion and Pre-processing}\label{sec:ingest}
 Ingestion runs on a scheduler that polls each subreddit's public RSS feed at
 a configurable cadence (default: hourly).  Historical dumps are pulled from

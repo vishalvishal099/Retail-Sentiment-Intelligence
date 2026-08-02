@@ -30,6 +30,7 @@ PAGES = [
     # date-range dropdown before capture — the default "Today" filter often
     # shows an empty state on a freshly-seeded dev DB.
     ("/",              "brand_health",         True),
+    ("/pipeline",      "pipeline",             True),
     ("/alerts",        "alert_feed",           True),
     ("/posts",         "post_explorer",        False),   # explorer defaults to a wider window
     ("/review",        "review_validate",      True),
