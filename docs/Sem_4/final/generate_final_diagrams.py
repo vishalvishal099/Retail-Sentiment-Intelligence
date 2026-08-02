@@ -49,10 +49,10 @@ def _diamond(ax, x, y, w, h, text, *, face=YELLOW, edge=NAVY, fontsize=8.5):
 
 
 def _arrow(ax, x1, y1, x2, y2, color=NAVY, lw=1.5, label=None,
-           label_off=(0.0, 0.12), rad=0.0):
+           label_off=(0.0, 0.12), rad=0.0, linestyle="-"):
     ax.add_patch(FancyArrowPatch(
         (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=13,
-        linewidth=lw, color=color,
+        linewidth=lw, color=color, linestyle=linestyle,
         connectionstyle=f"arc3,rad={rad}"))
     if label:
         mx, my = (x1 + x2) / 2 + label_off[0], (y1 + y2) / 2 + label_off[1]
@@ -498,33 +498,40 @@ def fig13_alert_routing():
     ax.set_ylim(0, 7)
     ax.axis("off")
 
-    _box(ax, 0.4, 5.4, 3.0, 1.1, "analyses +\naggregates", face=SKY, fontsize=9)
-    _box(ax, 0.4, 3.4, 3.0, 1.4,
-         "Alert engine\nspike > 2σ ·\nsentiment drop > 0.3", face=YELLOW, fontsize=8.6)
-    _arrow(ax, 1.9, 5.4, 1.9, 4.8, color=NAVY)
+    # ── Linear pipeline on the left (analyses → engine → P1/P2) ────────────
+    _box(ax, 0.3, 3.2, 2.4, 1.5, "analyses +\naggregates",
+         face=SKY, fontsize=9)
+    _box(ax, 2.9, 3.2, 2.4, 1.5,
+         "Alert engine\nspike > 2σ ·\nsentiment drop > 0.3",
+         face=YELLOW, fontsize=8.4)
+    _diamond(ax, 5.5, 3.15, 2.6, 1.6, "P1 / P2\nclassify", face=SKY, fontsize=9.5)
+    _arrow(ax, 2.7, 3.95, 2.9, 3.95, color=NAVY, lw=1.8)
+    _arrow(ax, 5.3, 3.95, 5.5, 3.95, color=NAVY, lw=1.8)
 
-    _diamond(ax, 4.2, 3.4, 3.2, 1.6, "P1 / P2\nclassify", face=SKY, fontsize=9)
-    _arrow(ax, 3.4, 4.1, 4.2, 4.2, color=NAVY)
-
-    _box(ax, 8.0, 5.2, 6.6, 1.2,
-         "Live Alert Feed (WebSocket push → dashboard)",
+    # ── Push channel (top-right): P1/P2 → Live Alert Feed ──────────────────
+    _box(ax, 9.0, 5.4, 5.7, 1.05,
+         "Live Alert Feed\n(WebSocket push → dashboard)",
          face=GREEN, edge=NAVY, fontsize=9)
-    _arrow(ax, 7.4, 4.6, 8.0, 5.4, color=GREEN, lw=1.6)
+    _arrow(ax, 7.3, 4.55, 9.0, 5.75, color=GREEN, lw=1.8,
+           label="push", label_off=(0.0, 0.25))
 
-    _box(ax, 8.0, 3.2, 3.1, 1.5,
-         "Notification groups\n(subreddit-owned:\nemail DL · Slack ·\npriority filter)", face=SKY, fontsize=8.2)
-    _arrow(ax, 7.4, 4.0, 8.0, 3.95, color=NAVY)
+    # ── Analyst click drops from Live Alert Feed into the resolution flow ──
+    _box(ax, 9.0, 3.35, 5.7, 1.30,
+         "One-click resolution flow\nPost Explorer → Review & Validate → Lifecycle",
+         face=NAVY, edge=NAVY, text_color=WHITE, fontsize=9)
+    _arrow(ax, 11.85, 5.4, 11.85, 4.65, color=GREEN, lw=1.6, linestyle="--",
+           label="analyst click", label_off=(-0.85, 0.0))
 
-    _box(ax, 11.5, 3.2, 3.1, 1.5,
-         "Dispatch:\nEmail / Slack\n+ audit log\n(dry-run mode)", face=LIGHT, edge=NAVY, fontsize=8.2)
-    _arrow(ax, 11.1, 3.95, 11.5, 3.95, color=NAVY, lw=1.6)
-
-    _box(ax, 4.2, 1.1, 7.0, 1.0,
-         "One-click from feed → Post Explorer → Review & Validate → Lifecycle",
-         face=NAVY, edge=NAVY, text_color=WHITE, fontsize=8.8)
-    # Route curved arrow around Notification groups (which sits at x=8.0..11.1, y=3.2..4.7)
-    # instead of straight through it.
-    _arrow(ax, 8.0, 5.2, 4.2, 2.1, color=GREEN, lw=1.6, rad=-0.35)
+    # ── Route channel (bottom-right): P1/P2 → Notification groups → Dispatch
+    _box(ax, 9.0, 1.30, 2.7, 1.55,
+         "Notification groups\nsubreddit-owned:\nemail DL · Slack ·\npriority filter",
+         face=SKY, fontsize=8.4)
+    _box(ax, 12.0, 1.30, 2.7, 1.55,
+         "Dispatch\nEmail / Slack\n+ audit log\n(dry-run mode)",
+         face=LIGHT, edge=NAVY, fontsize=8.4)
+    _arrow(ax, 7.3, 3.35, 9.0, 2.30, color=NAVY, lw=1.8,
+           label="route", label_off=(0.05, -0.30))
+    _arrow(ax, 11.7, 2.07, 12.0, 2.07, color=NAVY, lw=1.8)
 
     _title(ax, "Figure 13 — Alert Engine and Group-Based Notification Routing")
     fig.tight_layout()
