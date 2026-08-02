@@ -17,15 +17,16 @@
 \contentsline {figure}{\numberline {5.10}{\ignorespaces Brand Health --- sentiment gauge, distribution donut, volume trend and priority breakdown driven by the daily aggregates.}}{23}{figure.caption.18}%
 \contentsline {figure}{\numberline {5.11}{\ignorespaces Human-in-the-loop Review \& Validate flow.}}{25}{figure.caption.19}%
 \contentsline {figure}{\numberline {5.12}{\ignorespaces Review \& Validate queue --- posts flagged by the model land here; analysts re-label sentiment/aspects and either compose a reply or resolve in place. Corrections are POSTed to the endpoint in Listing~\ref {lst:review}.}}{26}{figure.caption.20}%
-\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- dual-draft with few-shot.}}{28}{figure.caption.21}%
-\contentsline {figure}{\numberline {5.14}{\ignorespaces Feedback learning loop and path to auto-reply.}}{29}{figure.caption.22}%
-\contentsline {figure}{\numberline {5.15}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{30}{figure.caption.23}%
-\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Lifecycle Kanban workflow.}}{31}{figure.caption.24}%
-\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{32}{figure.caption.25}%
-\contentsline {figure}{\numberline {5.18}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{33}{figure.caption.26}%
-\contentsline {figure}{\numberline {5.19}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{34}{figure.caption.27}%
+\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- triple-draft with few-shot.}}{28}{figure.caption.21}%
+\contentsline {figure}{\numberline {5.14}{\ignorespaces Smart Reply Composer in action on a negative r/instacart post. \emph {Advanced} is expanded (aspect override + trust slider); \emph {Generate Drafts} has produced Draft~A (GPT-4o), Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer, content-aware); the selected draft populates the editable reply box; an internal action note is generated alongside for the Lifecycle board.}}{29}{figure.caption.22}%
+\contentsline {figure}{\numberline {5.15}{\ignorespaces Feedback learning loop and path to auto-reply.}}{30}{figure.caption.23}%
+\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{31}{figure.caption.24}%
+\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle Kanban workflow.}}{32}{figure.caption.25}%
+\contentsline {figure}{\numberline {5.18}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{33}{figure.caption.26}%
+\contentsline {figure}{\numberline {5.19}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{34}{figure.caption.27}%
+\contentsline {figure}{\numberline {5.20}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{35}{figure.caption.28}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{37}{figure.caption.30}%
+\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{38}{figure.caption.31}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }

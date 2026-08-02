@@ -88,7 +88,83 @@ def main() -> None:
             page.screenshot(path=str(out), full_page=True)
             _crop_to_max_aspect(out)
             print(f"   wrote {out}  ({out.stat().st_size // 1024} KB)")
+
+        _capture_smart_reply(page)
         browser.close()
+
+
+def _capture_smart_reply(page) -> None:
+    """Capture the Smart Reply Composer on a negative-sentiment review card.
+
+    Workflow the analyst actually performs:
+      1. Open /review?sentiment=negative so 'Generate Drafts' is allowed
+         (the backend rejects non-negative posts).
+      2. On the first eligible card, expand the 'Advanced' section so the
+         aspect + trust-override controls are visible.
+      3. Click 'Generate Drafts' and wait for GPT-4o + Mistral + Smart
+         Composer drafts to render.
+      4. Screenshot just that card so the composer fills the frame.
+    """
+    name = "smart_reply_composer"
+    url = f"{BASE}/review?sentiment=negative"
+    print(f"→ {name}  ({url})")
+    page.goto(url, wait_until="networkidle", timeout=30_000)
+    page.wait_for_timeout(1500)
+
+    # Pin the first eligible card as an ELEMENT HANDLE so the reference stays
+    # stable after React re-renders. A live locator would re-evaluate and
+    # match the *next* card once ours flips out of the 'Generate Drafts' state.
+    card_locator = page.locator(".rounded-2xl.shadow-card").filter(
+        has=page.locator("button", has_text="Generate Drafts")
+    )
+    if card_locator.count() == 0:
+        print("   (no eligible card found — skipped)")
+        return
+    card = card_locator.first.element_handle()
+    if card is None:
+        print("   (could not resolve card handle — skipped)")
+        return
+    card.scroll_into_view_if_needed()
+    page.wait_for_timeout(400)
+
+    # Expand 'Advanced' inside THIS card.
+    advanced = card.query_selector('button:has-text("Advanced")')
+    if advanced:
+        try:
+            advanced.click()
+            page.wait_for_timeout(400)
+            print("   opened Advanced panel")
+        except Exception as exc:
+            print(f"   (Advanced toggle skipped: {exc})")
+
+    # Trigger draft generation from THIS card.
+    gen_btn = card.query_selector('button:has-text("Generate Drafts")')
+    if gen_btn is None:
+        print("   (Generate Drafts button vanished — skipped)")
+        return
+    print("   clicking 'Generate Drafts' (Ollama + gateway may take ~10-20 s)...")
+    gen_btn.click()
+
+    # Poll THIS card's button text until it flips to 'Regenerate Both'.
+    for _ in range(60):
+        page.wait_for_timeout(1000)
+        regen = card.query_selector('button:has-text("Regenerate Both")')
+        if regen is not None:
+            print("   all three drafts rendered")
+            break
+    else:
+        print("   (timed out waiting for drafts — capturing anyway)")
+    page.wait_for_timeout(1200)   # let the drafts settle into their boxes
+
+    card.scroll_into_view_if_needed()
+    page.wait_for_timeout(400)
+    out = OUT / f"{name}.png"
+    try:
+        card.screenshot(path=str(out))
+    except Exception:
+        page.screenshot(path=str(out), full_page=True)
+        _crop_to_max_aspect(out)
+    print(f"   wrote {out}  ({out.stat().st_size // 1024} KB)")
 
 
 if __name__ == "__main__":

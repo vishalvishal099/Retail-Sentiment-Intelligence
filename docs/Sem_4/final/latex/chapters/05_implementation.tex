@@ -556,7 +556,28 @@ def draft_reply(post_id: str, payload: dict | None = None):
 
 \begin{figure}[H]
 \centering\includegraphics[width=\linewidth]{fig6_reply_cascade}
-\caption{Smart Reply Composer --- dual-draft with few-shot.}\label{fig:reply}
+\caption{Smart Reply Composer --- triple-draft with few-shot.}\label{fig:reply}
+\end{figure}
+
+The rendered composer is shown in Figure~\ref{fig:ui:reply}.  For every
+negative post the analyst clicks \emph{Advanced} (revealing the aspect
+override and trust slider) and then \emph{Generate Drafts}; the endpoint
+above returns three candidate replies side-by-side --- Draft A from GPT-4o
+via the Walmart LLM Gateway, Draft B from a locally-hosted Mistral 7B on
+Ollama, and Draft C from a deterministic content-aware Smart Composer ---
+along with an internal action note that later appears on the Lifecycle
+board.  The analyst selects one, edits it inline in \emph{Your Reply},
+and posts either to the Reddit dry-run gate or straight to the audit log.
+
+\begin{figure}[H]
+\centering\includegraphics[width=\linewidth,height=0.85\textheight,keepaspectratio]{ui/smart_reply_composer.png}
+\caption{Smart Reply Composer in action on a negative
+r/instacart post.  \emph{Advanced} is expanded (aspect override +
+trust slider); \emph{Generate Drafts} has produced Draft~A (GPT-4o),
+Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer,
+content-aware); the selected draft populates the editable reply box;
+an internal action note is generated alongside for the Lifecycle
+board.}\label{fig:ui:reply}
 \end{figure}
 
 \section{Learning Loop --- Feedback for Future Retraining}\label{sec:loop}

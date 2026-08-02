@@ -130,107 +130,109 @@
 \newlabel{sec:reply}{{5.9}{27}{Smart Reply Composer --- Dual-Draft (Rule + LLM)}{section.5.9}{}}
 \newlabel{lst:reply}{{5.8}{27}{Dual-draft reply endpoint (rule + LLM, few-shot from posted replies) ({\tt src/dashboard/api.py})}{lstlisting.5.8}{}}
 \@writefile{lol}{\contentsline {lstlisting}{\numberline {5.8}{\ignorespaces Dual-draft reply endpoint (rule + LLM, few-shot from posted replies) ({\tt  src/dashboard/api.py}).}}{27}{lstlisting.5.8}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- dual-draft with few-shot.}}{28}{figure.caption.21}\protected@file@percent }
-\newlabel{fig:reply}{{5.13}{28}{Smart Reply Composer --- dual-draft with few-shot}{figure.caption.21}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.10}Learning Loop --- Feedback for Future Retraining}{28}{section.5.10}\protected@file@percent }
-\newlabel{sec:loop}{{5.10}{28}{Learning Loop --- Feedback for Future Retraining}{section.5.10}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.14}{\ignorespaces Feedback learning loop and path to auto-reply.}}{29}{figure.caption.22}\protected@file@percent }
-\newlabel{fig:loop}{{5.14}{29}{Feedback learning loop and path to auto-reply}{figure.caption.22}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.11}Post Explorer and Multi-Facet Search}{29}{section.5.11}\protected@file@percent }
-\newlabel{sec:explore}{{5.11}{29}{Post Explorer and Multi-Facet Search}{section.5.11}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.15}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{30}{figure.caption.23}\protected@file@percent }
-\newlabel{fig:ui:posts}{{5.15}{30}{Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text}{figure.caption.23}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.12}Post Lifecycle (Kanban Workflow)}{31}{section.5.12}\protected@file@percent }
-\newlabel{sec:kanban}{{5.12}{31}{Post Lifecycle (Kanban Workflow)}{section.5.12}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Lifecycle Kanban workflow.}}{31}{figure.caption.24}\protected@file@percent }
-\newlabel{fig:kanban}{{5.16}{31}{Post Lifecycle Kanban workflow}{figure.caption.24}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{32}{figure.caption.25}\protected@file@percent }
-\newlabel{fig:ui:kanban}{{5.17}{32}{Post Lifecycle --- Kanban board with SLA timestamps for every transition}{figure.caption.25}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.13}Insights and Competitor Analysis}{32}{section.5.13}\protected@file@percent }
-\newlabel{sec:insights}{{5.13}{32}{Insights and Competitor Analysis}{section.5.13}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.18}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{33}{figure.caption.26}\protected@file@percent }
-\newlabel{fig:ui:insights}{{5.18}{33}{Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities}{figure.caption.26}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.19}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{34}{figure.caption.27}\protected@file@percent }
-\newlabel{fig:ui:notif}{{5.19}{34}{Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}}{figure.caption.27}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.14}Storage Layer}{34}{section.5.14}\protected@file@percent }
-\newlabel{sec:storage}{{5.14}{34}{Storage Layer}{section.5.14}{}}
-\newlabel{lst:storage}{{5.9}{34}{SQLite schema mirroring the Cosmos DB partition design ({\tt src/storage/store.py})}{lstlisting.5.9}{}}
-\@writefile{lol}{\contentsline {lstlisting}{\numberline {5.9}{\ignorespaces SQLite schema mirroring the Cosmos DB partition design ({\tt  src/storage/store.py}).}}{34}{lstlisting.5.9}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {6}Evaluation and Results}{36}{chapter.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5.13}{\ignorespaces Smart Reply Composer --- triple-draft with few-shot.}}{28}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:reply}{{5.13}{28}{Smart Reply Composer --- triple-draft with few-shot}{figure.caption.21}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.14}{\ignorespaces Smart Reply Composer in action on a negative r/instacart post. \emph  {Advanced} is expanded (aspect override + trust slider); \emph  {Generate Drafts} has produced Draft~A (GPT-4o), Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer, content-aware); the selected draft populates the editable reply box; an internal action note is generated alongside for the Lifecycle board.}}{29}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:ui:reply}{{5.14}{29}{Smart Reply Composer in action on a negative r/instacart post. \emph {Advanced} is expanded (aspect override + trust slider); \emph {Generate Drafts} has produced Draft~A (GPT-4o), Draft~B (Mistral 7B via Ollama), and Draft~C (Smart Composer, content-aware); the selected draft populates the editable reply box; an internal action note is generated alongside for the Lifecycle board}{figure.caption.22}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.10}Learning Loop --- Feedback for Future Retraining}{29}{section.5.10}\protected@file@percent }
+\newlabel{sec:loop}{{5.10}{29}{Learning Loop --- Feedback for Future Retraining}{section.5.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.15}{\ignorespaces Feedback learning loop and path to auto-reply.}}{30}{figure.caption.23}\protected@file@percent }
+\newlabel{fig:loop}{{5.15}{30}{Feedback learning loop and path to auto-reply}{figure.caption.23}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.11}Post Explorer and Multi-Facet Search}{30}{section.5.11}\protected@file@percent }
+\newlabel{sec:explore}{{5.11}{30}{Post Explorer and Multi-Facet Search}{section.5.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.16}{\ignorespaces Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text.}}{31}{figure.caption.24}\protected@file@percent }
+\newlabel{fig:ui:posts}{{5.16}{31}{Post Explorer --- multi-facet search over subreddit, aspect, sentiment, trust bucket, priority tier and free text}{figure.caption.24}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.12}Post Lifecycle (Kanban Workflow)}{32}{section.5.12}\protected@file@percent }
+\newlabel{sec:kanban}{{5.12}{32}{Post Lifecycle (Kanban Workflow)}{section.5.12}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.17}{\ignorespaces Post Lifecycle Kanban workflow.}}{32}{figure.caption.25}\protected@file@percent }
+\newlabel{fig:kanban}{{5.17}{32}{Post Lifecycle Kanban workflow}{figure.caption.25}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.18}{\ignorespaces Post Lifecycle --- Kanban board with SLA timestamps for every transition.}}{33}{figure.caption.26}\protected@file@percent }
+\newlabel{fig:ui:kanban}{{5.18}{33}{Post Lifecycle --- Kanban board with SLA timestamps for every transition}{figure.caption.26}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.13}Insights and Competitor Analysis}{33}{section.5.13}\protected@file@percent }
+\newlabel{sec:insights}{{5.13}{33}{Insights and Competitor Analysis}{section.5.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.19}{\ignorespaces Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities.}}{34}{figure.caption.27}\protected@file@percent }
+\newlabel{fig:ui:insights}{{5.19}{34}{Insights \& Competitor --- aspect-level negative-share for Walmart vs.\ curated competitor communities}{figure.caption.27}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.20}{\ignorespaces Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}.}}{35}{figure.caption.28}\protected@file@percent }
+\newlabel{fig:ui:notif}{{5.20}{35}{Notification centre --- in-app mirror of the email digest; sourced from the same alert rows that drive Figure~\ref {fig:ui:alerts}}{figure.caption.28}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.14}Storage Layer}{35}{section.5.14}\protected@file@percent }
+\newlabel{sec:storage}{{5.14}{35}{Storage Layer}{section.5.14}{}}
+\newlabel{lst:storage}{{5.9}{35}{SQLite schema mirroring the Cosmos DB partition design ({\tt src/storage/store.py})}{lstlisting.5.9}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {5.9}{\ignorespaces SQLite schema mirroring the Cosmos DB partition design ({\tt  src/storage/store.py}).}}{35}{lstlisting.5.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {6}Evaluation and Results}{37}{chapter.6}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:eval}{{6}{36}{Evaluation and Results}{chapter.6}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.1}Sentiment Model Evaluation}{36}{section.6.1}\protected@file@percent }
-\newlabel{sec:senteval}{{6.1}{36}{Sentiment Model Evaluation}{section.6.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces Sentiment model comparison (5-fold out-of-fold cross-validation).}}{36}{table.caption.28}\protected@file@percent }
-\newlabel{tab:sent}{{6.1}{36}{Sentiment model comparison (5-fold out-of-fold cross-validation)}{table.caption.28}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces Per-length-bucket sentiment results (5-fold out-of-fold predictions).}}{36}{table.caption.29}\protected@file@percent }
-\newlabel{tab:sentlen}{{6.2}{36}{Per-length-bucket sentiment results (5-fold out-of-fold predictions)}{table.caption.29}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{37}{figure.caption.30}\protected@file@percent }
-\newlabel{fig:sentbar}{{6.1}{37}{Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT}{figure.caption.30}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.2}Vision Module Evaluation}{37}{section.6.2}\protected@file@percent }
-\newlabel{sec:viseval}{{6.2}{37}{Vision Module Evaluation}{section.6.2}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.3}{\ignorespaces Vision module --- before vs after multi-pass anti-hallucination pipeline.}}{37}{table.caption.31}\protected@file@percent }
-\newlabel{tab:vision}{{6.3}{37}{Vision module --- before vs after multi-pass anti-hallucination pipeline}{table.caption.31}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.3}Trust-Score Behaviour}{37}{section.6.3}\protected@file@percent }
-\newlabel{sec:trusteval}{{6.3}{37}{Trust-Score Behaviour}{section.6.3}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {7}Tools, Technologies, and Configuration}{38}{chapter.7}\protected@file@percent }
+\newlabel{ch:eval}{{6}{37}{Evaluation and Results}{chapter.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.1}Sentiment Model Evaluation}{37}{section.6.1}\protected@file@percent }
+\newlabel{sec:senteval}{{6.1}{37}{Sentiment Model Evaluation}{section.6.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces Sentiment model comparison (5-fold out-of-fold cross-validation).}}{37}{table.caption.29}\protected@file@percent }
+\newlabel{tab:sent}{{6.1}{37}{Sentiment model comparison (5-fold out-of-fold cross-validation)}{table.caption.29}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces Per-length-bucket sentiment results (5-fold out-of-fold predictions).}}{37}{table.caption.30}\protected@file@percent }
+\newlabel{tab:sentlen}{{6.2}{37}{Per-length-bucket sentiment results (5-fold out-of-fold predictions)}{table.caption.30}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6.1}{\ignorespaces Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT.}}{38}{figure.caption.31}\protected@file@percent }
+\newlabel{fig:sentbar}{{6.1}{38}{Sentiment macro-F1 --- baseline RoBERTa vs fine-tuned ModernBERT}{figure.caption.31}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.2}Vision Module Evaluation}{38}{section.6.2}\protected@file@percent }
+\newlabel{sec:viseval}{{6.2}{38}{Vision Module Evaluation}{section.6.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.3}{\ignorespaces Vision module --- before vs after multi-pass anti-hallucination pipeline.}}{38}{table.caption.32}\protected@file@percent }
+\newlabel{tab:vision}{{6.3}{38}{Vision module --- before vs after multi-pass anti-hallucination pipeline}{table.caption.32}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.3}Trust-Score Behaviour}{38}{section.6.3}\protected@file@percent }
+\newlabel{sec:trusteval}{{6.3}{38}{Trust-Score Behaviour}{section.6.3}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {7}Tools, Technologies, and Configuration}{39}{chapter.7}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:tools}{{7}{38}{Tools, Technologies, and Configuration}{chapter.7}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {7.1}{\ignorespaces Tools and technologies.}}{38}{table.caption.32}\protected@file@percent }
-\newlabel{tab:tools}{{7.1}{38}{Tools and technologies}{table.caption.32}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {7.1}Configuration}{38}{section.7.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {8}Problems Encountered and Mitigations}{39}{chapter.8}\protected@file@percent }
+\newlabel{ch:tools}{{7}{39}{Tools, Technologies, and Configuration}{chapter.7}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7.1}{\ignorespaces Tools and technologies.}}{39}{table.caption.33}\protected@file@percent }
+\newlabel{tab:tools}{{7.1}{39}{Tools and technologies}{table.caption.33}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7.1}Configuration}{39}{section.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {8}Problems Encountered and Mitigations}{40}{chapter.8}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:problems}{{8}{39}{Problems Encountered and Mitigations}{chapter.8}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {8.1}{\ignorespaces Problems encountered and mitigations.}}{39}{table.caption.33}\protected@file@percent }
-\newlabel{tab:problems}{{8.1}{39}{Problems encountered and mitigations}{table.caption.33}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{40}{chapter.9}\protected@file@percent }
+\newlabel{ch:problems}{{8}{40}{Problems Encountered and Mitigations}{chapter.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8.1}{\ignorespaces Problems encountered and mitigations.}}{40}{table.caption.34}\protected@file@percent }
+\newlabel{tab:problems}{{8.1}{40}{Problems encountered and mitigations}{table.caption.34}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{41}{chapter.9}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:concl}{{9}{40}{Conclusions and Recommendations}{chapter.9}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {9.1}Recommendations}{40}{section.9.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {10}Future Work}{41}{chapter.10}\protected@file@percent }
+\newlabel{ch:concl}{{9}{41}{Conclusions and Recommendations}{chapter.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9.1}Recommendations}{41}{section.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {10}Future Work}{42}{chapter.10}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:future}{{10}{41}{Future Work}{chapter.10}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {10.1}Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{41}{section.10.1}\protected@file@percent }
-\newlabel{sec:future:hitl}{{10.1}{41}{Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{section.10.1}{}}
-\@writefile{toc}{\contentsline {paragraph}{Guiding principle.}{41}{section*.35}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {10.1}{\ignorespaces Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon.}}{42}{table.caption.34}\protected@file@percent }
-\newlabel{tab:future:horizons}{{10.1}{42}{Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon}{table.caption.34}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {10.2}Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{42}{section.10.2}\protected@file@percent }
-\newlabel{sec:future:multilingual}{{10.2}{42}{Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{section.10.2}{}}
-\@writefile{toc}{\contentsline {paragraph}{Why now.}{42}{section*.36}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Concrete deliverables.}{42}{section*.37}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{How this track ties into Track 1.}{43}{section*.38}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {10.3}Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{43}{section.10.3}\protected@file@percent }
-\newlabel{sec:future:multiplatform}{{10.3}{43}{Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{section.10.3}{}}
-\@writefile{toc}{\contentsline {paragraph}{Why now.}{43}{section*.39}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Concrete deliverables.}{44}{section*.40}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Known risks.}{44}{section*.41}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {10.4}Beyond the Three Tracks}{44}{section.10.4}\protected@file@percent }
-\newlabel{sec:future:beyond}{{10.4}{44}{Beyond the Three Tracks}{section.10.4}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{46}{appendix.A}\protected@file@percent }
+\newlabel{ch:future}{{10}{42}{Future Work}{chapter.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10.1}Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{42}{section.10.1}\protected@file@percent }
+\newlabel{sec:future:hitl}{{10.1}{42}{Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{section.10.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Guiding principle.}{42}{section*.36}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10.1}{\ignorespaces Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon.}}{43}{table.caption.35}\protected@file@percent }
+\newlabel{tab:future:horizons}{{10.1}{43}{Track 1 --- Four-horizon HITL reduction roadmap. Each row lists the target HITL involvement and the deliverable that unlocks the next horizon}{table.caption.35}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10.2}Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{43}{section.10.2}\protected@file@percent }
+\newlabel{sec:future:multilingual}{{10.2}{43}{Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{section.10.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why now.}{43}{section*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Concrete deliverables.}{43}{section*.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{How this track ties into Track 1.}{44}{section*.39}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10.3}Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{44}{section.10.3}\protected@file@percent }
+\newlabel{sec:future:multiplatform}{{10.3}{44}{Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{section.10.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why now.}{44}{section*.40}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Concrete deliverables.}{45}{section*.41}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Known risks.}{45}{section*.42}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10.4}Beyond the Three Tracks}{45}{section.10.4}\protected@file@percent }
+\newlabel{sec:future:beyond}{{10.4}{45}{Beyond the Three Tracks}{section.10.4}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{47}{appendix.A}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{app:sub}{{A}{46}{Curated Subreddit Coverage}{appendix.A}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {A.1}{\ignorespaces Curated subreddit coverage.}}{46}{table.caption.45}\protected@file@percent }
-\newlabel{tab:sub}{{A.1}{46}{Curated subreddit coverage}{table.caption.45}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {B}Reproduction Commands}{47}{appendix.B}\protected@file@percent }
+\newlabel{app:sub}{{A}{47}{Curated Subreddit Coverage}{appendix.A}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {A.1}{\ignorespaces Curated subreddit coverage.}}{47}{table.caption.46}\protected@file@percent }
+\newlabel{tab:sub}{{A.1}{47}{Curated subreddit coverage}{table.caption.46}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {B}Reproduction Commands}{48}{appendix.B}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{app:repro}{{B}{47}{Reproduction Commands}{appendix.B}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {B.1}Source Code Repository}{47}{section.B.1}\protected@file@percent }
-\newlabel{sec:repo}{{B.1}{47}{Source Code Repository}{section.B.1}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {B.2}Environment}{47}{section.B.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.3}Full pipeline}{47}{section.B.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.4}Regenerate figures}{48}{section.B.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.5}Retrain sentiment model}{48}{section.B.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{48}{section.B.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{48}{section.B.7}\protected@file@percent }
+\newlabel{app:repro}{{B}{48}{Reproduction Commands}{appendix.B}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B.1}Source Code Repository}{48}{section.B.1}\protected@file@percent }
+\newlabel{sec:repo}{{B.1}{48}{Source Code Repository}{section.B.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B.2}Environment}{48}{section.B.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.3}Full pipeline}{48}{section.B.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.4}Regenerate figures}{49}{section.B.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.5}Retrain sentiment model}{49}{section.B.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{49}{section.B.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{49}{section.B.7}\protected@file@percent }
 \bibstyle{ieeetr}
 \bibdata{refs}
 \bibcite{devlin2019bert}{{1}{}{{}}{{}}}
@@ -246,13 +248,13 @@
 \bibcite{selfcheck2023}{{11}{}{{}}{{}}}
 \bibcite{ott2011finding}{{12}{}{{}}{{}}}
 \bibcite{akoglu2013opinion}{{13}{}{{}}{{}}}
-\@writefile{toc}{\contentsline {chapter}{References}{49}{section*.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{References}{50}{section*.47}\protected@file@percent }
 \bibcite{zhao2023detect}{{14}{}{{}}{{}}}
-\@writefile{toc}{\contentsline {chapter}{Glossary}{51}{appendix*.48}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{Glossary}{52}{appendix*.49}\protected@file@percent }
 \gdef \LT@ii {\LT@entry 
     {1}{32.09296pt}\LT@entry 
     {1}{299.03584pt}\LT@entry 
     {1}{44.43164pt}}
-\@writefile{toc}{\contentsline {chapter}{Checklist}{52}{appendix*.49}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{Checklist}{53}{appendix*.50}\protected@file@percent }
 \providecommand\NAT@force@numbers{}\NAT@force@numbers
-\gdef \@abspage@last{64}
+\gdef \@abspage@last{65}

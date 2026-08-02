@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 15:19
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2026.2.7)  2 AUG 2026 15:40
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -867,39 +867,44 @@ File: ../figures/ui/review_validate.png Graphic file (type bmp)
 [27]
 File: figures/fig6_reply_cascade.png Graphic file (type bmp)
 <figures/fig6_reply_cascade.png>
+File: ../figures/ui/smart_reply_composer.png Graphic file (type bmp)
+<../figures/ui/smart_reply_composer.png>
+
+
+[28]
 File: figures/fig7_learning_loop.png Graphic file (type bmp)
 <figures/fig7_learning_loop.png>
 
 
-[28]
+[29]
 File: ../figures/ui/post_explorer.png Graphic file (type bmp)
 <../figures/ui/post_explorer.png>
 
 
-[29]
-
 [30]
+
+[31]
 File: figures/fig8_lifecycle_kanban.png Graphic file (type bmp)
 <figures/fig8_lifecycle_kanban.png>
 File: ../figures/ui/lifecycle_kanban.png Graphic file (type bmp)
 <../figures/ui/lifecycle_kanban.png>
 
 
-[31]
+[32]
 File: ../figures/ui/insights_competitor.png Graphic file (type bmp)
 <../figures/ui/insights_competitor.png>
 
 
-[32]
+[33]
 File: ../figures/ui/notifications.png Graphic file (type bmp)
 <../figures/ui/notifications.png>
 
 
-[33]
+[34]
 
-[34]) (./chapters/06_evaluation.tex
+[35]) (./chapters/06_evaluation.tex
 
-[35]
+[36]
 Chapter 6.
 
 Overfull \hbox (70.0041pt too wide) in paragraph at lines 33--38
@@ -910,11 +915,11 @@ File: figures/fig14_sentiment_results.png Graphic file (type bmp)
 <figures/fig14_sentiment_results.png>
 
 
-[36
+[37
 
 ]) (./chapters/07_tools.tex
 
-[37]
+[38]
 Chapter 7.
 ) (./chapters/08_problems.tex
 Overfull \hbox (1.04001pt too wide) in paragraph at lines 26--1
@@ -925,7 +930,7 @@ ig/models.yaml\TU/TimesNewRoman(0)/m/n/12 :
 
 
 
-[38
+[39
 
 ]
 Chapter 8.
@@ -946,13 +951,13 @@ Underfull \hbox (badness 1043) in paragraph at lines 23--23
 
 ) (./chapters/09_conclusions.tex
 
-[39
+[40
 
 ]
 Chapter 9.
 ) (./chapters/10_future.tex
 
-[40
+[41
 
 ]
 Chapter 10.
@@ -1025,11 +1030,11 @@ eindia \TU/TimesNewRoman(0)/m/n/12 — account for an estimated 30% of
 
 
 
-[41
+[42
 
 ]
 
-[42]
+[43]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 148.
@@ -1044,15 +1049,15 @@ Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 
 
 
-[43]
+[44]
 
-LaTeX Warning: Reference `sec:alerts' on page 44 undefined on input line 189.
+LaTeX Warning: Reference `sec:alerts' on page 45 undefined on input line 189.
 
 
 
-[44]) (./appendices/A_subreddits.tex
+[45]) (./appendices/A_subreddits.tex
 
-[45]
+[46]
 Appendix A.
 
 Underfull \hbox (badness 3803) in paragraph at lines 11--12
@@ -1068,7 +1073,7 @@ Asshole (retail-
 
 ) (./appendices/B_reproduction.tex
 
-[46
+[47
 
 ]
 Appendix B.
@@ -1086,7 +1091,7 @@ ite (:3003)[]
 
 
 
-[47
+[48
 
 ]
 Overfull \hbox (46.25533pt too wide) in paragraph at lines 40--40
@@ -1102,16 +1107,16 @@ _report.py[]
 
 )
 
-[48] (./main.bbl
+[49] (./main.bbl
 
-[49
+[50
 
 
 ]) (./frontmatter/glossary.tex
 
-[50]
+[51]
 
-[51
+[52
 
 ]) (./frontmatter/checklist.tex
 Underfull \hbox (badness 1107) in paragraph at lines 27--27
@@ -1121,7 +1126,7 @@ port,
 
 
 
-[52
+[53
 
 
 ])
@@ -1136,7 +1141,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 44--166
 
 
 
-[53] (./main.aux)
+[54] (./main.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -1146,15 +1151,15 @@ L3 programming layer <2025-01-18>
 LaTeX Warning: There were undefined references.
 
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 9FFCAD2630E25C14DA2F3B8D555491CD;12735.
+(rerunfilecheck)             Checksum: DBB40F6AF3932186D16917840AB5683C;12735.
  ) 
 Here is how much of TeX's memory you used:
- 16333 strings out of 475366
- 318015 string characters out of 5762340
+ 16347 strings out of 475366
+ 318570 string characters out of 5762340
  973615 words of memory out of 5000000
- 39006 multiletter control sequences out of 15000+600000
- 564211 words of font info for 108 fonts, out of 8000000 for 9000
+ 39018 multiletter control sequences out of 15000+600000
+ 564219 words of font info for 109 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
- 79i,14n,93p,530b,1800s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,14n,93p,541b,1800s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.pdf (64 pages).
+Output written on main.pdf (65 pages).
