@@ -213,42 +213,48 @@ def fig7_learning_loop():
     ax.set_ylim(0, 8)
     ax.axis("off")
 
-    _box(ax, 0.5, 6.4, 4.0, 1.1,
+    # ── Row 1  — Analyst approves + feedback table (centre spine) ──────────
+    _box(ax, 4.9, 6.5, 4.2, 1.1,
          "Analyst approves reply\n+ correction + action note",
          face=SKY, fontsize=9)
-    _arrow(ax, 4.5, 6.95, 5.4, 6.0, color=NAVY)
+    _box(ax, 4.9, 4.85, 4.2, 1.25,
+         "feedback table\n(post → approved reply, label,\naspects, model, action note)",
+         face=PURPLE, edge=NAVY, text_color=WHITE, fontsize=8.8)
+    _arrow(ax, 7.0, 6.5, 7.0, 6.1, color=NAVY, lw=1.8)
 
-    _box(ax, 5.4, 5.2, 3.4, 1.6,
-         "feedback table\n(post → approved reply,\nlabel, aspects, model,\naction note)",
-         face=PURPLE, edge=NAVY, text_color=WHITE, fontsize=8.6)
+    # ── Row 2  — Two immediate consumers of feedback (side-by-side) ────────
+    _box(ax, 0.4, 4.85, 4.0, 1.25,
+         "NEAR TERM\nFew-shot prompts\n(no training, tone improves)",
+         face=GREEN, fontsize=8.8)
+    _box(ax, 9.6, 4.85, 4.0, 1.25,
+         "MID TERM\nPeriodic ModernBERT\nre-calibration on new labels",
+         face=YELLOW, fontsize=8.8)
+    _arrow(ax, 4.9, 5.48, 4.4, 5.48, color=GREEN, lw=1.5)
+    _arrow(ax, 9.1, 5.48, 9.6, 5.48, color=NAVY,  lw=1.5)
 
-    # Near-term branch
-    _box(ax, 9.6, 6.4, 4.0, 1.1,
-         "NEAR TERM — few-shot prompts\n(no training, tone improves)",
-         face=GREEN, fontsize=8.6)
-    _arrow(ax, 8.8, 6.3, 9.6, 6.9, color=GREEN)
+    # ── Row 3  — Gate diamond (centre) ─────────────────────────────────────
+    _diamond(ax, 5.1, 2.85, 3.8, 1.5, "corpus ≈\n1 M pairs?", face=SKY, fontsize=9)
+    _arrow(ax, 7.0, 4.85, 7.0, 4.35, color=NAVY, lw=1.8)
 
-    _box(ax, 9.6, 4.7, 4.0, 1.1,
-         "Periodic ModernBERT\nre-calibration on new labels",
-         face=YELLOW, fontsize=8.6)
-    _arrow(ax, 8.8, 5.7, 9.6, 5.25, color=NAVY)
+    # ── Row 4  — "yes" branch (long term) and "no" loop back ───────────────
+    _box(ax, 9.6, 2.9, 4.0, 1.25,
+         "LONG TERM\nFine-tune Mistral 7B\non Walmart post→reply data",
+         face=RED, edge=NAVY, text_color=WHITE, fontsize=8.8)
+    _arrow(ax, 8.9, 3.55, 9.6, 3.55, color=RED, lw=1.8,
+           label="yes", label_off=(0.0, 0.25))
 
-    # Long-term branch
-    _diamond(ax, 5.2, 2.7, 3.8, 1.6, "corpus ≈\n1M pairs?", face=SKY, fontsize=8.5)
-    _arrow(ax, 7.1, 5.2, 7.1, 4.3, color=NAVY)
+    # 'No' branch — curved arrow loops from diamond LEFT side back UP to feedback table
+    _arrow(ax, 5.1, 3.55, 4.9, 5.05, color=GREY, lw=1.4, rad=-0.35,
+           label="no — keep collecting", label_off=(-1.4, -0.35))
 
-    _box(ax, 9.6, 2.9, 4.0, 1.1,
-         "LONG TERM — fine-tune Mistral\non Walmart post→reply data",
-         face=RED, edge=NAVY, text_color=WHITE, fontsize=8.6)
-    _arrow(ax, 9.0, 3.5, 9.6, 3.45, color=RED, label="yes", label_off=(0.1, 0.25))
-    _arrow(ax, 7.1, 2.7, 7.1, 2.1, color=GREY, label="keep collecting", label_off=(1.4, 0.0))
-
-    _box(ax, 9.6, 1.1, 4.0, 1.1,
+    # ── Row 5  — Final auto-reply mode (right column, below LONG TERM) ─────
+    _box(ax, 9.6, 1.05, 4.0, 1.25,
          "Supervised / auto-reply mode\nHITL reserved for hard cases",
-         face=NAVY, edge=NAVY, text_color=WHITE, fontsize=8.6)
-    _arrow(ax, 11.6, 2.9, 11.6, 2.2, color=RED, lw=1.8)
+         face=NAVY, edge=NAVY, text_color=WHITE, fontsize=8.8)
+    _arrow(ax, 11.6, 2.9, 11.6, 2.3, color=RED, lw=1.8)
 
-    ax.text(2.4, 0.6,
+    # Design-goal caption (bottom-left, doesn't collide with anything)
+    ax.text(0.4, 0.55,
             "Design goal: every human correction manufactures training data that "
             "progressively removes the HITL dependency.",
             ha="left", fontsize=8.5, color=GREY, style="italic")
