@@ -243,9 +243,10 @@ def fig7_learning_loop():
     _arrow(ax, 8.9, 3.55, 9.6, 3.55, color=RED, lw=1.8,
            label="yes", label_off=(0.0, 0.25))
 
-    # 'No' branch — curved arrow loops from diamond LEFT side back UP to feedback table
-    _arrow(ax, 5.1, 3.55, 4.9, 5.05, color=GREY, lw=1.4, rad=-0.35,
-           label="no — keep collecting", label_off=(-1.4, -0.35))
+    # 'No' branch — curved arrow loops from diamond's left tip back UP to the
+    # LEFT-EDGE MIDPOINT of the feedback table (avoids rounded-corner gap).
+    _arrow(ax, 5.10, 3.60, 5.00, 5.48, color=GREY, lw=1.6, rad=-0.35,
+           label="no — keep collecting", label_off=(-1.3, -0.55))
 
     # ── Row 5  — Final auto-reply mode (right column, below LONG TERM) ─────
     _box(ax, 9.6, 1.05, 4.0, 1.25,
