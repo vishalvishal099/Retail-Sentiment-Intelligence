@@ -2,7 +2,7 @@
 
 Writes four figures into docs/Sem_4/figures/ (same folder the report reads):
     fig5_review_validate_flow.png  - Human-in-the-Loop Review & Validate flow
-    fig6_reply_cascade.png         - Smart Reply Composer: dual-draft + LLM cascade + few-shot
+    fig6_reply_cascade.png         - Smart Reply Composer: triple-draft (GPT + Mistral + Smart) + few-shot
     fig7_learning_loop.png         - Feedback learning loop → future retraining (HITL removal)
     fig8_lifecycle_kanban.png      - Post Lifecycle Kanban states + close paths
 
@@ -137,67 +137,65 @@ def fig5_review_validate_flow():
 
 
 # ---------------------------------------------------------------------------
-# Figure 6 — Smart Reply Composer: dual-draft + LLM cascade + few-shot
+# Figure 6 — Smart Reply Composer: triple-draft + few-shot prompting
 # ---------------------------------------------------------------------------
 
 def fig6_reply_cascade():
-    fig, ax = plt.subplots(figsize=(11, 7.2))
+    fig, ax = plt.subplots(figsize=(11, 6.6))
     ax.set_xlim(0, 14)
-    ax.set_ylim(0, 9)
+    ax.set_ylim(0, 8.5)
     ax.axis("off")
 
-    # Inputs
-    _box(ax, 0.4, 7.2, 4.2, 1.2,
+    # Inputs (top-left)
+    _box(ax, 0.4, 6.7, 4.6, 1.2,
          "Post text + aspects + subreddit\n+ vision caption (if image)",
          face=SKY, fontsize=9)
-    _box(ax, 0.4, 5.4, 4.2, 1.3,
-         "Few-shot exemplars\n(recent approved replies\nfrom feedback table)",
+    _box(ax, 0.4, 4.9, 4.6, 1.3,
+         "Few-shot exemplars\n(top-3 recent approved replies\nfrom feedback table)",
          face=PURPLE, edge=NAVY, text_color=WHITE, fontsize=8.8)
-    _arrow(ax, 4.6, 7.8, 5.6, 6.7, color=NAVY)
-    _arrow(ax, 4.6, 6.0, 5.6, 6.0, color=PURPLE, lw=1.8, label="injected", label_off=(0, 0.3))
 
-    # Composer hub
-    _box(ax, 5.6, 5.4, 2.6, 1.6, "Smart Reply\nComposer", face=YELLOW, fontsize=10)
+    # Composer hub (center)
+    _box(ax, 5.6, 5.4, 2.8, 1.9,
+         "Smart Reply\nComposer\n(one prompt)",
+         face=YELLOW, fontsize=10)
+    _arrow(ax, 5.0, 7.3, 5.6, 7.0, color=NAVY)
+    _arrow(ax, 5.0, 5.55, 5.6, 5.8, color=PURPLE, lw=1.8,
+           label="injected as\nexamples", label_off=(0, 0.55))
 
-    # Draft A — rule
-    _box(ax, 9.2, 7.4, 4.4, 1.1,
-         "Draft A — Rule composer\n(keyword pools · always available)",
-         face=GREEN, fontsize=8.8)
-    _arrow(ax, 8.2, 6.6, 9.2, 7.9, color=GREEN)
+    # Three draft engines (right column, top to bottom)
+    _box(ax, 9.4, 7.1, 4.2, 1.0,
+         "Draft A — GPT-4o  (Walmart Gateway)\nhighest-quality, ~$0.0002 / reply",
+         face=SKY, fontsize=8.6)
+    _box(ax, 9.4, 5.8, 4.2, 1.0,
+         "Draft B — Mistral 7B  (local Ollama)\nopen-weights, free, offline",
+         face=PURPLE, edge=NAVY, text_color=WHITE, fontsize=8.6)
+    _box(ax, 9.4, 4.5, 4.2, 1.0,
+         "Draft C — Smart Composer  (no LLM)\ndeterministic safety net",
+         face=GREEN, fontsize=8.6)
+    _arrow(ax, 8.4, 6.6, 9.4, 7.6, color=NAVY, lw=1.5)
+    _arrow(ax, 8.4, 6.3, 9.4, 6.3, color=NAVY, lw=1.5)
+    _arrow(ax, 8.4, 6.0, 9.4, 5.0, color=NAVY, lw=1.5)
 
-    # Draft B — cascade
-    _box(ax, 9.2, 5.5, 1.35, 1.1, "GPT-4o\ngateway", face=SKY, fontsize=8.3)
-    _box(ax, 10.75, 5.5, 1.35, 1.1, "Mistral 7B\n(Ollama)", face=SKY, fontsize=8.3)
-    _box(ax, 12.3, 5.5, 1.3, 1.1, "Smart\ntemplate", face=SKY, fontsize=8.3)
-    _arrow(ax, 8.2, 6.0, 9.2, 6.05, color=NAVY, label="Draft B", label_off=(0, 0.28))
-    _arrow(ax, 10.55, 6.05, 10.75, 6.05, color=RED, lw=1.3, label="fail", label_off=(0, 0.25))
-    _arrow(ax, 12.1, 6.05, 12.3, 6.05, color=RED, lw=1.3, label="fail", label_off=(0, 0.25))
-    ax.text(11.4, 4.9, "try in order → never fails closed", ha="center",
-            fontsize=8, color=GREY, style="italic")
-
-    # Action note
-    _box(ax, 9.2, 3.7, 4.4, 1.0,
-         "Internal Action Note (same cascade,\nlonger budget, lower temperature)",
-         face=LIGHT, edge=NAVY, fontsize=8.5)
-    _arrow(ax, 8.2, 5.6, 9.2, 4.2, color=GREY)
+    # Fallback annotation
+    ax.text(11.5, 3.9, "if slot A or B fails  →  slot falls back to Smart Composer  ([offline fallback] badge)",
+            ha="center", fontsize=8, color=GREY, style="italic")
 
     # Output to analyst
-    _box(ax, 3.2, 2.2, 7.4, 1.1,
-         "Two customer drafts + action note  →  Analyst compares, edits, posts",
+    _box(ax, 3.2, 2.0, 7.6, 1.1,
+         "Three drafts + action note  →  Analyst picks A / B / C, edits, posts",
          face=NAVY, edge=NAVY, text_color=WHITE, fontsize=9.5)
-    _arrow(ax, 11.4, 5.5, 8.0, 3.3, color=NAVY)
-    _arrow(ax, 11.4, 7.4, 8.0, 3.3, color=NAVY)
+    _arrow(ax, 9.4, 5.0, 8.0, 3.1, color=NAVY, lw=1.3)
 
-    # Back to feedback
-    _box(ax, 3.2, 0.5, 7.4, 1.0,
+    # Feedback loop back to few-shot
+    _box(ax, 3.2, 0.4, 7.6, 1.0,
          "Approved reply stored in feedback table  →  becomes next few-shot exemplar",
          face=PURPLE, edge=NAVY, text_color=WHITE, fontsize=8.8)
-    _arrow(ax, 6.9, 2.2, 6.9, 1.5, color=PURPLE, lw=1.8)
-    _arrow(ax, 3.2, 1.0, 1.5, 1.0, color=PURPLE, lw=1.3)
-    _arrow(ax, 1.5, 1.0, 1.5, 6.0, color=PURPLE, lw=1.3, rad=0.0)
-    _arrow(ax, 1.5, 6.0, 0.4, 6.0, color=PURPLE, lw=1.3)
+    _arrow(ax, 7.0, 2.0, 7.0, 1.4, color=PURPLE, lw=1.8)
+    _arrow(ax, 3.2, 0.9, 1.6, 0.9, color=PURPLE, lw=1.3)
+    _arrow(ax, 1.6, 0.9, 1.6, 5.55, color=PURPLE, lw=1.3, rad=0.0)
+    _arrow(ax, 1.6, 5.55, 0.4, 5.55, color=PURPLE, lw=1.3)
 
-    _title(ax, "Figure 6 — Smart Reply Composer: Dual-Draft (Rule + LLM cascade) with Few-Shot Prompting")
+    _title(ax, "Figure 6 — Smart Reply Composer: Triple-Draft (GPT-4o + Mistral + Smart Composer) with Few-Shot Prompting")
     fig.tight_layout()
     out = OUT / "fig6_reply_cascade.png"
     fig.savefig(out, dpi=180, bbox_inches="tight", facecolor=WHITE)
@@ -288,10 +286,10 @@ def fig8_lifecycle_kanban():
         if i < len(states) - 1:
             _arrow(ax, x + w, 5.05, x + w + 0.55, 5.05, color=NAVY, lw=1.8)
 
-    # transition labels
-    ax.text(xs[0] + w + 0.27, 5.35, "acknowledge", ha="center", fontsize=7.5, color=GREY, style="italic")
-    ax.text(xs[1] + w + 0.27, 5.35, "start work", ha="center", fontsize=7.5, color=GREY, style="italic")
-    ax.text(xs[2] + w + 0.27, 5.35, "resolve", ha="center", fontsize=7.5, color=GREY, style="italic")
+    # transition labels (moved ABOVE the boxes so they don't overlap the state cards)
+    ax.text(xs[0] + w + 0.27, 6.05, "acknowledge", ha="center", fontsize=7.5, color=GREY, style="italic")
+    ax.text(xs[1] + w + 0.27, 6.05, "start work",  ha="center", fontsize=7.5, color=GREY, style="italic")
+    ax.text(xs[2] + w + 0.27, 6.05, "resolve",     ha="center", fontsize=7.5, color=GREY, style="italic")
 
     # Two-step resolve note
     _box(ax, 0.5, 2.5, 6.0, 1.1,
@@ -368,21 +366,24 @@ def fig10_modernbert_curriculum():
 
     stages = [
         ("Stage 1\nTweetEval\n45k tweets", "Generic sentiment\ngrounding", "macro-F1 0.7267", SKY),
-        ("Stage 2\nGoEmotions\n54k Reddit", "Reddit register +\npolarity", "macro-F1 0.7028", SKY),
+        ("Stage 2\nGoEmotions\n54k Reddit", "Reddit register +\npolarity",  "macro-F1 0.7028", SKY),
         ("Stage 3\nWalmart-200\n5-fold CV", "Domain specialise\n(class weights +\noversampling)", "macro-F1 0.7362 ± 0.12", YELLOW),
     ]
-    w = 3.7
+    w = 3.1
+    gap = 0.35
     for i, (title, mid, metric, color) in enumerate(stages):
-        x = 0.4 + i * (w + 0.7)
+        x = 0.4 + i * (w + gap)
         _box(ax, x, 3.4, w, 1.7, title, face=color, fontsize=9.5)
         _box(ax, x, 1.9, w, 1.3, mid, face=LIGHT, fontsize=8.3)
         ax.text(x + w / 2, 1.4, metric, ha="center", fontsize=8.6, color=NAVY, weight="bold")
         if i < len(stages) - 1:
-            _arrow(ax, x + w, 4.25, x + w + 0.7, 4.25, color=NAVY, lw=1.8)
+            _arrow(ax, x + w, 4.25, x + w + gap, 4.25, color=NAVY, lw=1.8)
 
-    _box(ax, 11.9, 3.4, 2.7, 1.7,
+    # Final model box — safely clear of Stage 3 (Stage 3 ends at x = 0.4 + 2*(w+gap) + w = 10.75)
+    final_x = 11.30
+    _box(ax, final_x, 3.4, 3.2, 1.7,
          "Final model\n(all 200 posts)\ndeployed", face=GREEN, edge=NAVY, fontsize=9)
-    _arrow(ax, 11.5, 4.25, 11.9, 4.25, color=NAVY, lw=1.8)
+    _arrow(ax, final_x - gap, 4.25, final_x, 4.25, color=NAVY, lw=1.8)
     ax.text(7.5, 0.6, "Reported numbers are 5-fold out-of-fold (no sample scored by a model "
                       "that trained on it). RoBERTa baseline: 0.6272.",
             ha="center", fontsize=8.3, color=GREY, style="italic")
@@ -408,21 +409,22 @@ def fig11_aspect_nli():
 
     hyps = ["pricing", "delivery_pickup", "returns", "online_app", "workforce_hr"]
     for i, h in enumerate(hyps):
-        y = 5.6 - i * 1.05
-        _box(ax, 4.6, y, 3.2, 0.85,
+        # Start higher so the 5 hypothesis boxes don't collide with the bottom caption.
+        y = 6.05 - i * 0.98
+        _box(ax, 4.6, y, 3.2, 0.75,
              f"\u201cThis post is about {h}\u201d", face=LIGHT, fontsize=8.2)
-        _arrow(ax, 3.6, 3.6, 4.6, y + 0.42, color=GREY, lw=1.0)
-        _arrow(ax, 7.8, y + 0.42, 9.0, 3.6, color=GREY, lw=1.0)
+        _arrow(ax, 3.6, 3.6, 4.6, y + 0.37, color=GREY, lw=1.0)
+        _arrow(ax, 7.8, y + 0.37, 9.0, 3.6, color=GREY, lw=1.0)
 
     _box(ax, 9.0, 3.0, 2.8, 1.2, "DeBERTa-v3\nNLI entailment", face=YELLOW, fontsize=9)
     _box(ax, 12.2, 3.0, 2.5, 1.2, "score ≥ τ →\nmulti-aspect tags", face=NAVY,
          edge=NAVY, text_color=WHITE, fontsize=8.8)
     _arrow(ax, 11.8, 3.6, 12.2, 3.6, color=NAVY, lw=1.6)
 
-    _box(ax, 4.6, 0.7, 7.2, 1.1,
+    _box(ax, 4.6, 0.3, 7.2, 1.0,
          "Two sub-taxonomies kept separate: customer (7) · employee / workforce_hr (5)",
          face=LIGHT, edge=NAVY, fontsize=8.6)
-    _arrow(ax, 13.4, 3.0, 8.2, 1.8, color=NAVY)
+    _arrow(ax, 13.4, 3.0, 8.2, 1.35, color=NAVY)
 
     _title(ax, "Figure 11 — Zero-Shot NLI Aspect Tagging (multi-aspect, no training data)")
     fig.tight_layout()
