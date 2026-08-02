@@ -1,13 +1,39 @@
 \chapter{Future Work}\label{ch:future}
 
-The roadmap below is deliberately structured as \emph{four horizons of
-declining human-in-the-loop (HITL) involvement}.  Every horizon is
-admissible only when the previous one is measurably successful, and each
-horizon produces the training signal that unlocks the next one --- so the
-roadmap is a ladder from today's fully-supervised workflow to a
-Walmart-trained, mostly-autonomous replier.
+Future work is deliberately organised into \emph{three parallel tracks}
+rather than a single laundry list.  The tracks are complementary:
+Track~1 winds the pipeline's human-in-the-loop dependency \emph{down},
+while Tracks~2 and 3 widen its coverage \emph{outward} to new languages
+and new social-media platforms.  Every deliverable is admissible only
+when the previous milestone in its track is measurably successful; the
+guiding principle in all three tracks is that human effort produces the
+training signal that unlocks the next step.
 
-\section{Four-Horizon Roadmap}\label{sec:future:roadmap}
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}p{2.4cm} p{2.6cm} X@{}}
+\toprule
+\textbf{Track} & \textbf{Direction} & \textbf{Question it answers} \\
+\midrule
+Track 1 & HITL reduction (deeper) &
+How do we go from today's 100\,\% analyst-supervised replies to a
+mostly-autonomous replier, without a silent quality drop? \\
+Track 2 & Bilingual $\to$ multilingual (wider) &
+How do we cover Indian retail communities that today's English-only
+filter silently drops? \\
+Track 3 & Multi-platform (wider) &
+How do we extend beyond Reddit to X, Facebook, Instagram, and
+app-store reviews so brand health reflects the whole social surface? \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Track 1 --- HITL Reduction (Four-Horizon Roadmap)}\label{sec:future:hitl}
+
+Track~1 is the deepest of the three because it changes the pipeline's
+operating mode over time.  It is expressed as four horizons of
+declining HITL involvement, each shipping a concrete artefact that
+becomes the training signal for the next horizon.
 
 \definecolor{hzGreen}{HTML}{2E7D32}
 \definecolor{hzBlue}{HTML}{0071DC}
@@ -31,10 +57,9 @@ rerun 5-fold OOF to check the F1 delta. \\
 
 \textcolor{hzBlue}{\textbf{1 $\to$ 3 months}} &
 100\,\% &
-\textbf{Automate + go bilingual.}  Wire the monthly ModernBERT retrain
-into a Cron / Airflow job with an OOF-F1 promotion gate.  Add
-multi-language support (start with Hindi + English) --- taxonomy
-validated with native-speaker analysts. \\
+\textbf{Automate the retrain loop.}  Wire the monthly ModernBERT
+retrain into a Cron / Airflow job with an OOF-F1 promotion gate --- new
+checkpoints ship only when they beat the current one on held-out folds. \\
 
 \rowcolor{zebra}
 \textcolor{hzPurple}{\textbf{3 $\to$ 6 months}} &
@@ -54,8 +79,7 @@ agreement stays high, gradually raise the auto-send threshold --- HITL
 winds down to sampling / audit only. \\
 \bottomrule
 \end{tabularx}
-\caption{Four-horizon roadmap: from today's fully-supervised HITL
-workflow to a Walmart-trained, mostly-autonomous replier.  Each row
+\caption{Track 1 --- Four-horizon HITL reduction roadmap.  Each row
 lists the target HITL involvement and the deliverable that unlocks the
 next horizon.}\label{tab:future:horizons}
 \end{table}
@@ -69,36 +93,152 @@ analyst-edit-distance (for replies) meets the promotion gate on a
 statistically meaningful sample; otherwise the horizon is extended
 rather than skipped.
 
-\section{Beyond the Four Horizons}\label{sec:future:beyond}
+\section{Track 2 --- Bilingual (Hindi + English) $\to$ Multilingual}\label{sec:future:multilingual}
+
+\paragraph{Why now.}
+Indian retail-adjacent communities on Reddit --- \texttt{r/india},
+\texttt{r/IndiaOffline}, \texttt{r/IndianRealEstate},
+\texttt{r/DebateIndianEconomy}, plus the shopping-heavy
+sub-communities of \texttt{r/personalfinanceindia} --- account for an
+estimated 30\,\% of Walmart-family mentions (Walmart owns Flipkart,
+PhonePe, and Myntra in India).  Today's ingestion layer runs a
+\texttt{langdetect} filter that silently drops anything not classified
+as English.  Any post in Hindi, Tamil, Telugu, Bengali, or
+code-mixed \emph{Hinglish} is invisible to the rest of the pipeline ---
+including brand health, alerts, and the reply queue.  This is a
+measurement failure, not just a coverage gap: our current
+``Walmart brand sentiment'' score is silently biased toward
+English-speaking, US-centric communities.
+
+\paragraph{Concrete deliverables.}
+\begin{itemize}
+\item \textbf{Detector.}  Extend \texttt{langdetect} to accept
+      \texttt{\{hi, en\}} first, then add
+      \texttt{\{ta, te, bn\}} once the analyst pool for each
+      language is in place.  Handle code-mixed Hinglish (dominant on
+      Indian Reddit) with a mixed-script tokenizer.
+\item \textbf{Two viable modelling paths}, decided empirically:
+      \emph{(a)} translate posts to English at ingestion time via
+      NLLB-200 (Meta, open-weights, 3.3\,B) so downstream sentiment
+      and aspect models stay English-only, \emph{or} \emph{(b)}
+      fine-tune a second ModernBERT checkpoint on native-script data
+      and route by detected language.  Path (a) is cheaper to ship;
+      path (b) is more accurate for low-resource languages.  Pilot
+      both on a $\sim$200-post Hindi gold set before committing.
+\item \textbf{Taxonomy extension.}  The seven customer aspects and
+      five workforce aspects were validated on English Reddit only.
+      Indic retail idioms (``bill karo'' for billing, ``delivery
+      kab'' for late shipping, ``paisa wapas'' for refund) need to
+      be added or the aspect NLI head will miss them.
+\item \textbf{Native-speaker HITL loop.}  Reuse the existing Review \&
+      Validate UI unchanged; only the analyst pool changes.  The
+      warm-loop retrain in Section~\ref{sec:future:hitl} then covers
+      Hindi automatically once the gold set has $\sim$100 Hindi posts.
+\end{itemize}
+
+\paragraph{How this track ties into Track 1.}
+Track~2 rides on top of Track~1's horizon 1--3 months (automate
+the retrain loop) and horizon 3--6 months (Walmart-trained model).
+Once the monthly retrain is automated, adding Hindi is a matter of
+appending Hindi gold-set posts to the training pool; once the
+Walmart-trained Mistral checkpoint exists, its multilingual variant
+(Mistral supports 15+ languages natively) becomes the natural
+production reply generator.
+
+\section{Track 3 --- Multi-Platform (Reddit $\to$ X / Facebook / Instagram / app-stores)}\label{sec:future:multiplatform}
+
+\paragraph{Why now.}
+Reddit alone answers \emph{what deliberate, long-form customers say}.
+It misses:
+\begin{itemize}
+\item \textbf{X (formerly Twitter)} --- real-time viral complaints;
+      brand-tagged tweets are the fastest signal of an outage or
+      recall.
+\item \textbf{Instagram} --- image-first customer content
+      (unboxing videos, product-defect photos); this is where our
+      four-pass vision pipeline (Section~\ref{sec:vision}) actually
+      shines because the caption / OCR / merge stack was built for
+      exactly this format.
+\item \textbf{Facebook} --- the age-demographic complement to
+      Reddit; older, family-focused, and often the first channel
+      customers reach for on returns or in-store complaints.
+\item \textbf{Google Play / Apple App Store reviews} --- the
+      highest-intent signal in the entire retail social surface,
+      because every review carries a native
+      \texttt{star\_rating} field (1--5) that is effectively free
+      ground truth for sentiment.
+\end{itemize}
+A brand-health score built on Reddit-only is systematically biased
+toward what one deliberate, English-speaking subset of the internet
+says.
+
+\paragraph{Concrete deliverables.}
+\begin{itemize}
+\item \textbf{Ingestion adapters}, one per platform, each behind a
+      common \texttt{RawPost} interface so the analysis pipeline
+      downstream is platform-agnostic: X API v2, Meta Graph API
+      (Facebook + Instagram), Google Play scraping via
+      \texttt{google-play-scraper}, App Store via the RSS feed.
+\item \textbf{Per-platform pre-processing.}  X posts need retweet-
+      lineage dedup (a retweet is not a new opinion); Instagram
+      posts route through the vision pipeline first (caption + image
+      OCR) before hitting text sentiment; app-store reviews carry a
+      native \texttt{star\_rating} that is stored alongside our
+      ModernBERT sentiment for direct calibration checks.
+\item \textbf{Extended priority classifier.}  The existing P1/P2 rules
+      (Section~\ref{sec:alerts}) need platform-specific extensions:
+      an X post with $\geq$~100 retweets is auto P1; an app-store
+      1-star surge (rate-of-change on the daily 1-star count) is P1;
+      an Instagram brand-tagged post from a $\geq$~10\,k-follower
+      account is P1.  Reddit rules are unchanged.
+\item \textbf{Unified schema.}  The
+      \texttt{raw\_posts.source\_platform} column is already stubbed
+      in the current schema (it takes the value \texttt{"reddit"}
+      for every row today).  Populating it correctly is a one-line
+      change per adapter and lets Brand Health / Insights aggregate
+      across platforms out of the box.
+\end{itemize}
+
+\paragraph{Known risks.}
+X's post-2023 API tiering makes free ingestion impractical (Basic
+tier is \$100/month for $\sim$10\,k posts/month, which is enough for a
+pilot but not for production).  The Meta Graph API requires
+page-level admin permissions --- workable inside Walmart but a
+blocker for open replication.  Instagram image volumes will
+overwhelm the current one-image-at-a-time vision pass and will need
+batched inference on a GPU pool.
+
+\section{Beyond the Three Tracks}\label{sec:future:beyond}
 
 The following items are on the wishlist but were deliberately excluded
-from the four horizons above because they lack a clear next step
-grounded in the current pipeline.  They are documented here for
-completeness and to give reviewers a sense of the design space we chose
-\emph{not} to commit to.
+from the three tracks because they lack a clear next step grounded in
+the current pipeline.  They are listed here so reviewers can see the
+design space we chose \emph{not} to commit to.
 
-\subsection*{Model-Level Extensions}
+\subsection*{Model-level extensions}
 \begin{itemize}
-\item Train a joint sentiment + aspect head with a shared encoder to reduce
-      inference cost by a further $\sim$30\,\%.
-\item Distil ModernBERT into a $\sim$50M-parameter student for CPU-only
-      inference at the edge.
-\item Add reasoning-augmented VLM captioning (LLaVA-Next 1.6B or SmolVLM) to
-      the vision layer.
+\item Train a joint sentiment + aspect head with a shared encoder to
+      reduce inference cost by a further $\sim$30\,\%.
+\item Distil ModernBERT into a $\sim$50\,M-parameter student for
+      CPU-only inference at the edge.
+\item Add reasoning-augmented VLM captioning (LLaVA-Next 1.6\,B or
+      SmolVLM) to the vision layer for step-through descriptions of
+      complex screenshots.
 \end{itemize}
 
-\subsection*{Product-Level Extensions}
+\subsection*{Product-level extensions}
 \begin{itemize}
-\item Predictive P1 forecast: seasonal-decomposition on daily P1 counts to
-      forecast alert volume 24--48 hours ahead.
-\item Extend the ingestion set to Twitter / X, YouTube comments, and
-      app-store reviews.
+\item Predictive P1 forecast: seasonal-decomposition on daily P1
+      counts to forecast alert volume 24--48 hours ahead.
+\item Sentiment-drift alerts on the Walmart-owned brand set
+      (Flipkart, PhonePe, Myntra) as an early warning for
+      cross-brand contagion.
 \end{itemize}
 
-\subsection*{Operational Extensions}
+\subsection*{Operational extensions}
 \begin{itemize}
-\item Deploy the pipeline as a scheduled Kubernetes CronJob backed by the
-      shared managed database introduced in horizon three.
-\item Integrate with Walmart's internal ticketing so P1 alerts open cases
-      directly.
+\item Deploy the pipeline as a scheduled Kubernetes CronJob backed by
+      the shared managed database introduced in Track 1 horizon 3.
+\item Integrate with Walmart's internal ticketing so P1 alerts open
+      cases directly.
 \end{itemize}

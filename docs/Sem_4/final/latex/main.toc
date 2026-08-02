@@ -45,18 +45,26 @@
 \contentsline {chapter}{\numberline {9}Conclusions and Recommendations}{38}{chapter.9}%
 \contentsline {section}{\numberline {9.1}Recommendations}{38}{section.9.1}%
 \contentsline {chapter}{\numberline {10}Future Work}{39}{chapter.10}%
-\contentsline {section}{\numberline {10.1}Four-Horizon Roadmap}{39}{section.10.1}%
-\contentsline {paragraph}{Guiding principle.}{40}{section*.33}%
-\contentsline {section}{\numberline {10.2}Beyond the Four Horizons}{40}{section.10.2}%
-\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{41}{appendix.A}%
-\contentsline {chapter}{\numberline {B}Reproduction Commands}{42}{appendix.B}%
-\contentsline {section}{\numberline {B.1}Source Code Repository}{42}{section.B.1}%
-\contentsline {section}{\numberline {B.2}Environment}{42}{section.B.2}%
-\contentsline {section}{\numberline {B.3}Full pipeline}{42}{section.B.3}%
-\contentsline {section}{\numberline {B.4}Regenerate figures}{43}{section.B.4}%
-\contentsline {section}{\numberline {B.5}Retrain sentiment model}{43}{section.B.5}%
-\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{43}{section.B.6}%
-\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{43}{section.B.7}%
-\contentsline {chapter}{References}{44}{section*.38}%
-\contentsline {chapter}{Glossary}{46}{appendix*.40}%
-\contentsline {chapter}{Checklist}{47}{appendix*.41}%
+\contentsline {section}{\numberline {10.1}Track 1 --- HITL Reduction (Four-Horizon Roadmap)}{39}{section.10.1}%
+\contentsline {paragraph}{Guiding principle.}{39}{section*.33}%
+\contentsline {section}{\numberline {10.2}Track 2 --- Bilingual (Hindi + English) $\to $ Multilingual}{40}{section.10.2}%
+\contentsline {paragraph}{Why now.}{40}{section*.34}%
+\contentsline {paragraph}{Concrete deliverables.}{40}{section*.35}%
+\contentsline {paragraph}{How this track ties into Track 1.}{41}{section*.36}%
+\contentsline {section}{\numberline {10.3}Track 3 --- Multi-Platform (Reddit $\to $ X / Facebook / Instagram / app-stores)}{41}{section.10.3}%
+\contentsline {paragraph}{Why now.}{41}{section*.37}%
+\contentsline {paragraph}{Concrete deliverables.}{42}{section*.38}%
+\contentsline {paragraph}{Known risks.}{42}{section*.39}%
+\contentsline {section}{\numberline {10.4}Beyond the Three Tracks}{42}{section.10.4}%
+\contentsline {chapter}{\numberline {A}Curated Subreddit Coverage}{44}{appendix.A}%
+\contentsline {chapter}{\numberline {B}Reproduction Commands}{45}{appendix.B}%
+\contentsline {section}{\numberline {B.1}Source Code Repository}{45}{section.B.1}%
+\contentsline {section}{\numberline {B.2}Environment}{45}{section.B.2}%
+\contentsline {section}{\numberline {B.3}Full pipeline}{45}{section.B.3}%
+\contentsline {section}{\numberline {B.4}Regenerate figures}{46}{section.B.4}%
+\contentsline {section}{\numberline {B.5}Retrain sentiment model}{46}{section.B.5}%
+\contentsline {section}{\numberline {B.6}Rebuild this report (LaTeX)}{46}{section.B.6}%
+\contentsline {section}{\numberline {B.7}Rebuild the .docx working draft}{46}{section.B.7}%
+\contentsline {chapter}{References}{47}{section*.44}%
+\contentsline {chapter}{Glossary}{49}{appendix*.46}%
+\contentsline {chapter}{Checklist}{50}{appendix*.47}%

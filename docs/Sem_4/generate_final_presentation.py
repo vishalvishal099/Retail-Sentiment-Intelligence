@@ -53,7 +53,7 @@ def _set_bg(slide, color):
 
 
 def _tx(slide, left, top, width, height, text, *,
-        size=Pt(14), bold=False, color=DARK_GRAY,
+        size=Pt(14), bold=False, italic=False, color=DARK_GRAY,
         align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP):
     box = slide.shapes.add_textbox(left, top, width, height)
     tf = box.text_frame
@@ -67,6 +67,7 @@ def _tx(slide, left, top, width, height, text, *,
         for r in p.runs:
             r.font.size = size
             r.font.bold = bold
+            r.font.italic = italic
             r.font.color.rgb = color
     return box
 
@@ -221,7 +222,7 @@ def build():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    TOTAL = 22
+    TOTAL = 23
     page = [0]
 
     def new():
@@ -1001,18 +1002,18 @@ def build():
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 18 · Future work (grounded, 4-horizon roadmap) ──────────────────────
+    # 18 · Future work — Track 1 · HITL Reduction (4-horizon roadmap) ─────
     s = new()
-    _header_bar(s, "Future Work  —  4-Horizon Roadmap",
-                "From today's HITL to a Walmart-trained, mostly-autonomous replier")
+    _header_bar(s, "Future Work  —  Track 1  ·  HITL Reduction (4 Horizons)",
+                "One of three tracks:  Track 1 HITL  ·  Track 2 Bilingual  ·  Track 3 Multi-Platform  (Tracks 2 & 3 on next slide)")
     horizons = [
         ("Now → 1 month",   "Grow the gold set",  "HITL: 100 %",
          "Grow the labelled gold set to ~500 posts using the HITL feedback the team is already producing; "
          "rerun 5-fold OOF to check the F1 delta.",
          GREEN),
-        ("1 → 3 months",    "Automate + go bilingual",  "HITL: 100 %",
-         "Wire the monthly ModernBERT retrain into a Cron / Airflow job with an OOF-F1 promotion gate.  "
-         "Add multi-language support (start with Hindi + English) — taxonomy validated with native-speaker analysts.",
+        ("1 → 3 months",    "Automate the retrain loop",  "HITL: 100 %",
+         "Wire the monthly ModernBERT retrain into a Cron / Airflow job with an OOF-F1 promotion gate — "
+         "new checkpoints ship only when they beat the current one on held-out folds.",
          WALMART_BLUE),
         ("3 → 6 months",    "Walmart-trained model + shared DB",  "HITL: ~80 %",
          "Fine-tune Mistral 7B on our own posted-reply corpus  →  a Walmart-trained replier that drops the paid "
@@ -1052,7 +1053,79 @@ def build():
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 19 · Source Code + Deliverables ───────────────────────────────────────
+    # 19 · Future work — Tracks 2 & 3 · Bilingual + Multi-Platform ─────────
+    s = new()
+    _header_bar(s, "Future Work  —  Track 2  ·  Bilingual   +   Track 3  ·  Multi-Platform",
+                "The other two tracks that widen the pipeline's coverage while Track 1 winds HITL down")
+
+    # ── Track 2 card (left half) ────────────────────────────────────────────
+    card_w = Inches(6.05)
+    _rect(s, Inches(0.5), Inches(1.05), card_w, Inches(0.55), WALMART_BLUE)
+    _tx(s, Inches(0.65), Inches(1.10), card_w - Inches(0.3), Inches(0.45),
+        "TRACK 2  ·  BILINGUAL  →  MULTILINGUAL",
+        size=Pt(14), bold=True, color=WHITE)
+    _rect(s, Inches(0.5), Inches(1.60), card_w, Inches(5.55),
+          LIGHT_GRAY, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(1.70), card_w - Inches(0.4), Inches(0.40),
+        "Why:  Indian retail subreddits are ~30 % of Walmart-family mentions but the "
+        "current  langdetect  →  English-only  filter silently drops them.",
+        size=Pt(10.5), color=DARK_GRAY)
+    _tx(s, Inches(0.7), Inches(2.15), card_w - Inches(0.4), Inches(0.30),
+        "Concrete deliverables", size=Pt(11.5), bold=True, color=WALMART_BLUE)
+    bilingual_bullets = [
+        "Extend  langdetect  to  hi + en  (later  ta / te / bn);  code-mixed 'Hinglish' handled with a mixed-script tokenizer.",
+        "Ingestion-time translation via NLLB-200 (open-weights, 3.3 B) so downstream models stay English-only —  or —  fine-tune ModernBERT on native scripts.",
+        "Extend aspect taxonomy for Indic retail idioms (\u201cbill karo\u201d for billing, \u201cdelivery kab\u201d for late shipping).",
+        "Native-speaker analyst validation loop —  same HITL flow, new language pool.",
+    ]
+    by = Inches(2.50)
+    for b in bilingual_bullets:
+        _tx(s, Inches(0.75), by, Inches(0.25), Inches(0.30),
+            "•", size=Pt(11), bold=True, color=WALMART_BLUE)
+        _tx(s, Inches(0.95), by, card_w - Inches(0.6), Inches(0.85),
+            b, size=Pt(10), color=DARK_GRAY)
+        by = by + Inches(0.90)
+    _rect(s, Inches(0.5), Inches(6.55), card_w, Inches(0.60),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(6.60), card_w - Inches(0.4), Inches(0.50),
+        "Ships as part of Track 1 horizon 1 → 3 mo  (bilingual retrain gate) and horizon 3 → 6 mo  (Walmart-trained multilingual replier).",
+        size=Pt(9.5), color=DARK_GRAY, italic=True)
+
+    # ── Track 3 card (right half) ───────────────────────────────────────────
+    right_x = Inches(6.80)
+    _rect(s, right_x, Inches(1.05), card_w, Inches(0.55), PURPLE)
+    _tx(s, right_x + Inches(0.15), Inches(1.10), card_w - Inches(0.3), Inches(0.45),
+        "TRACK 3  ·  MULTI-PLATFORM  (Reddit  →  X / Facebook / Instagram / app-stores)",
+        size=Pt(12), bold=True, color=WHITE)
+    _rect(s, right_x, Inches(1.60), card_w, Inches(5.55),
+          LIGHT_GRAY, line=PURPLE)
+    _tx(s, right_x + Inches(0.20), Inches(1.70), card_w - Inches(0.4), Inches(0.40),
+        "Why:  Reddit is deliberate + long-form;  X is real-time viral;  Instagram is image-heavy (vision pipeline shines);  app-store reviews carry a star-rating ground-truth signal.",
+        size=Pt(10.5), color=DARK_GRAY)
+    _tx(s, right_x + Inches(0.20), Inches(2.15), card_w - Inches(0.4), Inches(0.30),
+        "Concrete deliverables", size=Pt(11.5), bold=True, color=PURPLE)
+    platform_bullets = [
+        "Ingestion adapters:  X API v2,  Meta Graph API (Facebook + Instagram),  Google Play / App Store review scrapers  —  each behind a common  RawPost  interface.",
+        "Per-platform pre-processing:  X dedup by retweet lineage;  Instagram routed through the vision pipeline first (caption + image);  app-store reviews carry a native  star_rating  field.",
+        "Extend priority classifier:  X viral (retweets > 100) → auto P1;  app-store 1-star surge → P1;  Instagram brand-tagged post from > 10 k follower account → P1.",
+        "Unified  raw_posts.source_platform  column (already stubbed) so Brand Health / Insights aggregate across platforms out of the box.",
+    ]
+    by = Inches(2.50)
+    for b in platform_bullets:
+        _tx(s, right_x + Inches(0.25), by, Inches(0.25), Inches(0.30),
+            "•", size=Pt(11), bold=True, color=PURPLE)
+        _tx(s, right_x + Inches(0.45), by, card_w - Inches(0.6), Inches(0.85),
+            b, size=Pt(10), color=DARK_GRAY)
+        by = by + Inches(0.90)
+    _rect(s, right_x, Inches(6.55), card_w, Inches(0.60),
+          LIGHT_BLUE, line=PURPLE)
+    _tx(s, right_x + Inches(0.20), Inches(6.60), card_w - Inches(0.4), Inches(0.50),
+        "Risks:  X API tiers ($100 / mo min);  Meta Graph needs page-level perms;  Instagram image volume needs vision-batching.",
+        size=Pt(9.5), color=DARK_GRAY, italic=True)
+
+    _footer(s, page[0], TOTAL)
+
+    # 20 · Source Code + Deliverables ───────────────────────────────────────
     s = new()
     _header_bar(s, "Source Code & Deliverables")
     _rect(s, Inches(0.5), Inches(1.05), Inches(12.3), Inches(1.1),
