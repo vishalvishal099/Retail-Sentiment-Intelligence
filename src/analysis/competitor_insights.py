@@ -30,17 +30,43 @@ HIGH_PRIO_RATIO = 0.60           # >=60% negative on the aspect
 MEDIUM_PRIO_RATIO = 0.40
 
 
-def _load_analyses(storage: SQLiteBackend, since_iso: str) -> list[dict]:
-    """Pull analysis rows created (best-effort: by created_at on the source
-    post) after `since_iso`. We join on raw_posts to filter by timestamp.
+def _resolve_window(window_days: int) -> tuple[datetime, datetime]:
+    """Return (start, end) matching Brand Health's calendar-day-floored convention.
+
+    Brand Health's `_resolve_window` in the dashboard API rounds the lower
+    bound to 00:00 UTC of the earliest day in the window and uses `now` as
+    the upper bound. Mirroring that here so `analyses_count` on this page
+    matches `total_posts` on Brand Health for equivalent day counts.
+    """
+    now = datetime.now(timezone.utc)
+    if window_days <= 1:
+        # "Today" — start of current UTC day.
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        # Rolling window ending at `now` that spans `window_days` calendar days
+        # (today + previous window_days-1 days).
+        start = (now - timedelta(days=window_days - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    return start, now
+
+
+def _load_analyses(storage: SQLiteBackend, start: datetime, end: datetime) -> list[dict]:
+    """Pull analyses whose source post was CREATED in [start, end).
+
+    Uses the same JSON-path join as Brand Health
+    (`_fetch_window_rows` in src/dashboard/api.py) so a legacy analysis row
+    where `analyses.post_id` (top-level column) drifted from
+    `analyses.data.post_id` (JSON blob) is resolved identically on both pages.
     """
     sql = (
         "SELECT a.data AS adata, r.data AS rdata "
-        "FROM analyses a JOIN raw_posts r ON a.post_id = r.id "
-        "WHERE r.created_timestamp >= ?"
+        "FROM analyses a "
+        "JOIN raw_posts r ON r.id = json_extract(a.data, '$.post_id') "
+        "WHERE CAST(json_extract(r.data, '$.created_timestamp') AS REAL) >= ? "
+        "  AND CAST(json_extract(r.data, '$.created_timestamp') AS REAL) <  ? "
     )
-    since_ts = datetime.fromisoformat(since_iso.replace("Z", "+00:00")).timestamp()
-    cur = storage._conn.execute(sql, (since_ts,))
+    cur = storage._conn.execute(sql, (start.timestamp(), end.timestamp()))
     rows: list[dict] = []
     for row in cur.fetchall():
         try:
@@ -186,9 +212,8 @@ def generate_insights(
 ) -> dict:
     """Build a competitor-insights payload and persist it."""
     window_days = max(1, min(int(window_days), 90))
-    since = datetime.now(timezone.utc) - timedelta(days=window_days)
-    since_iso = since.isoformat()
-    analyses = _load_analyses(storage, since_iso)
+    start, end = _resolve_window(window_days)
+    analyses = _load_analyses(storage, start, end)
     bundle = _bucket(analyses)
 
     competitor_bucket = bundle["buckets"]["competitor"]
@@ -202,7 +227,8 @@ def generate_insights(
 
     payload = {
         "window_days": window_days,
-        "since": since_iso,
+        "since": start.isoformat(),
+        "until": end.isoformat(),
         "analyses_count": len(analyses),
         "pain_points": pain,
         "walmart_comparison": comparison,
