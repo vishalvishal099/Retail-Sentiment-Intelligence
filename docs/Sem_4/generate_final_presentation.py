@@ -716,78 +716,94 @@ def build():
     # 9 · Insights & Competitor ─────────────────────────────────────────────
     s = new()
     _header_bar(s, "Insights & Competitor Analysis",
-                "Deterministic aggregation over the 8-aspect taxonomy — no LLM in the loop")
+                "Four-step pipeline over the 8-aspect taxonomy — deterministic, no LLM in the loop")
 
-    features = [
-        ("Pain Points",         "Ranked table of competitor\naspects by negative-ratio\n(top 10, floor ≥ 8 posts)",  WALMART_BLUE),
-        ("Walmart Comparison",  "Radar chart:  Walmart neg-ratio\nvs competitors on the same\naspects  →  gives  delta",  PURPLE),
-        ("Recommendations",     "Template cards:  priority tag\n+ action angle chosen from\nratio and delta thresholds",  GREEN),
+    # ── 4-step pipeline row  (each card tells one step of the story) ────
+    step_w, step_h = 3.00, 3.60
+    step_gap = 0.10
+    step_x0 = 0.5
+    step_y  = 1.10
+
+    steps = [
+        # colour, badge, title, "what we do" bullets, formula footer, live example
+        (WALMART_BLUE, LIGHT_BLUE, "1",
+         "Group posts\nby aspect",
+         "For each retail aspect,\ncount posts from competitor\nsubs by sentiment:\nnegative · positive · neutral",
+         "— counter aggregate —",
+         "delivery/pickup:\n3,546  posts total\n1,377 neg  ·  128 pos  ·  2,041 neu"),
+
+        (PURPLE, PURPLE_TINT, "2",
+         "Compute\nnegative rate",
+         "Divide negatives by total to\nget the complaint-rate on\nthat aspect.\nFloor: total ≥ 8 posts",
+         "negative_ratio = neg / total",
+         "1,377 / 3,546  =  0.388\n=  38.8 %  complaint-rate\n(highest of any aspect)"),
+
+        (GREEN, GREEN_TINT, "3",
+         "Compare\nto Walmart",
+         "Same recipe on Walmart subs\nfor the same aspect —\nthen take the gap.\nCatches 'are we better or worse?'",
+         "delta  =  competitor – Walmart",
+         "Walmart delivery neg-rate ≈ 24 %\ndelta = 38.8 % – 24 %\n=  +14.8 %"),
+
+        (AMBER, AMBER_TINT, "4",
+         "Priority tag\n+ action angle",
+         "Two threshold checks:\n• competitor rate → urgency\n• delta → what to do about it\nEmit one recommendation card",
+         "60 / 40 %  and  ± 5 %  cutoffs",
+         "Priority = MEDIUM (40 % ≤ 39 % < 60 %)\nAngle    = 'Marketing angle'\n           (delta +14.8 % > +5 %)"),
     ]
-    for i, (t, body, col) in enumerate(features):
-        lx = 0.5 + i * (4.10 + 0.20)
-        _rect(s, Inches(lx), Inches(1.05), Inches(4.10), Inches(2.20),
+
+    for i, (col, tint, badge, title, action, formula, example) in enumerate(steps):
+        x = step_x0 + i * (step_w + step_gap)
+        # Card outline
+        _rect(s, Inches(x), Inches(step_y), Inches(step_w), Inches(step_h),
               LIGHT_GRAY, line=col)
-        _rect(s, Inches(lx), Inches(1.05), Inches(4.10), Inches(0.45), col)
-        _tx(s, Inches(lx), Inches(1.11), Inches(4.10), Inches(0.35),
-            t, size=Pt(13), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        _tx(s, Inches(lx + 0.15), Inches(1.55), Inches(3.80), Inches(1.60),
-            body, size=Pt(11.5), color=DARK_GRAY, align=PP_ALIGN.CENTER,
+        # Header strip + numbered badge
+        _rect(s, Inches(x), Inches(step_y), Inches(step_w), Inches(0.60), col)
+        _tx(s, Inches(x + 0.10), Inches(step_y + 0.08), Inches(0.45), Inches(0.45),
+            f"{badge}", size=Pt(20), bold=True, color=WHITE,
+            align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+        _tx(s, Inches(x + 0.60), Inches(step_y + 0.05), Inches(step_w - 0.7), Inches(0.55),
+            title, size=Pt(12.5), bold=True, color=WHITE,
             anchor=MSO_ANCHOR.MIDDLE)
+        # What-we-do prose
+        _tx(s, Inches(x + 0.15), Inches(step_y + 0.72), Inches(step_w - 0.30), Inches(1.35),
+            action, size=Pt(10.5), color=DARK_GRAY)
+        # Formula ribbon (tinted, monospace-feel bold)
+        _rect(s, Inches(x + 0.15), Inches(step_y + 2.10), Inches(step_w - 0.30), Inches(0.45),
+              tint, line=col)
+        _tx(s, Inches(x + 0.15), Inches(step_y + 2.10), Inches(step_w - 0.30), Inches(0.45),
+            formula, size=Pt(10.5), bold=True, color=DARK_BLUE,
+            align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+        # Live example
+        _tx(s, Inches(x + 0.15), Inches(step_y + 2.62), Inches(step_w - 0.30), Inches(0.90),
+            example, size=Pt(10), color=DARK_BLUE, italic=True)
+        # Small right-pointing chevron between cards (except after last)
+        if i < len(steps) - 1:
+            chevron_x = x + step_w + step_gap / 2 - 0.05
+            _tx(s, Inches(chevron_x), Inches(step_y + 1.6), Inches(0.20), Inches(0.4),
+                "▸", size=Pt(22), bold=True, color=col,
+                align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
 
-    # Left card: the two formulas (negative_ratio + delta) with a symbol legend.
-    _rect(s, Inches(0.5), Inches(3.45), Inches(6.30), Inches(3.65),
+    # ── Final recommendation banner (what the analyst actually sees on the card) ──
+    _rect(s, Inches(0.5), Inches(4.90), Inches(12.30), Inches(1.10),
           LIGHT_BLUE, line=WALMART_BLUE)
-    _rect(s, Inches(0.5), Inches(3.45), Inches(6.30), Inches(0.45), WALMART_BLUE)
-    _tx(s, Inches(0.5), Inches(3.51), Inches(6.30), Inches(0.35),
-        "FORMULAS  ·  what every number on the page is",
-        size=Pt(11.5), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-    _tx(s, Inches(0.7), Inches(3.95), Inches(6.0), Inches(0.30),
-        "1. Per-aspect negative rate  (drives ranking + priority)",
-        size=Pt(11), bold=True, color=DARK_BLUE)
-    _rect(s, Inches(0.7), Inches(4.28), Inches(6.0), Inches(0.50),
-          WHITE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(4.28), Inches(6.0), Inches(0.50),
-        "negative_ratio(aspect) = neg / total     (floor: total ≥ 8 posts)",
-        size=Pt(12), bold=True, color=DARK_BLUE,
-        align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    _tx(s, Inches(0.7), Inches(4.90), Inches(6.0), Inches(0.30),
-        "2. Walmart-vs-competitor gap  (drives action angle)",
-        size=Pt(11), bold=True, color=DARK_BLUE)
-    _rect(s, Inches(0.7), Inches(5.23), Inches(6.0), Inches(0.50),
-          WHITE, line=WALMART_BLUE)
-    _tx(s, Inches(0.7), Inches(5.23), Inches(6.0), Inches(0.50),
-        "delta(aspect) = competitor negative_ratio  –  Walmart negative_ratio",
-        size=Pt(12), bold=True, color=DARK_BLUE,
-        align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    _tx(s, Inches(0.7), Inches(5.90), Inches(6.0), Inches(1.15),
-        "neg / total  =  fraction of that aspect's competitor posts labelled negative by ModernBERT.\n"
-        "delta > 0  →  competitors are worse than Walmart on this topic.\n"
-        "Zero LLM cost — every value is a  Counter  aggregate on top of ModernBERT + DeBERTa-NLI outputs.",
-        size=Pt(9.5), color=DARK_GRAY, italic=True)
+    _tx(s, Inches(0.7), Inches(4.98), Inches(11.9), Inches(0.35),
+        "WORKED EXAMPLE  →  the recommendation card the analyst sees",
+        size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(5.35), Inches(11.9), Inches(0.65),
+        "\u201cCompetitors are struggling with delivery/pickup (39 % negative) much more than Walmart (24 %). "
+        "Lean into this as a competitive marketing angle.\u201d   \u2014   priority: MEDIUM   \u00b7   supporting: 3,546 posts",
+        size=Pt(12), italic=True, color=DARK_BLUE, anchor=MSO_ANCHOR.MIDDLE)
 
-    # Right card: thresholds → priority + action angle.
-    _rect(s, Inches(6.95), Inches(3.45), Inches(5.85), Inches(3.65),
-          AMBER_TINT, line=AMBER)
-    _rect(s, Inches(6.95), Inches(3.45), Inches(5.85), Inches(0.45), AMBER)
-    _tx(s, Inches(6.95), Inches(3.51), Inches(5.85), Inches(0.35),
-        "THRESHOLDS  ·  what the numbers become on the card",
-        size=Pt(11.5), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-    _tx(s, Inches(7.15), Inches(3.95), Inches(5.5), Inches(0.30),
-        "Priority tag  (uses  competitor negative_ratio)",
-        size=Pt(11), bold=True, color=DARK_BLUE)
-    _bullets(s, Inches(7.15), Inches(4.28), Inches(5.5), Inches(0.90), [
-        "ratio  ≥  60 %   →   High priority",
-        "ratio  ≥  40 %   →   Medium",
-        "otherwise       →   Low",
-    ], size=Pt(11))
-    _tx(s, Inches(7.15), Inches(5.25), Inches(5.5), Inches(0.30),
-        "Action angle  (uses  delta)",
-        size=Pt(11), bold=True, color=DARK_BLUE)
-    _bullets(s, Inches(7.15), Inches(5.58), Inches(5.5), Inches(1.45), [
-        "delta  >  +5 %   →   'Marketing angle'   (Walmart is better)",
-        "delta  <  –5 %   →   'Investigate'       (Walmart is worse)",
-        "within ± 5 %     →   'Industry-wide friction'",
-    ], size=Pt(11))
+    # ── Design-principle footer ─────────────────────────────────────────
+    _rect(s, Inches(0.5), Inches(6.15), Inches(12.30), Inches(0.90),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(6.22), Inches(11.9), Inches(0.35),
+        "DESIGN PRINCIPLE  ·  why this is defensible",
+        size=Pt(11), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(6.55), Inches(11.9), Inches(0.45),
+        "Every number is a Counter aggregate over ModernBERT + DeBERTa-v3-NLI outputs — zero LLM cost, "
+        "reproducible, and each recommendation traces to specific counts the analyst can click into.",
+        size=Pt(10.5), color=DARK_GRAY, italic=True)
 
     _footer(s, page[0], TOTAL)
 
