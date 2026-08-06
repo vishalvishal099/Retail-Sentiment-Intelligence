@@ -222,7 +222,7 @@ def build():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    TOTAL = 23
+    TOTAL = 24
     page = [0]
 
     def new():
@@ -777,7 +777,77 @@ def build():
         size=Pt(11), color=DARK_GRAY)
     _footer(s, page[0], TOTAL)
 
-    # 11 · ModernBERT Final Results ─────────────────────────────────────────
+    # 11 · Key Metrics — Formulas & Thresholds ─────────────────────────────
+    s = new()
+    _header_bar(s, "Key Metrics  —  Formulas & Thresholds",
+                "Every dashboard number reduces to one of these four families")
+
+    def _formula_card(x, y, colour, tint, tag, title,
+                      formula, explain, thresholds):
+        _rect(s, Inches(x), Inches(y), Inches(6.05), Inches(2.85),
+              LIGHT_GRAY, line=colour)
+        _rect(s, Inches(x), Inches(y), Inches(6.05), Inches(0.42), colour)
+        _tx(s, Inches(x), Inches(y + 0.06), Inches(6.05), Inches(0.32),
+            tag, size=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        _tx(s, Inches(x + 0.18), Inches(y + 0.50), Inches(5.7), Inches(0.35),
+            title, size=Pt(12.5), bold=True, color=DARK_BLUE)
+        _rect(s, Inches(x + 0.18), Inches(y + 0.90), Inches(5.7), Inches(0.62),
+              tint, line=colour)
+        _tx(s, Inches(x + 0.18), Inches(y + 0.90), Inches(5.7), Inches(0.62),
+            formula, size=Pt(12), bold=True, color=DARK_BLUE,
+            align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+        _tx(s, Inches(x + 0.18), Inches(y + 1.60), Inches(5.7), Inches(0.45),
+            explain, size=Pt(10.5), color=DARK_GRAY, italic=True)
+        _bullets(s, Inches(x + 0.18), Inches(y + 2.05), Inches(5.7),
+                 Inches(0.75), thresholds, size=Pt(10.5))
+
+    _formula_card(0.5, 1.05, WALMART_BLUE, LIGHT_BLUE,
+        "BRAND HEALTH  ·  SENTIMENT GAUGE",
+        "Net-sentiment score in –100 … +100",
+        "score  =  (positive – negative) / total  ×  100",
+        "P, N, U = counts of positive / negative / neutral posts in the window (segment-filtered).",
+        [
+            "score  >  +20   →   Healthy    (green)",
+            "score  <  –20   →   At risk    (red)",
+            "otherwise       →   Neutral    (orange)",
+        ])
+
+    _formula_card(6.75, 1.05, GREEN, GREEN_TINT,
+        "TRUST SCORE  ·  PER-POST CREDIBILITY",
+        "Weighted 3-component credibility signal",
+        "trust  =  0.4 · metadata  +  0.3 · dedup  +  0.3 · llm",
+        "metadata = account age / karma;  dedup = MinHash near-duplicate;  llm = ambiguous-zone check.",
+        [
+            "trust  ≥  0.7   →   trusted, eligible for P1",
+            "0.5 ≤ trust < 0.7   →   eligible for P2",
+            "trust  <  0.5   →   flagged (never silently dropped)",
+        ])
+
+    _formula_card(0.5, 4.05, AMBER, AMBER_TINT,
+        "PRIORITY TIERS  ·  P1 / P2 URGENCY GATE",
+        "Two-dimensional gate: credibility × model confidence",
+        "P1:  trust ≥ 0.70   ∧   sent_conf ≥ 0.80\nP2:  trust ≥ 0.50   ∧   sent_conf ≥ 0.60   (and not P1)",
+        "Ranking within tier uses  priority_score = trust × sent_conf  (SQL ORDER BY).",
+        [
+            "Both components must independently clear the gate",
+            "P1 = urgent  ·  P2 = review-worthy  ·  else = background",
+            "Notification groups filter on  priority_filter  (JSON)",
+        ])
+
+    _formula_card(6.75, 4.05, PURPLE, PURPLE_TINT,
+        "COMPETITOR PAIN POINTS  ·  RANKING & ACTION",
+        "Per-aspect negative rate on competitor subs, vs Walmart",
+        "negative_ratio(a) = neg(a) / total(a)      ·      delta = comp – wmt",
+        "Signal floor  total ≥ 8  posts per aspect;  top-10 sorted DESC by (ratio, total).",
+        [
+            "ratio  ≥  60 %   →   High priority   ·   ≥ 40 %  →  Medium",
+            "delta  >  +5 %   →   'Marketing angle'  (Walmart is better)",
+            "delta  <  –5 %   →   'Investigate'     (Walmart is worse)",
+        ])
+
+    _footer(s, page[0], TOTAL)
+
+    # 12 · ModernBERT Final Results ─────────────────────────────────────────
     s = new()
     _header_bar(s, "ModernBERT  —  Final Training Results",
                 "3-stage curriculum,  5-fold out-of-fold CV,  n = 200")
