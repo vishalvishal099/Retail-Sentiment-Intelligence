@@ -1556,8 +1556,22 @@ def lifecycle_list(state: str | None = Query(None), limit: int = Query(200, ge=1
         return JSONResponse({"error": f"unknown state '{state}'"}, status_code=400)
     rows = _storage.lifecycle_list(state=state, limit=limit)
     counts = _storage.lifecycle_counts()
-    # Always include all known states with zero so the board renders clean columns.
     counts_full = {s: counts.get(s, 0) for s in LIFECYCLE_STATES}
+    for row in rows:
+        if row.get("reddit_url"):
+            continue
+        post_id = row.get("post_id", "")
+        subreddit = row.get("subreddit", "")
+        try:
+            raw = _storage.get_item("raw_posts", post_id, subreddit) or {}
+        except Exception:
+            raw = {}
+        url = raw.get("url") if isinstance(raw, dict) else ""
+        if not url and isinstance(post_id, str) and post_id.startswith("reddit_"):
+            bare = post_id[len("reddit_"):]
+            url = f"https://www.reddit.com/r/{subreddit}/comments/{bare}/"
+        if url:
+            row["reddit_url"] = url
     return {
         "states": list(LIFECYCLE_STATES),
         "counts": counts_full,
@@ -1586,6 +1600,7 @@ def lifecycle_transition(post_id: str, payload: dict):
     target = (payload.get("to_state") or "").strip()
     note = (payload.get("note") or "").strip()
     by = (payload.get("by") or "analyst").strip()
+    assign_team = (payload.get("assign_team") or "").strip()
     if target not in LIFECYCLE_STATES:
         return JSONResponse({"error": f"unknown state '{target}'"}, status_code=400)
 
@@ -1604,10 +1619,15 @@ def lifecycle_transition(post_id: str, payload: dict):
 
     now = datetime.now(timezone.utc).isoformat()
     history = row.get("history") or []
-    history.append({"at": now, "from_state": current, "to_state": target, "by": by, "note": note})
+    history_note = note if not assign_team else (f"[Assigned: {assign_team}] {note}" if note else f"[Assigned: {assign_team}]")
+    history.append({"at": now, "from_state": current, "to_state": target, "by": by, "note": history_note})
     row["state"] = target
     row["history"] = history
     row["updated_at"] = now
+    if assign_team:
+        row["assign_team"] = assign_team
+    if note:
+        row["action_note"] = note
     if target == "acknowledged" and not row.get("acknowledged_at"):
         row["acknowledged_at"] = now
     if target == "reply_sent" and not row.get("reply_sent_at"):
@@ -2744,41 +2764,95 @@ def get_review_queue(
     offset: int = Query(0, ge=0),
     sentiment: str = Query(None),
     range: str = Query(None, alias="range"),
+    macro_segment: str = Query(None, description="Optional macro group: 'walmart' or 'competitor'."),
 ):
     """Get posts needing human review. When sentiment/range filters are active,
     return ALL matching posts (not just needs_review=1) so the analyst can
     review and reply to any post that matches the criteria."""
     _ensure_initialized()
 
+    macro_subs: set[str] | None = None
+    if macro_segment:
+        try:
+            from src.utils.segments import _load_macro_map
+            macro_subs = {s for s, m in _load_macro_map().items() if m == macro_segment}
+        except Exception:
+            macro_subs = None
+
     conditions: list[str] = []
     params: list = []
 
-    # Always only show posts that still need review — never show already-reviewed posts
-    conditions.append("json_extract(data, '$.needs_review') = 1")
+    # Include posts the model flagged for review (low confidence) OR any
+    # negative post that clears the P1/P2 priority bar — those need analyst
+    # eyes even though the model was confident. Reviewed posts drop out
+    # because their `needs_review` is set to False after triage.
+    trust_expr_f = "COALESCE(CAST(json_extract(data, '$.trust_score') AS REAL), 0)"
+    conf_expr_f = "COALESCE(CAST(json_extract(data, '$.sentiment_confidence') AS REAL), 0)"
+    conditions.append(
+        "("
+        "json_extract(data, '$.needs_review') = 1"
+        f" OR (json_extract(data, '$.sentiment') = 'negative' AND {trust_expr_f} >= 0.5 AND {conf_expr_f} >= 0.6)"
+        ")"
+    )
+    conditions.append("(COALESCE(json_extract(data, '$.human_validated'), 0) = 0)")
 
     if sentiment:
         conditions.append("json_extract(data, '$.sentiment') = ?")
         params.append(sentiment)
 
     if range:
-        cutoff = _range_to_cutoff(range)
-        if cutoff:
-            conditions.append("json_extract(data, '$.analyzed_at') >= ?")
-            params.append(cutoff)
+        try:
+            window_start, window_end, _, _ = _resolve_window(range)
+        except Exception:
+            window_start = window_end = None
+        if window_start and window_end:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM raw_posts rp "
+                "WHERE rp.id = json_extract(analyses.data, '$.post_id') "
+                "AND rp.created_timestamp >= ? AND rp.created_timestamp < ?)"
+            )
+            params.append(window_start.timestamp())
+            params.append(window_end.timestamp())
+
+    if macro_subs is not None:
+        if not macro_subs:
+            return {"queue": [], "total": 0, "offset": offset, "has_more": False}
+        placeholders = ",".join(["?"] * len(macro_subs))
+        conditions.append(f"LOWER(json_extract(data, '$.subreddit')) IN ({placeholders})")
+        params.extend(sorted(macro_subs))
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
     # Total count for pagination
     total = _storage._conn.execute(
         f"SELECT COUNT(*) FROM analyses WHERE {where_clause}", params
     ).fetchone()[0]
-    params.extend([limit, offset])
+    # Order by priority tier first (P1 → P2 → other), then by recency, so P1s
+    # anywhere in the pool surface before older P2s / others.
+    trust_expr = "COALESCE(CAST(json_extract(data, '$.trust_score') AS REAL), 0)"
+    conf_expr = "COALESCE(CAST(json_extract(data, '$.sentiment_confidence') AS REAL), 0)"
+    tier_rank_sql = (
+        f"CASE "
+        f"  WHEN {trust_expr} >= 0.7 AND {conf_expr} >= 0.8 THEN 0 "
+        f"  WHEN {trust_expr} >= 0.5 AND {conf_expr} >= 0.6 THEN 1 "
+        f"  ELSE 2 "
+        f"END"
+    )
     query = (
         f"SELECT data FROM analyses "
         f"WHERE {where_clause} "
-        f"ORDER BY json_extract(data, '$.analyzed_at') DESC "
+        f"ORDER BY ({tier_rank_sql}) ASC, "
+        f"         ({trust_expr} * {conf_expr}) DESC, "
+        f"         json_extract(data, '$.analyzed_at') DESC "
         f"LIMIT ? OFFSET ?"
     )
-    analyses = _storage.query("analyses", query, params)
+    analyses = _storage.query("analyses", query, params + [limit, offset])
+
+    def _priority_tier(trust: float, conf: float) -> str:
+        if trust >= 0.7 and conf >= 0.8:
+            return "P1"
+        if trust >= 0.5 and conf >= 0.6:
+            return "P2"
+        return "other"
 
     # Enrich with post data
     enriched = []
@@ -2796,15 +2870,21 @@ def get_review_queue(
             bare = post_id[len("reddit_") :]
             reddit_url = f"https://www.reddit.com/r/{item.get('subreddit', '')}/comments/{bare}/"
 
+        trust_val = float(item.get("trust_score") or 0.0)
+        conf_val = float(item.get("sentiment_confidence") or 0.0)
+        tier = _priority_tier(trust_val, conf_val)
+
         enriched_item = {
             "id": item.get("id", ""),
             "post_id": post_id,
             "sentiment": item.get("sentiment", "unknown"),
-            "sentiment_confidence": item.get("sentiment_confidence", 0),
-            "trust_score": item.get("trust_score", 0),
+            "sentiment_confidence": conf_val,
+            "trust_score": trust_val,
             "is_trusted": item.get("is_trusted", False),
             "aspects": item.get("aspects", []),
             "needs_review": item.get("needs_review", True),
+            "priority_tier": tier,
+            "priority_score": round(trust_val * conf_val, 4),
             "subreddit": item.get("subreddit", ""),
             "analyzed_at": item.get("analyzed_at", ""),
             "model": item.get("model", ""),
@@ -3008,10 +3088,10 @@ def draft_all(post_id: str, payload: dict | None = None):
     drafts = result.get("drafts", [])
 
     # ── Internal action note ────────────────────────────────────────────────────
-    # Cascade: 1) Walmart LLM Gateway (GPT-4o)  2) Mistral via Ollama
-    #          3) Smart Composer template  4) bare template fallback
-    action_draft = ""
-    action_model = "template"
+    # Generate from BOTH Walmart LLM Gateway (GPT-4o) AND Mistral (Ollama) in
+    # parallel. Return both so the analyst can pick. Falls back to the smart
+    # composer template only when both models are unreachable.
+    action_drafts: list[dict] = []
     asp = aspects[0] if aspects else "this issue"
     complaint_text = (raw.get('title', '') + ' ' + raw.get('body', '')).strip()[:600]
     action_prompt = (
@@ -3023,70 +3103,84 @@ def draft_all(post_id: str, payload: dict | None = None):
         f"Aspects affected: {', '.join(aspects) or 'general'}\n\n"
         "Internal action recommendation (2-3 complete sentences):"
     )
+
+    def _trim_to_sentence(text: str, cap: int = 600) -> str:
+        text = text.strip()
+        if len(text) <= cap:
+            return text
+        last_end = max(text.rfind('. ', 0, cap), text.rfind('! ', 0, cap), text.rfind('? ', 0, cap))
+        return text[:last_end + 1] if last_end > 0 else text[:cap]
+
     try:
         llm2 = _get_reply_llm()
 
-        # ── Step 1: Walmart LLM Gateway (GPT-4o) ──────────────────────────────
-        if hasattr(llm2, '_gateway_generate_reply') and not action_draft:
-            try:
-                import requests as _req
-                url = llm2.config.wmt_gateway_url.rstrip("/") + "/chat/completions"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {llm2.config.wmt_gateway_key}",
-                    "WM_CONSUMER.ID": getattr(llm2.config, "wmt_consumer_id", ""),
-                    "WM_SVC.NAME": getattr(llm2.config, "wmt_svc_name", "isl-ai-engine"),
-                    "WM_SVC.ENV": getattr(llm2.config, "wmt_svc_env", "stage"),
-                }
-                resp = _req.post(url, json={
-                    "model": llm2.config.wmt_gateway_model,
-                    "messages": [{"role": "user", "content": action_prompt}],
-                    "temperature": 0.4,
-                    "max_tokens": 200,
-                }, headers=headers, timeout=30, verify=False)
-                if resp.status_code == 200:
-                    action_draft = resp.json()["choices"][0]["message"]["content"].strip()
-                    action_model = f"GPT-4o ({llm2.config.wmt_gateway_model})"
+        # ── GPT-4o via Walmart LLM Gateway ─────────────────────────────────────
+        try:
+            import requests as _req
+            url = llm2.config.wmt_gateway_url.rstrip("/") + "/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {llm2.config.wmt_gateway_key}",
+                "WM_CONSUMER.ID": getattr(llm2.config, "wmt_consumer_id", ""),
+                "WM_SVC.NAME": getattr(llm2.config, "wmt_svc_name", "isl-ai-engine"),
+                "WM_SVC.ENV": getattr(llm2.config, "wmt_svc_env", "stage"),
+            }
+            resp = _req.post(url, json={
+                "model": llm2.config.wmt_gateway_model,
+                "messages": [{"role": "user", "content": action_prompt}],
+                "temperature": 0.4,
+                "max_tokens": 200,
+            }, headers=headers, timeout=30, verify=False)
+            if resp.status_code == 200:
+                text = resp.json()["choices"][0]["message"]["content"].strip()
+                if text:
+                    action_drafts.append({
+                        "model": f"GPT-4o ({llm2.config.wmt_gateway_model})",
+                        "source": "gateway",
+                        "note": _trim_to_sentence(text),
+                    })
                     log.info("action_note_generated", model="gateway_gpt4o")
-            except Exception as eg:
-                log.warning("action_note_gateway_failed", error=str(eg))
+        except Exception as eg:
+            log.warning("action_note_gateway_failed", error=str(eg))
 
-        # ── Step 2: Mistral via Ollama ─────────────────────────────────────────
-        if not action_draft and hasattr(llm2, '_ollama_generate_reply'):
+        # ── Mistral via Ollama ─────────────────────────────────────────────────
+        if hasattr(llm2, '_ollama_generate_reply'):
             try:
                 ollama_text = llm2._ollama_generate_reply(action_prompt)
                 if ollama_text:
-                    action_draft = ollama_text
-                    action_model = f"Mistral ({getattr(llm2.config, 'ollama_model', 'mistral:7b-instruct')})"
+                    action_drafts.append({
+                        "model": f"Mistral ({getattr(llm2.config, 'ollama_model', 'mistral:7b-instruct')})",
+                        "source": "ollama",
+                        "note": _trim_to_sentence(ollama_text),
+                    })
                     log.info("action_note_generated", model="ollama_mistral")
             except Exception as eo:
                 log.warning("action_note_ollama_failed", error=str(eo))
 
-        # ── Step 3: Smart Composer template (always available) ─────────────────
-        if not action_draft:
-            from src.analysis.llm_client import _smart_compose_reply as _sc
-            # Re-purpose the smart composer with an action-note seed phrasing
+        # ── Smart Composer template fallback (only when both LLMs failed) ──────
+        if not action_drafts:
+            subreddit_val = analysis.get("subreddit", "walmart")
             asp_str = ', '.join(aspects[:2]) if aspects else "general service"
-            subreddit = analysis.get("subreddit", "walmart")
-            action_draft = (
-                f"Escalate to the {asp_str} operations team: review the root cause of "
-                f"this complaint from r/{subreddit} and update the relevant SOP within 5 business days. "
-                f"Flag for the weekly customer-feedback triage meeting."
-            )
-            action_model = "smart-composer"
+            action_drafts.append({
+                "model": "smart-composer",
+                "source": "template",
+                "note": (
+                    f"Escalate to the {asp_str} operations team: review the root cause of "
+                    f"this complaint from r/{subreddit_val} and update the relevant SOP within 5 business days. "
+                    f"Flag for the weekly customer-feedback triage meeting."
+                ),
+            })
             log.info("action_note_generated", model="smart_composer_template")
-
-        # Trim to sentence boundary if over 600 chars
-        if len(action_draft) > 600:
-            last_end = max(action_draft.rfind('. ', 0, 600),
-                          action_draft.rfind('! ', 0, 600),
-                          action_draft.rfind('? ', 0, 600))
-            action_draft = action_draft[:last_end + 1] if last_end > 0 else action_draft[:600]
 
     except Exception as e:
         log.warning("action_draft_failed", post_id=post_id, error=str(e))
-        action_draft = f"Review and improve the {asp} process. Escalate to the relevant team for root cause analysis."
-        action_model = "template"
+        action_drafts.append({
+            "model": "template",
+            "source": "template",
+            "note": f"Review and improve the {asp} process. Escalate to the relevant team for root cause analysis.",
+        })
+
+    primary_action = action_drafts[0] if action_drafts else {}
 
     primary = drafts[0] if drafts else {}
     return {
@@ -3096,8 +3190,9 @@ def draft_all(post_id: str, payload: dict | None = None):
         "model_used": primary.get("model_used", ""),
         "source": primary.get("source", ""),
         "examples_used": len(examples),
-        "action_draft": action_draft,
-        "action_model": action_model,
+        "action_draft": primary_action.get("note", ""),
+        "action_model": primary_action.get("model", ""),
+        "action_drafts": action_drafts,
         "gateway_available": result.get("gateway_available", None),
         "ollama_available": result.get("ollama_available", None),
         "gateway_reason": result.get("gateway_reason", None),
@@ -3188,6 +3283,7 @@ def get_reviewed(
     limit: int = Query(50, ge=1, le=200),
     sentiment: str = Query(None),
     range: str = Query(None, alias="range"),
+    macro_segment: str = Query(None, description="Optional macro group: 'walmart' or 'competitor'."),
 ):
     """Return posts that have already been human-validated (left the review queue)."""
     _ensure_initialized()
@@ -3201,6 +3297,17 @@ def get_reviewed(
         if cutoff:
             conditions.append("json_extract(data, '$.analyzed_at') >= ?")
             params.append(cutoff)
+    if macro_segment:
+        try:
+            from src.utils.segments import _load_macro_map
+            macro_subs2 = {s for s, m in _load_macro_map().items() if m == macro_segment}
+            if not macro_subs2:
+                return {"queue": [], "total": 0}
+            placeholders = ",".join(["?"] * len(macro_subs2))
+            conditions.append(f"LOWER(json_extract(data, '$.subreddit')) IN ({placeholders})")
+            params.extend(sorted(macro_subs2))
+        except Exception:
+            pass
     params.append(limit)
     query = (
         f"SELECT data FROM analyses WHERE {' AND '.join(conditions)} "
@@ -3600,8 +3707,153 @@ def get_alerts(
 
     import json as _json
     alerts = [_json.loads(r["data"]) for r in rows]
+
+    # Backward-compat enrichment: older sentiment_crash rows may not include
+    # affected group details. Compute current context and patch matching rows
+    # in-memory so the UI can show actionable ownership immediately.
+    sentiment_ctx: dict | None = None
+    try:
+        live_ctx = _alert_engine.detect_sentiment_crash(drop_threshold=-1.0)
+        if live_ctx:
+            sentiment_ctx = live_ctx[0]
+    except Exception:
+        sentiment_ctx = None
+
+    top_sub_cache: dict[str, str] = {}
+
+    def _top_subs_for_macro_day(macro: str, day_key: str) -> str:
+        cache_key = f"{macro}|{day_key}"
+        if cache_key in top_sub_cache:
+            return top_sub_cache[cache_key]
+        try:
+            try:
+                day_start_dt = datetime.fromisoformat(day_key).replace(tzinfo=timezone.utc)
+            except Exception:
+                day_start_dt = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            next_day_dt = day_start_dt + timedelta(days=1)
+            day_start_ts = day_start_dt.timestamp()
+            next_day_ts = next_day_dt.timestamp()
+            rows2 = _storage._conn.execute(  # type: ignore[attr-defined]
+                "SELECT a.data AS adata, r.subreddit AS sub "
+                "FROM analyses a JOIN raw_posts r ON a.post_id = r.id "
+                "WHERE r.created_timestamp >= ? AND r.created_timestamp < ?",
+                [day_start_ts, next_day_ts],
+            ).fetchall()
+            import json as _j
+            stats: dict[str, dict[str, int]] = {}
+            for rr in rows2:
+                sub = (rr["sub"] or "").strip().lower()
+                if not sub or macro_segment_for(sub) != macro:
+                    continue
+                d = _j.loads(rr["adata"])
+                st = stats.setdefault(sub, {"neg": 0, "total": 0})
+                st["total"] += 1
+                if d.get("sentiment") == "negative":
+                    st["neg"] += 1
+            ranked = []
+            for sub, st in stats.items():
+                if st["total"] <= 0:
+                    continue
+                ratio = st["neg"] / st["total"]
+                ranked.append((ratio, st["neg"], st["total"], sub))
+            ranked.sort(reverse=True)
+            out = " | ".join([f"r/{s} ({n}/{t}, {r:.0%})" for r, n, t, s in ranked[:3]])
+
+            # Fallback: if we have no analysed rows yet for this day window,
+            # show top subreddits by raw post volume so the owner is visible.
+            if not out:
+                rows3 = _storage._conn.execute(  # type: ignore[attr-defined]
+                    "SELECT subreddit AS sub, COUNT(*) AS n FROM raw_posts "
+                    "WHERE created_timestamp >= ? AND created_timestamp < ? "
+                    "GROUP BY subreddit ORDER BY n DESC LIMIT 100",
+                    [day_start_ts, next_day_ts],
+                ).fetchall()
+                tops = []
+                for rr in rows3:
+                    sub2 = (rr["sub"] or "").strip().lower()
+                    if not sub2 or macro_segment_for(sub2) != macro:
+                        continue
+                    tops.append((int(rr["n"] or 0), sub2))
+                    if len(tops) >= 3:
+                        break
+                out = " | ".join([f"r/{s} ({n} posts)" for n, s in tops])
+
+            # Second fallback: if that day has no rows at all, use previous day.
+            if not out:
+                prev_start = day_start_ts - 86400
+                prev_end = day_start_ts
+                rows4 = _storage._conn.execute(  # type: ignore[attr-defined]
+                    "SELECT subreddit AS sub, COUNT(*) AS n FROM raw_posts "
+                    "WHERE created_timestamp >= ? AND created_timestamp < ? "
+                    "GROUP BY subreddit ORDER BY n DESC LIMIT 100",
+                    [prev_start, prev_end],
+                ).fetchall()
+                tops2 = []
+                for rr in rows4:
+                    sub3 = (rr["sub"] or "").strip().lower()
+                    if not sub3 or macro_segment_for(sub3) != macro:
+                        continue
+                    tops2.append((int(rr["n"] or 0), sub3))
+                    if len(tops2) >= 3:
+                        break
+                out = " | ".join([f"r/{s} ({n} posts, prev day)" for n, s in tops2])
+            top_sub_cache[cache_key] = out
+            return out
+        except Exception:
+            top_sub_cache[cache_key] = ""
+            return ""
+
     # Normalise state field so the UI never has to deal with missing keys.
     for a in alerts:
+        if a.get("type") == "sentiment_crash":
+            details = a.setdefault("details", {})
+            if sentiment_ctx and a.get("id") == sentiment_ctx.get("id"):
+                ctx_details = sentiment_ctx.get("details", {}) or {}
+                for k in (
+                    "affected_macro_group",
+                    "affected_macro_delta",
+                    "competitor_delta",
+                    "walmart_delta",
+                    "top_subreddits_today",
+                ):
+                    if k not in details and k in ctx_details:
+                        details[k] = ctx_details[k]
+                # Ensure title also carries the group label for older rows.
+                grp = details.get("affected_macro_group")
+                if grp and "(" not in (a.get("title") or ""):
+                    label = "Competitors" if grp == "competitor" else "Walmart"
+                    base = a.get("title") or "Sentiment crash"
+                    if base.startswith("Sentiment crash"):
+                        base = base.replace("Sentiment crash", f"Sentiment crash ({label})", 1)
+                    else:
+                        base = f"Sentiment crash ({label}): {base}"
+                    a["title"] = base
+
+            # If we have subgroup context but title is generic, append top
+            # subreddit so the owner is obvious from the card headline.
+            tsubs = str(details.get("top_subreddits_today") or "")
+            if not tsubs:
+                grp0 = str(details.get("affected_macro_group") or "").strip().lower()
+                if not grp0:
+                    title0 = str(a.get("title") or "")
+                    if "(Competitors" in title0:
+                        grp0 = "competitor"
+                    elif "(Walmart" in title0:
+                        grp0 = "walmart"
+                if grp0 in ("walmart", "competitor"):
+                    day_key = str(a.get("time_window") or "")
+                    tsubs = _top_subs_for_macro_day(grp0, day_key)
+                    if tsubs:
+                        details["top_subreddits_today"] = tsubs
+            if tsubs and "r/" not in (a.get("title") or ""):
+                if " | " in tsubs:
+                    first = tsubs.split(" | ")[0].strip()
+                elif "), " in tsubs:
+                    first = tsubs.split("), ")[0].strip() + ")"
+                else:
+                    first = tsubs.split(",")[0].strip()
+                if first:
+                    a["title"] = f"{a.get('title') or 'Sentiment crash'} [{first}]"
         a.setdefault("state", "new")
     return {"alerts": alerts, "count": len(alerts), "total": total, "source": "stored", "range": range}
 
@@ -3718,8 +3970,9 @@ _DEFAULT_ALERT_RULES = {
     },
     "competitor_negative": {
         "enabled": True,
-        "sigma_threshold": 2.0,
-        "description": "Alert when competitor negative-sentiment volume spikes.",
+        "delta_threshold": 0.15,
+        "min_posts_per_window": 25,
+        "description": "Alert when a competitor subreddit's negative ratio jumps by at least this amount week-over-week.",
     },
 }
 
@@ -3954,7 +4207,21 @@ def get_trust_stats(limit: int = Query(2000, ge=100, le=10000), examples: int = 
     """
     _ensure_initialized()
     query = f"SELECT data FROM raw_posts ORDER BY created_timestamp DESC LIMIT {int(limit)}"
-    recent = _storage.query("raw_posts", query, [])
+    raw_recent = _storage.query("raw_posts", query, [])
+
+    # Only include posts that already have a real trust_score — ignore unscored
+    # raw_posts so metrics match the historical Trust Analytics behavior.
+    def _has_score(post: dict) -> bool:
+        raw = post.get("trust_score")
+        if raw is None:
+            return False
+        try:
+            float(raw)
+        except (TypeError, ValueError):
+            return False
+        return True
+
+    recent = [p for p in raw_recent if _has_score(p)]
 
     if not recent:
         return {
@@ -3963,14 +4230,17 @@ def get_trust_stats(limit: int = Query(2000, ge=100, le=10000), examples: int = 
             "low_trust_examples": [], "threshold": _config.trust.threshold,
         }
 
+    def _trust_score(post: dict) -> float:
+        return float(post.get("trust_score") or 0.0)
+
     threshold = _config.trust.threshold
-    trusted_posts = [p for p in recent if p.get("trust_score", 0) >= threshold]
-    flagged_posts = [p for p in recent if p.get("trust_score", 0) < threshold]
+    trusted_posts = [p for p in recent if _trust_score(p) >= threshold]
+    flagged_posts = [p for p in recent if _trust_score(p) < threshold]
 
     # Distribution histogram (5 buckets, 0.2 wide).
     buckets = {"0.0-0.2": 0, "0.2-0.4": 0, "0.4-0.6": 0, "0.6-0.8": 0, "0.8-1.0": 0}
     for p in recent:
-        score = p.get("trust_score", 0) or 0
+        score = _trust_score(p)
         if score < 0.2:
             buckets["0.0-0.2"] += 1
         elif score < 0.4:
@@ -4013,7 +4283,7 @@ def get_trust_stats(limit: int = Query(2000, ge=100, le=10000), examples: int = 
     )
 
     # Low-trust examples for the analyst review table.
-    flagged_sorted = sorted(flagged_posts, key=lambda p: p.get("trust_score", 0))
+    flagged_sorted = sorted(flagged_posts, key=_trust_score)
     examples_out = []
     for p in flagged_sorted[:examples]:
         text = (p.get("body") or p.get("title") or "").strip()
@@ -4025,7 +4295,7 @@ def get_trust_stats(limit: int = Query(2000, ge=100, le=10000), examples: int = 
             "author": p.get("author"),
             "title": p.get("title"),
             "text": text,
-            "trust_score": p.get("trust_score", 0),
+            "trust_score": _trust_score(p),
             "trust_components": p.get("trust_components", {}),
             "trust_flags": p.get("trust_flags", []),
             "score": p.get("score", 0),

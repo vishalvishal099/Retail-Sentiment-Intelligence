@@ -28,7 +28,7 @@ The three drafts are shown side-by-side in the UI. The analyst picks one,
 edits inline, and clicks **Save & Open Reddit** — the posted reply is written
 to the `feedback` table and becomes a **future few-shot example**.
 
-### Cascade & fallback logic
+## Cascade & fallback logic
 
 Every slot is guaranteed to have a draft:
 
@@ -55,7 +55,7 @@ both GPT-4o and Mistral. Keeping the prompt identical makes A/B comparison
 meaningful: differences between drafts A and B reflect only the model, not
 the instruction.
 
-### 2.1 Template
+## 2.1 Template
 
 ```text
 You are a senior Walmart customer-care analyst replying on Reddit.
@@ -80,7 +80,7 @@ Customer post:
 Reply:
 ```
 
-### 2.2 Style guardrails (baked into the system role)
+## 2.2 Style guardrails (baked into the system role)
 
 - **Length** — 2 to 4 sentences. Prevents wall-of-text corporate replies.
 - **Tone** — empathetic, specific to the actual complaint (no boilerplate).
@@ -90,7 +90,7 @@ Reply:
 - **Identity** — sign off as a real person (e.g. "— Ravi (Walmart Care)"),
   never as an anonymous brand handle.
 
-### 2.3 Input variables
+## 2.3 Input variables
 
 | Variable | Source | Notes |
 |----------|--------|-------|
@@ -100,7 +100,7 @@ Reply:
 | `{post_title + post_body}` | post record | Concatenated, truncated to 1200 chars |
 | `{past_post_i}, {past_reply_i}` | `feedback` table | Top-3 human-validated replies from the same aspect |
 
-### 2.4 Sampling parameters
+## 2.4 Sampling parameters
 
 | Model | `temperature` | `top_p` | `max_tokens` | Notes |
 |-------|--------------|---------|--------------|-------|
@@ -128,7 +128,7 @@ persisted (see `POST /api/review/{post_id}/reply` in `src/dashboard/api.py`):
 }
 ```
 
-### 3.1 What "few-shot prompting" means here
+## 3.1 What "few-shot prompting" means here
 
 Few-shot prompting is the technique of showing an LLM **a small number of
 worked examples inside the prompt** so it imitates the pattern without any
@@ -145,7 +145,7 @@ currently in the hundreds — not thousands — and (b) the tone we want to
 match is *the analyst team's*, which changes as the team learns. Fine-tuning
 would ossify last month's tone; few-shot updates every day for free.
 
-### 3.2 How the few-shot slot is filled
+## 3.2 How the few-shot slot is filled
 
 On every `Generate Drafts` click, `_collect_reply_examples(limit=5)` runs the
 following SQL against `feedback`:
@@ -166,7 +166,7 @@ The prompt builder then keeps the **top 3 pairs** (`[:3]` in
 `_build_reply_prompt`) — that gives the LLM enough tone signal without
 blowing past its context window.
 
-### 3.3 Cold start vs. warm state
+## 3.3 Cold start vs. warm state
 
 | Phase | `feedback` count | What the LLM sees | Behaviour |
 |-------|-----------------|--------------------|-----------|
@@ -180,7 +180,7 @@ never longer than ~4 examples) but **the pool it draws from grows without
 bound**. That's why RSI ships with few-shot on day one — no annotation
 sprint required to bootstrap it.
 
-### 3.4 Why it works — intuition
+## 3.4 Why it works — intuition
 
 Modern instruction-tuned models (GPT-4o, Mistral-7B-Instruct) have been
 trained to treat "Example X: … Example Y: …" as a *task template*. When
@@ -236,7 +236,7 @@ sentence in every draft was produced by the actual pipeline at the moment
 this document was written. The exact commands that reproduce it are in
 §6.5 below.
 
-### 5.1 The raw post (from `raw_posts`)
+## 5.1 The raw post (from `raw_posts`)
 
 Real row, ingested by the Arctic Shift ingestion pass and stored under
 `id = reddit_1u2bgdw`. Open the original on Reddit:
@@ -255,7 +255,7 @@ Real row, ingested by the Arctic Shift ingestion pass and stored under
 }
 ```
 
-### 5.2 What the pipeline computed (from `analyses`)
+## 5.2 What the pipeline computed (from `analyses`)
 
 Real row from the `analyses` container — copy-paste of the actual DB value:
 
@@ -271,7 +271,7 @@ Real row from the `analyses` container — copy-paste of the actual DB value:
 Because `sentiment = negative` and trust ≥ 0.5, the post is eligible for
 Review & Validate; the **Generate Drafts** button is enabled.
 
-### 5.3 The prompt the LLMs actually see (variables substituted)
+## 5.3 The prompt the LLMs actually see (variables substituted)
 
 Below is the **exact prompt string** printed by
 `WalmartLLMClient._build_reply_prompt()` on this post, using the top-3 most
@@ -305,7 +305,7 @@ The very few times I've gotten a whole pie, it'll be stuff premade and left in t
 Reply:
 ```
 
-### 5.4 The three drafts the system actually produced
+## 5.4 The three drafts the system actually produced
 
 Captured verbatim from `WalmartLLMClient.generate_reply_pair(...)` on
 `reddit_1u2bgdw` with **all three engines healthy**:
@@ -339,7 +339,7 @@ Captured verbatim from `WalmartLLMClient.generate_reply_pair(...)` on
 > frustration around your order. Drop us a private message with the order #
 > or store info and we'll take it from here. — Walmart Care
 
-### 5.5 What to tell the evaluator (step by step)
+## 5.5 What to tell the evaluator (step by step)
 
 1. **"The customer's post is real, in our database, right now."** — Open
    the original on Reddit ([`r/samsclub/comments/1u2bgdw`](https://www.reddit.com/r/samsclub/comments/1u2bgdw/why_do_you_guys_sell_whole_pizzas_made_hours_ago/))
@@ -368,7 +368,7 @@ Captured verbatim from `WalmartLLMClient.generate_reply_pair(...)` on
    Reddit, the reply is written to `feedback` with `kind = auto_reply_posted`
    and becomes the next post's top few-shot example."** — See §5.6.
 
-### 5.6 What actually gets written back after the analyst posts
+## 5.6 What actually gets written back after the analyst posts
 
 If the analyst had accepted Draft A and clicked *Save & Open Reddit*, the
 following row would be inserted into `feedback` (schema matches the 18 rows

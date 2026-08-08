@@ -55,7 +55,7 @@ Two shapes coexist in `feedback` depending on `kind`. Both share the same
 top-level fields so the retraining script can filter with a single JSON
 predicate.
 
-### 3.1 Label / aspect / trust correction (`kind` unset or `label_correction`)
+## 3.1 Label / aspect / trust correction (`kind` unset or `label_correction`)
 
 ```json
 {
@@ -86,7 +86,7 @@ That way the correction flows through **immediately** to Brand Health,
 Post Explorer, drilldowns, and every KPI — the analyst doesn't wait for a
 retrain to see their fix.
 
-### 3.2 Posted reply (`kind = "auto_reply_posted"`)
+## 3.2 Posted reply (`kind = "auto_reply_posted"`)
 
 ```json
 {
@@ -108,7 +108,7 @@ example.
 
 ## 4 · How each signal is consumed
 
-### 4.1 Posted reply → Smart Reply few-shot (in-context, live)
+## 4.1 Posted reply → Smart Reply few-shot (in-context, live)
 
 - **Frequency:** every `Generate Drafts` click
 - **Query:** `SELECT data FROM feedback WHERE json_extract(data, '$.kind') = 'auto_reply_posted' ORDER BY json_extract(data, '$.created_at') DESC LIMIT 5;`
@@ -119,7 +119,7 @@ example.
 
 This is the *hot loop*. It closes on itself in seconds.
 
-### 4.2 Label correction → ModernBERT Stage-3 augmentation (monthly)
+## 4.2 Label correction → ModernBERT Stage-3 augmentation (monthly)
 
 - **Frequency:** operational cadence — recommendation is monthly
 - **Consumer:** `scripts/train_modernbert_sentiment.py --stages 3`
@@ -141,7 +141,7 @@ This is the *hot loop*. It closes on itself in seconds.
 
 This is the *warm loop*. It closes on a monthly cadence.
 
-### 4.3 Trust override → threshold calibration
+## 4.3 Trust override → threshold calibration
 
 - **Frequency:** whenever a batch of overrides accumulates
 - **Consumer:** offline notebook (`evaluation/trust_score_walmart200.ipynb`)

@@ -1,6 +1,6 @@
 # Retail Sentiment Intelligence
 
-### Real-Time Brand Health Monitoring via Reddit NLP Pipeline
+## Real-Time Brand Health Monitoring via Reddit NLP Pipeline
 
 **BITS ZG628T · Dissertation — Post Mid-Semester Progress Presentation**
 
@@ -15,7 +15,7 @@ Birla Institute of Technology & Science, Pilani (WILP)
 
 ## Agenda
 
-### Part A · Mid-Semester Recap *(already presented)*
+## Part A · Mid-Semester Recap *(already presented)*
 
 1. System Architecture & End-to-End Pipeline
 2. Vision / Image Processing — Challenge & Mitigation
@@ -24,7 +24,7 @@ Birla Institute of Technology & Science, Pilani (WILP)
 5. Dashboard — Data Population & Sections
 6. Notification System — Group-Based Routing
 
-### Part B · Post Mid-Semester Work *(new — focus of this presentation)*
+## Part B · Post Mid-Semester Work *(new — focus of this presentation)*
 
 7. Review & Validate — Human-in-the-Loop
 8. Post Explorer & Filtering
@@ -367,7 +367,7 @@ sequenceDiagram
 - Screenshots of error messages, damaged products, receipts, app glitches
 - Text-only pipeline misses these entirely → incomplete brand health
 
-### Example
+## Example
 
 | Field | Value |
 |-------|-------|
@@ -407,7 +407,7 @@ sequenceDiagram
 | Critical hallucinations | **37.5%** | Fake receipts, fake prices |
 | Correct text extraction | **25% (2/8)** | Only memes/photos pass |
 
-### What hallucination looked like
+## What hallucination looked like
 
 - "Walmart receipt: $39.99, handwritten 'Damaged Box'" → actually a product page, no price, no handwriting
 - "Order status PENDING" → no PENDING text anywhere in image
@@ -441,7 +441,7 @@ sequenceDiagram
 
 > **Every single model that solves our problem is from a Chinese lab — blocked by Walmart's vendor policy.**
 
-### What all 5 papers agree on
+## What all 5 papers agree on
 
 > Dynamic / native resolution processing with **tile-based attention** is THE solution to fine-grained text recognition. Fixed-size image resizing is the dominant failure mode — not model architecture itself.
 
@@ -510,7 +510,7 @@ OUR SOLUTION:  Implement their TECHNIQUES as CODE on our compliant model
 
 ## Results — Hallucination Eliminated
 
-### Initial 8-image validation
+## Initial 8-image validation
 
 | Metric | Before (Single-Pass) | After (Multi-Pass) | Change |
 |--------|---------------------|--------------------|--------|
@@ -520,7 +520,7 @@ OUR SOLUTION:  Implement their TECHNIQUES as CODE on our compliant model
 | Fabricated claims | 8 total | **0** | Eliminated |
 | Avg latency / image | ~5 s | ~15 s | 3× (acceptable) |
 
-### Scaled validation — 25 images
+## Scaled validation — 25 images
 
 | Verdict | Count | Percentage |
 |---------|-------|------------|
@@ -548,7 +548,7 @@ $$
 
 Each component is normalized to **[0, 1]** and the final score is clamped.
 
-### Component 1: Metadata Heuristics (weight: 0.4)
+## Component 1: Metadata Heuristics (weight: 0.4)
 
 $$
 \text{meta} = w_{base} + w_{age} \cdot age + w_{karma} \cdot karma + w_{length} \cdot length + w_{eng} \cdot engagement
@@ -562,12 +562,12 @@ $$
 | Content length | `min((len(title) + len(body)) / 200, 1.0)` | 0.30 |
 | Engagement | `min(max(reddit_score, 0) / 20, 1.0)` | 0.15 |
 
-### Component 2: Dedup / Originality (weight: 0.3)
+## Component 2: Dedup / Originality (weight: 0.3)
 
 - MiniLM-L6-v2 sentence embeddings → cosine similarity vs prior posts
 - `max_sim > 0.92` → penalize (likely repost / copypasta)
 
-### Component 3: LLM Credibility (weight: 0.3)
+## Component 3: LLM Credibility (weight: 0.3)
 
 - Only invoked when `0.3 < metadata_score < 0.8` (ambiguous zone) — cost control
 - Rule-based heuristic (free) or cloud LLM call
@@ -596,13 +596,13 @@ $$
 
 **Confidence** = softmax probability of the predicted class.
 
-### How it's calculated
+## How it's calculated
 
 1. ModernBERT outputs **logits** for `[negative, neutral, positive]`
 2. **Softmax** converts to probabilities: P(neg), P(neu), P(pos)
 3. `confidence = max(P(neg), P(neu), P(pos))`
 
-### Thresholds used in the system
+## Thresholds used in the system
 
 | Threshold | Value | Source |
 |-----------|-------|--------|
@@ -610,7 +610,7 @@ $$
 | Notification P1 | trust ≥ 0.70 **AND** confidence ≥ 0.80 | dispatcher.py |
 | Notification P2 | trust ≥ 0.50 **AND** confidence ≥ 0.60 | dispatcher.py |
 
-### Combined Priority Formula
+## Combined Priority Formula
 
 ```
 P1 = (trust_score ≥ 0.70) ∧ (confidence ≥ 0.80)   → immediate action
@@ -630,16 +630,16 @@ P2 = (trust_score ≥ 0.50) ∧ (confidence ≥ 0.60)   → review-worthy
 
 ## Why ModernBERT over RoBERTa?
 
-### Thesis Claim
+## Thesis Claim
 
 > Long-context, domain-fine-tuned encoders **beat** short-context Twitter-trained baselines on Reddit-flavored retail complaints.
 
-### RoBERTa Limitations
+## RoBERTa Limitations
 - Only **512 token** context → truncates long Reddit posts
 - Trained on Twitter → different register from Reddit
 - No domain knowledge of retail / Walmart terminology
 
-### ModernBERT Advantages
+## ModernBERT Advantages
 - **8192 token** context (16× longer)
 - Supports full Reddit complaint posts without truncation
 - Modern architecture optimizations (RoPE, GeGLU, alternating attention)
@@ -655,7 +655,7 @@ P2 = (trust_score ≥ 0.50) ∧ (confidence ≥ 0.60)   → review-worthy
 | 2. Reddit Register | GoEmotions-3class (54 K Reddit comments) | 2 | Reddit language patterns |
 | 3. Domain Specialization | Walmart-200 (5-fold CV) | up to 15 (patience 3) | Retail fine-tuning |
 
-### Training Configuration
+## Training Configuration
 - `max_length = 1024` tokens (key lever for long-context advantage)
 - Effective batch size **32** (per-device BS=8 × grad accum=4)
 - Class weights: `neg=0.52, neu=1.03, pos=8.33` (inverse frequency)
@@ -700,7 +700,7 @@ P2 = (trust_score ≥ 0.50) ∧ (confidence ≥ 0.60)   → review-worthy
 
 > Proof that ModernBERT was actually fine-tuned in-house (not a downloaded checkpoint)
 
-### Training pipeline
+## Training pipeline
 
 | Stage | Script / File | Output |
 |-------|---------------|--------|
@@ -710,7 +710,7 @@ P2 = (trust_score ≥ 0.50) ∧ (confidence ≥ 0.60)   → review-worthy
 | Honest evaluation | [`scripts/eval_sentiment_models.py`](../../scripts/eval_sentiment_models.py) | `models/modernbert_walmart/eval_results.json` |
 | Thesis chapter | [`docs/MODEL_COMPARISON.md`](../MODEL_COMPARISON.md) | ~290-line write-up of methodology + results |
 
-### Checkpoints produced (on disk today)
+## Checkpoints produced (on disk today)
 
 ```
 models/modernbert_walmart/
@@ -722,7 +722,7 @@ models/modernbert_walmart/
 └── eval_results.json      # aggregated CV metrics + per-length-bucket F1
 ```
 
-### Reproduction command (offline)
+## Reproduction command (offline)
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
@@ -730,7 +730,7 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
   --stages 1,2,3 --folds 5 --max-length 1024 --batch-size 8
 ```
 
-### Why not just use RoBERTa? — Decision matrix
+## Why not just use RoBERTa? — Decision matrix
 
 | Criterion | RoBERTa (`cardiffnlp/twitter-roberta-base`) | ModernBERT (`answerdotai/ModernBERT-base`) | Winner |
 |-----------|--------------------------------------------|---------------------------------------------|--------|
@@ -744,7 +744,7 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
 
 **Decision:** ModernBERT wins on the metrics that matter (accuracy + long-context). We accept +5 ms latency for +0.137 macro F1. RoBERTa is retained as fallback in [`config/models.yaml`](../../config/models.yaml) if the local checkpoint is missing.
 
-### Pipeline wiring (production)
+## Pipeline wiring (production)
 
 - [`config/models.yaml`](../../config/models.yaml) — `sentiment.model = models/modernbert_walmart/final`, `max_length: 1024`
 - [`src/analysis/llm_client.py`](../../src/analysis/llm_client.py) — `HuggingFaceSentimentClient` loads from the registry (with RoBERTa fallback)
@@ -785,11 +785,11 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
 └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
 ```
 
-### Each tile supports
+## Each tile supports
 - **Single-click** → navigate to Post Explorer (pre-filtered)
 - **Dropdown** → dual nav to Post Explorer OR Review & Reply
 
-### Data sources
+## Data sources
 - `/api/brand-health?range=today` — aggregated sentiment counts
 - `/api/brand-health/priority-negatives` — P1 + P2 tier counts
 - `/api/lifecycle` — state distribution
@@ -838,12 +838,12 @@ Pipeline analyzes post → classify_priority(trust, confidence)
             └── Log to notification_log table (audit trail)
 ```
 
-### Priority Classification
+## Priority Classification
 
 - **P1**: `trust ≥ 0.70` AND `confidence ≥ 0.80` (high-signal, immediate action)
 - **P2**: `trust ≥ 0.50` AND `confidence ≥ 0.60` (review-worthy, lower urgency)
 
-### Routing Model
+## Routing Model
 - Groups are configured **per subreddit-set** → different teams own different subreddits
 - Each group has its own email DL, Slack channel, and priority filter (P1, P2, or both)
 
@@ -861,7 +861,7 @@ Admin UI at `/notifications` allows:
 - ✅ View delivery log — audit trail of all sent notifications
 - ✅ Delete groups
 
-### API Endpoints (8 total)
+## API Endpoints (8 total)
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -880,7 +880,7 @@ Admin UI at `/notifications` allows:
 
 > New capabilities built after mid-sem — analyst workflows, lifecycle tracking, competitor insights
 
-### What's new since mid-sem
+## What's new since mid-sem
 
 | # | Capability | Why it was added |
 |---|-----------|------------------|
@@ -902,12 +902,12 @@ Admin UI at `/notifications` allows:
 
 **Purpose:** Analysts correct AI labels and draft replies to negative posts.
 
-### Workflow
+## Workflow
 1. Queue shows posts sorted by priority (P1 first)
 2. Analyst reviews sentiment + aspects (correct if wrong)
 3. Click "Generate Drafts" → two reply options generated
 
-### Dual-Draft Reply Generation
+## Dual-Draft Reply Generation
 
 ```
 ┌─────────────────────┐    ┌─────────────────────┐
@@ -926,7 +926,7 @@ Admin UI at `/notifications` allows:
                   Post to Reddit
 ```
 
-### Learning Loop
+## Learning Loop
 
 - Posted replies saved to `feedback` table
 - Become **few-shot examples** for future draft generation
@@ -944,7 +944,7 @@ Admin UI at `/notifications` allows:
 
 **Purpose:** Browse all analyzed posts with powerful filtering.
 
-### Filters Available
+## Filters Available
 - **Sentiment:** negative / neutral / positive
 - **Confidence:** threshold slider
 - **Trust score:** threshold slider
@@ -953,7 +953,7 @@ Admin UI at `/notifications` allows:
 - **Date range:** today, week, month, custom
 - **Text search:** full-text across titles & bodies
 
-### Per-Post Card Shows
+## Per-Post Card Shows
 - Title + body excerpt
 - Sentiment badge (color-coded) + confidence %
 - Trust score indicator
@@ -972,7 +972,7 @@ Admin UI at `/notifications` allows:
 
 ## Post Lifecycle — Kanban Board
 
-### States: Triaged → Acknowledged → In Progress → Resolved
+## States: Triaged → Acknowledged → In Progress → Resolved
 
 ```
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
@@ -986,7 +986,7 @@ Admin UI at `/notifications` allows:
        └── Acknowledge ─┘── Start Work ──┘── Resolve
 ```
 
-### Resolve Modal (2-step flow)
+## Resolve Modal (2-step flow)
 
 **Step 1:** Save action note + optional LLM-drafted reply
 - "Save reply & open Reddit" — copies reply to clipboard, opens thread
@@ -1006,22 +1006,22 @@ Admin UI at `/notifications` allows:
 
 ## Insights Page — What It Provides
 
-### 1. Issue Rankings
+## 1. Issue Rankings
 - Top negative issues ranked by **volume × severity × recency**
 - Grouped by aspect (delivery, pricing, app, etc.)
 - Trend arrows showing improvement or deterioration
 
-### 2. Competitor Pulse
+## 2. Competitor Pulse
 - Compare sentiment: Walmart vs **Costco, Target, Amazon**
 - Cross-mentioned posts (e.g., "Walmart vs Costco" comparisons)
 - Subreddit-level breakdown per competitor
 
-### 3. LLM Summarization
+## 3. LLM Summarization
 - Natural-language summaries of the week's top themes
 - Suggested action items for product teams
 - Emerging-topic detection (new phrase clusters appearing in ≥ 5 posts / 2 hrs)
 
-### 4. Aspect Drilldown
+## 4. Aspect Drilldown
 - 6-category taxonomy: `delivery`, `product_quality`, `returns`, `customer_support`, `pricing`, `app_website`
 - Per-aspect: sentiment trend, volume, top sub-topics (word cloud), representative posts
 
@@ -1080,7 +1080,7 @@ Admin UI at `/notifications` allows:
 
 # Thank You
 
-### Retail Sentiment Intelligence
+## Retail Sentiment Intelligence
 
 **Post Mid-Semester Presentation**
 

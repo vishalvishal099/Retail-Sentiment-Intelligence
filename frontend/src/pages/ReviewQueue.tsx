@@ -45,9 +45,11 @@ export default function ReviewQueue() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSentiment = searchParams.get('sentiment') || '';
   const urlRange = searchParams.get('range') || '';
+  const urlMacro = searchParams.get('macro') || '';
   const [tab, setTab] = useState<'pending' | 'reviewed'>('pending');
   const [sentiment, setSentiment] = useState(urlSentiment);
   const [range, setRange] = useState(urlRange);
+  const [macroSegment, setMacroSegment] = useState(urlMacro);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [reviewedItems, setReviewedItems] = useState<ReviewItem[]>([]);
   const [totalPending, setTotalPending] = useState(0);
@@ -59,14 +61,15 @@ export default function ReviewQueue() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const load = (s?: string, r?: string) => {
+  const load = (s?: string, r?: string, m?: string) => {
     const sen = s ?? urlSentiment;
     const ran = r ?? urlRange;
+    const mac = m ?? urlMacro;
     setLoading(true);
     Promise.all([
-      api.getReviewQueue(50, sen || undefined, ran || undefined, 0),
+      api.getReviewQueue(50, sen || undefined, ran || undefined, 0, mac || undefined),
       api.getReviewStats().catch(() => null),
-      api.getReviewed(50, sen || undefined, ran || undefined), // always load reviewed on mount
+      api.getReviewed(50, sen || undefined, ran || undefined, mac || undefined),
     ])
       .then(([q, st, rv]) => {
         setItems(q.queue);
@@ -81,7 +84,7 @@ export default function ReviewQueue() {
 
   const loadMore = () => {
     setLoadingMore(true);
-    api.getReviewQueue(50, sentiment || undefined, range || undefined, items.length)
+    api.getReviewQueue(50, sentiment || undefined, range || undefined, items.length, macroSegment || undefined)
       .then(q => {
         setItems(prev => [...prev, ...q.queue]);
         setTotalPending(q.total);
@@ -91,9 +94,9 @@ export default function ReviewQueue() {
       .finally(() => setLoadingMore(false));
   };
 
-  const loadReviewed = (s?: string, r?: string) => {
+  const loadReviewed = (s?: string, r?: string, m?: string) => {
     setReviewedLoading(true);
-    api.getReviewed(50, s || undefined, r || undefined)
+    api.getReviewed(50, s || undefined, r || undefined, m || undefined)
       .then(r => setReviewedItems(r.queue))
       .catch(console.error)
       .finally(() => setReviewedLoading(false));
@@ -102,13 +105,13 @@ export default function ReviewQueue() {
   useEffect(() => {
     setSentiment(urlSentiment);
     setRange(urlRange);
-    load(urlSentiment, urlRange);
-  }, [urlSentiment, urlRange]);
+    setMacroSegment(urlMacro);
+    load(urlSentiment, urlRange, urlMacro);
+  }, [urlSentiment, urlRange, urlMacro]);
 
-  // Load reviewed tab lazily only if not already populated (e.g. user cleared filters)
   useEffect(() => {
     if (tab === 'reviewed' && reviewedItems.length === 0 && !reviewedLoading && !loading) {
-      loadReviewed(sentiment || undefined, range || undefined);
+      loadReviewed(sentiment || undefined, range || undefined, macroSegment || undefined);
     }
   }, [tab]);
 
@@ -116,13 +119,15 @@ export default function ReviewQueue() {
     const next = new URLSearchParams();
     if (sentiment) next.set('sentiment', sentiment);
     if (range) next.set('range', range);
+    if (macroSegment) next.set('macro', macroSegment);
     setSearchParams(next);
-    if (tab === 'reviewed') loadReviewed(sentiment || undefined, range || undefined);
+    if (tab === 'reviewed') loadReviewed(sentiment || undefined, range || undefined, macroSegment || undefined);
   };
 
   const clearFilters = () => {
     setSentiment('');
     setRange('');
+    setMacroSegment('');
     setSearchParams({});
   };
 
@@ -204,8 +209,13 @@ export default function ReviewQueue() {
               Range: {RANGE_OPTIONS.find(o => o.value === urlRange)?.label || urlRange}
             </span>
           )}
+          {urlMacro && (
+            <span className="px-3 py-1 rounded-pill bg-walmart-blue/10 text-walmart-blue border border-walmart-blue/20 font-medium">
+              Group: {urlMacro === 'walmart' ? 'Walmart' : 'Competitors'}
+            </span>
+          )}
           <span className="px-3 py-1 rounded-pill bg-walmart-navy/5 text-walmart-navy border border-walmart-navy/15 font-medium">
-            {items.length} items pending
+            {totalPending} pending {items.length < totalPending ? `(${items.length} shown)` : ''}
           </span>
           {stats && (
             <>
@@ -253,10 +263,22 @@ export default function ReviewQueue() {
               ))}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Group</label>
+            <select
+              value={macroSegment}
+              onChange={e => setMacroSegment(e.target.value)}
+              className="border border-walmart-navy/15 rounded-pill px-4 py-1.5 text-sm bg-white shadow-sm text-walmart-navy focus:outline-none focus:ring-2 focus:ring-walmart-blue"
+            >
+              <option value="">All</option>
+              <option value="walmart">Walmart</option>
+              <option value="competitor">Competitors</option>
+            </select>
+          </div>
           <Button onClick={applyFilters} disabled={loading} variant="primary">
             {loading ? 'Loading…' : 'Apply'}
           </Button>
-          {(urlSentiment || urlRange) && (
+          {(urlSentiment || urlRange || urlMacro) && (
             <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-sentiment-negative underline">
               Clear filters
             </button>
@@ -537,6 +559,8 @@ function ReviewCard({
   const [actionNote, setActionNote] = useState('');
   const [actionDraft, setActionDraft] = useState('');
   const [actionModel, setActionModel] = useState('');
+  const [actionDrafts, setActionDrafts] = useState<Array<{ model: string; source: string; note: string }>>([]);
+  const [selectedActionIdx, setSelectedActionIdx] = useState<number>(0);
   const [reply, setReply] = useState<string>(item.reply_text || '');
   const [posting, setPosting] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -575,10 +599,17 @@ function ReviewCard({
       if (res.status === 'ok') {
         setGatewayAvailable(res.gateway_available ?? null);
         setGatewayReason(res.gateway_reason ?? null);
-        // Only store action draft if checkbox is checked
-        setActionDraft(genActionNote ? (res.action_draft || '') : '');
-        const actionModelLabel = res.action_model || 'template';
-        setActionModel(actionModelLabel);
+        const incomingActionDrafts = genActionNote
+          ? (res.action_drafts && res.action_drafts.length
+            ? res.action_drafts
+            : (res.action_draft
+              ? [{ model: res.action_model || 'template', source: 'template', note: res.action_draft }]
+              : []))
+          : [];
+        setActionDrafts(incomingActionDrafts);
+        setSelectedActionIdx(0);
+        setActionDraft(incomingActionDrafts[0]?.note || '');
+        setActionModel(incomingActionDrafts[0]?.model || '');
         const incoming = (res.drafts && res.drafts.length
           ? res.drafts
           : (res.reply
@@ -626,20 +657,20 @@ function ReviewCard({
         try { await navigator.clipboard.writeText(reply); } catch { /* noop */ }
         if (res.reddit) {
           if (res.reddit.ok && res.reddit.dry_run) {
-            setRedditStatus({ kind: 'dry_run', msg: 'Reddit OAuth in dry-run — reply was logged, not posted live.' });
+            setRedditStatus({ kind: 'dry_run', msg: 'Reddit OAuth in dry-run — reply was logged, not posted live. Click “Mark as Posted” after you post it manually.' });
           } else if (res.reddit.ok) {
-            setRedditStatus({ kind: 'live', msg: `Posted to Reddit (${res.reddit.posted_id || 'ok'}).` });
+            setRedditStatus({ kind: 'live', msg: `Posted to Reddit (${res.reddit.posted_id || 'ok'}). Click “Mark as Posted” to move this post to Reviewed.` });
           } else if (res.reddit.error === 'rate_limited') {
             setRedditStatus({ kind: 'error', msg: `Rate-limited — try again in ${res.reddit.retry_after_seconds || '?'}s.` });
           } else {
             setRedditStatus({ kind: 'error', msg: `Reddit post failed: ${res.reddit.error}` });
           }
+        } else {
+          setRedditStatus({ kind: 'dry_run', msg: 'Reply saved. Click “Mark as Posted” after you post it manually.' });
         }
         if (item.reddit_url && (!res.reddit || res.reddit.dry_run)) {
           window.open(item.reddit_url, '_blank', 'noopener');
         }
-        // Remove from Pending — reply was sent, close with reply_sent lifecycle
-        onClose(item, 'reply_sent', actionNote.trim() || undefined);
       } else {
         setPostErr(res.reason || 'Could not save reply');
       }
@@ -648,6 +679,11 @@ function ReviewCard({
     } finally {
       setPosting(false);
     }
+  };
+
+  const handleMarkPosted = () => {
+    const note = actionNote.trim();
+    onClose(item, note ? 'issue_fixed' : 'reply_sent', note || undefined);
   };
 
   return (
@@ -663,6 +699,16 @@ function ReviewCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <SentimentBadge sentiment={item.sentiment} />
+            {item.priority_tier === 'P1' && (
+              <span className="px-2 py-0.5 rounded-pill text-[11px] font-bold bg-sentiment-negative text-white" title="P1 — trust ≥ 0.7 AND confidence ≥ 0.8">
+                P1
+              </span>
+            )}
+            {item.priority_tier === 'P2' && (
+              <span className="px-2 py-0.5 rounded-pill text-[11px] font-bold bg-walmart-spark-dark text-white" title="P2 — trust ≥ 0.5 AND confidence ≥ 0.6">
+                P2
+              </span>
+            )}
             <span className="text-xs text-gray-500">r/{item.subreddit}</span>
             <span className="text-xs text-gray-400">
               Confidence:{' '}
@@ -1013,12 +1059,44 @@ function ReviewCard({
                 <label className="block text-[11px] uppercase tracking-wider font-semibold text-walmart-navy mb-1">
                   ⚡ Internal Action Note
                   <span className="ml-2 normal-case font-normal text-gray-500">— shown in Lifecycle → Actionable Items</span>
-                  {actionModel && (
-                    <span className={`ml-2 normal-case font-medium ${actionModel.includes('GPT') ? 'text-sentiment-positive' : 'text-walmart-blue'}`}>
-                      · {actionModel}
-                    </span>
-                  )}
                 </label>
+                {actionDrafts.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {actionDrafts.map((d, i) => {
+                      const isGpt = d.model.toLowerCase().includes('gpt');
+                      const active = i === selectedActionIdx;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            setSelectedActionIdx(i);
+                            setActionDraft(d.note);
+                            setActionModel(d.model);
+                            setActionNote('');
+                          }}
+                          className={`text-[11px] px-2.5 py-1 rounded-pill border font-medium transition-colors ${
+                            active
+                              ? (isGpt
+                                ? 'bg-sentiment-positive text-white border-sentiment-positive'
+                                : 'bg-walmart-blue text-white border-walmart-blue')
+                              : (isGpt
+                                ? 'bg-white text-sentiment-positive border-sentiment-positive/40 hover:bg-sentiment-positive/5'
+                                : 'bg-white text-walmart-blue border-walmart-blue/40 hover:bg-walmart-blue/5')
+                          }`}
+                          title={d.note}
+                        >
+                          {isGpt ? '🤖' : '🦙'} {d.model}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {actionDrafts.length === 1 && actionModel && (
+                  <div className={`text-[11px] font-medium mb-1 ${actionModel.toLowerCase().includes('gpt') ? 'text-sentiment-positive' : 'text-walmart-blue'}`}>
+                    · {actionModel}
+                  </div>
+                )}
                 <textarea
                   value={actionNote}
                   onChange={e => setActionNote(e.target.value)}
@@ -1073,6 +1151,18 @@ function ReviewCard({
             >
               {posting ? 'Posting…' : (postedAt ? 'Re-Post Reply' : 'Post Reply')}
             </button>
+            {postedAt && (
+              <button
+                onClick={handleMarkPosted}
+                disabled={posting || generating}
+                className="px-4 py-1.5 text-xs rounded-pill bg-sentiment-positive text-white hover:bg-sentiment-positive/90 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm font-semibold"
+                title={actionNote.trim()
+                  ? 'Confirm the reply was posted. Moves this post to Reviewed and Lifecycle → Actionable Items (issue_fixed).'
+                  : 'Confirm the reply was posted. Moves this post to Reviewed and Lifecycle → Ack & Reply Sent.'}
+              >
+                ✓ Mark as Posted {actionNote.trim() ? '→ Actionable' : '→ Ack'}
+              </button>
+            )}
             <label className="flex items-center gap-1.5 text-xs text-walmart-navy cursor-pointer select-none">
               <input
                 type="checkbox"

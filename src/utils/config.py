@@ -156,6 +156,23 @@ class SlackChannelConfig:
     dry_run: bool = True
     webhook_url: str = ""
     channel: str = "#walmart-sentiment-alerts"
+    # Concord (Walmart internal Slack) — optional. If concord_org is set,
+    # the Slack adapter routes through Concord instead of the webhook_url.
+    # Defaults come from .env so setting CONCORD_ORG turns it on globally.
+    # Token is read from env $CONCORD_API_TOKEN (never stored in config).
+    concord_url: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_API_URL", "https://concord.prod.walmart.com/api/v1/process"))
+    concord_org: str = field(default_factory=lambda: os.environ.get("CONCORD_ORG", ""))
+    concord_project: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_PROJECT", "magic-slack-notifications"))
+    concord_repo: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_REPO", "magic-slack-notifications"))
+    concord_entry_point: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_ENTRY_POINT", "postRichMessage"))
+    concord_active_profiles: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_ACTIVE_PROFILES", "prod"))
+    concord_footer: str = field(default_factory=lambda: os.environ.get(
+        "CONCORD_FOOTER", "Retail Sentiment Intelligence"))
 
 
 @dataclass

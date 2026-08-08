@@ -48,7 +48,7 @@ export default function PostLifecycle() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<LifecycleRow | null>(null);
   const [acting, setActing] = useState(false);
-  const [resolveTarget, setResolveTarget] = useState<LifecycleRow | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<{ row: LifecycleRow; state: LifecycleState } | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -156,12 +156,12 @@ export default function PostLifecycle() {
                   {col.state === 'reply_sent' && (
                     <div className="flex border-t border-walmart-navy/5">
                       <button
-                        onClick={() => handleTransition(row.post_id, 'issue_fixed')}
+                        onClick={() => setResolveTarget({ row, state: 'issue_fixed' })}
                         disabled={acting}
-                        className="flex-1 text-[11px] font-semibold text-walmart-navy py-2 hover:bg-walmart-spark/10 transition-colors disabled:opacity-50 border-r border-walmart-navy/5"
-                        title="Needs further action — move to Actionable Items"
+                        className="flex-1 text-[11px] font-semibold text-walmart-navy py-2 hover:bg-walmart-spark/10 transition-colors disabled:opacity-50 border-r border-walmart-navy/5 flex items-center justify-center gap-1"
+                        title="Compose a reply, add an action note, and move to Actionable Items"
                       >
-                        ⚡ Action needed
+                        <MessageSquare size={11} /> Action needed
                       </button>
                       <button
                         onClick={() => handleTransition(row.post_id, 'resolved')}
@@ -176,7 +176,7 @@ export default function PostLifecycle() {
                   {col.state === 'issue_fixed' && (
                     <div className="flex border-t border-walmart-navy/5">
                       <button
-                        onClick={() => setResolveTarget(row)}
+                        onClick={() => setResolveTarget({ row, state: 'resolved' })}
                         disabled={acting}
                         className="flex-1 text-[11px] font-semibold text-walmart-navy py-2 hover:bg-walmart-blue/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                         title="Resolve — add action notes and optionally notify user"
@@ -197,13 +197,18 @@ export default function PostLifecycle() {
           row={selected}
           onClose={() => setSelected(null)}
           onTransition={handleTransition}
+          onOpenResolve={(row, state) => {
+            setSelected(null);
+            setResolveTarget({ row, state });
+          }}
           acting={acting}
         />
       )}
 
       {resolveTarget && (
         <ResolveModal
-          row={resolveTarget}
+          row={resolveTarget.row}
+          targetState={resolveTarget.state}
           onClose={() => setResolveTarget(null)}
           onResolved={async () => { setResolveTarget(null); await refresh(); }}
         />
@@ -213,13 +218,15 @@ export default function PostLifecycle() {
 }
 
 function ResolveModal({
-  row, onClose, onResolved,
+  row, onClose, onResolved, targetState = 'resolved',
 }: {
   row: LifecycleRow;
   onClose: () => void;
   onResolved: () => Promise<void>;
+  targetState?: LifecycleState;
 }) {
   const [actionNote, setActionNote] = useState('');
+  const [assignTeam, setAssignTeam] = useState('');
   const [replyText, setReplyText] = useState('');
   const [generating, setGenerating] = useState(false);
   const [drafts, setDrafts] = useState<Array<{ reply: string; label?: string; source?: string }>>([]);
@@ -277,14 +284,18 @@ function ResolveModal({
       setError('Please describe what action was taken.');
       return;
     }
+    if (targetState === 'issue_fixed' && !assignTeam.trim()) {
+      setError('Please choose which team the action is assigned to.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
-      const res = await api.transitionLifecycle(row.post_id, 'resolved');
+      const res = await api.transitionLifecycle(row.post_id, targetState, actionNote.trim(), undefined, assignTeam.trim() || undefined);
       if (res.ok) {
         await onResolved();
       } else {
-        setError(res.error || 'Failed to resolve');
+        setError(res.error || `Failed to move to ${targetState}`);
       }
     } catch (e) {
       setError(String(e));
@@ -293,6 +304,10 @@ function ResolveModal({
     }
   };
 
+  const targetLabel = targetState === 'issue_fixed' ? 'Move to Actionable' : 'Mark Resolved';
+  const heading = targetState === 'issue_fixed' ? 'Move to Actionable Items' : 'Resolve Actionable Item';
+  const resolveButtonLabel = targetState === 'issue_fixed' ? 'Move to Actionable (no reply)' : 'Resolve (no reply needed)';
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-walmart-navy/40 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -300,7 +315,7 @@ function ResolveModal({
         className="bg-surface rounded-2xl shadow-card-hover w-full max-w-xl max-h-[90vh] overflow-y-auto"
       >
         <div className="px-6 py-4 border-b border-walmart-navy/10">
-          <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Resolve Actionable Item</div>
+          <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-1">{heading}</div>
           <h2 className="text-base font-bold text-walmart-navy line-clamp-2">{row.title || row.post_id}</h2>
           <div className="text-xs text-gray-500 mt-1">r/{row.subreddit} · {row.top_aspect || 'general'}</div>
         </div>
@@ -318,6 +333,30 @@ function ResolveModal({
               placeholder="e.g. Escalated to store manager, refund issued, contacted customer via DM..."
               className="w-full text-sm border border-walmart-navy/15 rounded-xl p-3 focus:ring-2 focus:ring-walmart-blue focus:border-walmart-blue"
             />
+          </div>
+
+          {/* Assign to team (required for Actionable Items, optional for Resolved) */}
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-gray-600 font-semibold mb-1.5">
+              Assign to team {targetState === 'issue_fixed' && <span className="text-sentiment-negative">*</span>}
+            </label>
+            <select
+              value={assignTeam}
+              onChange={(e) => setAssignTeam(e.target.value)}
+              className="w-full text-sm border border-walmart-navy/15 rounded-xl p-3 bg-white focus:ring-2 focus:ring-walmart-blue focus:border-walmart-blue"
+            >
+              <option value="">— Select team —</option>
+              <option value="Store Operations">Store Operations</option>
+              <option value="Delivery / Spark">Delivery / Spark</option>
+              <option value="Customer Support">Customer Support</option>
+              <option value="Returns & Refunds">Returns & Refunds</option>
+              <option value="Product Quality">Product Quality</option>
+              <option value="Pricing">Pricing</option>
+              <option value="App / Website">App / Website</option>
+              <option value="HR / Employee Relations">HR / Employee Relations</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
 
           {/* LLM response section */}
@@ -399,7 +438,7 @@ function ResolveModal({
                   className="flex-1 px-4 py-2.5 rounded-pill bg-sentiment-positive text-white text-sm font-semibold hover:bg-sentiment-positive/90 disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                  Mark Resolved
+                  {targetLabel}
                 </button>
               </div>
               <button
@@ -428,7 +467,7 @@ function ResolveModal({
                   className="flex-1 px-4 py-2.5 rounded-pill bg-sentiment-positive text-white text-sm font-semibold hover:bg-sentiment-positive/90 disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-                  Resolve (no reply needed)
+                  {resolveButtonLabel}
                 </button>
               )}
               <button
@@ -446,11 +485,12 @@ function ResolveModal({
 }
 
 function DetailPanel({
-  row, onClose, onTransition, acting,
+  row, onClose, onTransition, onOpenResolve, acting,
 }: {
   row: LifecycleRow;
   onClose: () => void;
   onTransition: (postId: string, to: LifecycleState) => Promise<void>;
+  onOpenResolve: (row: LifecycleRow, state: LifecycleState) => void;
   acting: boolean;
 }) {
   const next = NEXT_STATES[row.state] || [];
@@ -493,16 +533,20 @@ function DetailPanel({
             <div>
               <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-2 font-semibold">Move to</div>
               <div className="flex flex-wrap gap-2">
-                {next.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => onTransition(row.post_id, s)}
-                    disabled={acting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-walmart-blue text-white text-xs font-semibold hover:bg-walmart-blue/90 disabled:opacity-60"
-                  >
-                    {STATE_LABELS[s] || s.replace('_', ' ')} <ChevronRight size={12} />
-                  </button>
-                ))}
+                {next.map((s) => {
+                  const needsModal = s === 'issue_fixed' || s === 'resolved';
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => needsModal ? onOpenResolve(row, s) : onTransition(row.post_id, s)}
+                      disabled={acting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-walmart-blue text-white text-xs font-semibold hover:bg-walmart-blue/90 disabled:opacity-60"
+                      title={needsModal ? 'Add action + team, then transition' : 'Transition directly'}
+                    >
+                      {STATE_LABELS[s] || s.replace('_', ' ')} <ChevronRight size={12} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

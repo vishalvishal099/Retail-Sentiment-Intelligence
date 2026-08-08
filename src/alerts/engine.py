@@ -61,10 +61,11 @@ class AlertEngine:
         if _enabled("emerging_topic"):
             alerts.extend(self.detect_emerging_topics(min_count=int(_val("emerging_topic", "min_posts", 5))))
         if _enabled("competitor_negative"):
-            # This detector uses week-over-week deltas, not sigma. `sigma_threshold`
-            # in the rules JSON exists for symmetry with the other rules; the
-            # actual delta_threshold is left at its class-level default.
-            alerts.extend(self.detect_competitor_neg_spike())
+            # Competitor-negative uses week-over-week ratio deltas, not sigma.
+            alerts.extend(self.detect_competitor_neg_spike(
+                min_posts_per_window=int(_val("competitor_negative", "min_posts_per_window", 25)),
+                delta_threshold=float(_val("competitor_negative", "delta_threshold", 0.15)),
+            ))
         return alerts
 
     def detect_volume_spike(self, sigma_threshold: float = 2.0) -> list[dict]:
@@ -159,6 +160,8 @@ class AlertEngine:
         """
         Detect sentiment crashes: drop > 0.3 in negative ratio vs yesterday.
         """
+        from src.utils.segments import macro_segment_for
+
         alerts = []
         now = datetime.now(timezone.utc)
         today_key = now.strftime("%Y-%m-%d")
@@ -176,15 +179,92 @@ class AlertEngine:
         # If negative ratio increased by more than threshold
         neg_increase = today_neg - yesterday_neg
         if neg_increase > drop_threshold:
+            # Add actionable context: which macro-group (walmart vs competitor)
+            # moved the most, and by how much.
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            tomorrow_start = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+            sql = (
+                "SELECT a.data AS adata, r.subreddit AS sub, r.created_timestamp AS ts "
+                "FROM analyses a JOIN raw_posts r ON a.post_id = r.id "
+                "WHERE r.created_timestamp >= ? AND r.created_timestamp < ?"
+            )
+
+            macro_stats: dict[str, dict[str, dict[str, int]]] = defaultdict(
+                lambda: {"today": {"neg": 0, "total": 0}, "yesterday": {"neg": 0, "total": 0}}
+            )
+            today_sub_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"neg": 0, "total": 0})
+
+            try:
+                cur = self.storage._conn.execute(sql, (yesterday_start, tomorrow_start))
+                rows = cur.fetchall()
+                for row in rows:
+                    ts = float(row["ts"] or 0)
+                    if ts < yesterday_start or ts >= tomorrow_start:
+                        continue
+                    window = "today" if ts >= today_start else "yesterday"
+                    sub = (row["sub"] or "").strip().lower()
+                    macro = macro_segment_for(sub)
+                    try:
+                        adata = json.loads(row["adata"])
+                    except Exception:
+                        continue
+                    is_neg = adata.get("sentiment") == "negative"
+                    macro_stats[macro][window]["total"] += 1
+                    if is_neg:
+                        macro_stats[macro][window]["neg"] += 1
+                    if window == "today":
+                        today_sub_stats[sub]["total"] += 1
+                        if is_neg:
+                            today_sub_stats[sub]["neg"] += 1
+            except Exception:
+                macro_stats = defaultdict(
+                    lambda: {"today": {"neg": 0, "total": 0}, "yesterday": {"neg": 0, "total": 0}}
+                )
+                today_sub_stats = defaultdict(lambda: {"neg": 0, "total": 0})
+
+            def _ratio(neg: int, total: int) -> float:
+                return (neg / total) if total > 0 else 0.0
+
+            walmart_today = _ratio(macro_stats["walmart"]["today"]["neg"], macro_stats["walmart"]["today"]["total"])
+            walmart_yday = _ratio(macro_stats["walmart"]["yesterday"]["neg"], macro_stats["walmart"]["yesterday"]["total"])
+            comp_today = _ratio(macro_stats["competitor"]["today"]["neg"], macro_stats["competitor"]["today"]["total"])
+            comp_yday = _ratio(macro_stats["competitor"]["yesterday"]["neg"], macro_stats["competitor"]["yesterday"]["total"])
+
+            walmart_delta = walmart_today - walmart_yday
+            competitor_delta = comp_today - comp_yday
+            affected_macro = "competitor" if competitor_delta >= walmart_delta else "walmart"
+            affected_label = "Competitors" if affected_macro == "competitor" else "Walmart"
+
+            # Show top subreddits by negative share among today's rows so users
+            # can immediately see where to investigate.
+            ranked_subs = []
+            for sub, stat in today_sub_stats.items():
+                total = stat["total"]
+                if total <= 0:
+                    continue
+                neg = stat["neg"]
+                ratio = neg / total
+                ranked_subs.append((ratio, neg, total, sub))
+            ranked_subs.sort(reverse=True)
+            top_subs = [f"r/{sub} ({neg}/{total}, {ratio:.0%})" for ratio, neg, total, sub in ranked_subs[:3]]
+            top_sub = top_subs[0] if top_subs else "unknown"
+
             alerts.append({
                 "id": f"alert_crash_{today_key}",
                 "type": "sentiment_crash",
                 "severity": "critical" if neg_increase > 0.4 else "high",
-                "title": f"Sentiment crash: negative ratio jumped +{neg_increase:.0%} vs yesterday",
+                "title": f"Sentiment crash ({affected_label}, {top_sub}): negative ratio jumped +{neg_increase:.0%} vs yesterday",
                 "details": {
                     "today_negative_ratio": round(today_neg, 3),
                     "yesterday_negative_ratio": round(yesterday_neg, 3),
                     "delta": round(neg_increase, 3),
+                    "affected_macro_group": affected_macro,
+                    "affected_macro_delta": round(max(walmart_delta, competitor_delta), 3),
+                    "competitor_delta": round(competitor_delta, 3),
+                    "walmart_delta": round(walmart_delta, 3),
+                    "top_subreddits_today": " | ".join(top_subs),
                 },
                 "detected_at": now.isoformat(),
                 "time_window": today_key,

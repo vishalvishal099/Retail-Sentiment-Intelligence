@@ -218,6 +218,7 @@ export default function BrandHealth() {
           { label: 'Addressed & replied', value: lcReplied, color: 'text-sentiment-positive' },
           { label: 'Awaiting action', value: lcPending, color: 'text-walmart-spark-dark' },
         );
+        const macroQs = macroSegment ? `&macro=${macroSegment}` : '';
         return (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICardRich
@@ -225,7 +226,7 @@ export default function BrandHealth() {
               value={data.total_posts}
               rows={analyzedRows}
               onExplore={() => goToPosts()}
-              onReview={() => navigate(`/review?range=${range}`)}
+              onReview={() => navigate(`/review?range=${range}${macroQs}`)}
               hint={pendingAnalysis > 0
                 ? `Posts with sentiment analysis · ${pendingAnalysis.toLocaleString()} still pending (matches Pipeline → Fetched of ${fetched.toLocaleString()})`
                 : "Posts with sentiment analysis (matches Pipeline → Fetched)"}
@@ -241,7 +242,7 @@ export default function BrandHealth() {
                 { label: 'Resolved', value: lcResolved, color: 'text-walmart-blue' },
               ]}
               onExplore={() => goToPosts('negative')}
-              onReview={() => navigate(`/review?sentiment=negative&range=${range}`)}
+              onReview={() => navigate(`/review?sentiment=negative&range=${range}${macroQs}`)}
               hint="Negative sentiment posts"
             />
             <KPICardRich
@@ -254,7 +255,7 @@ export default function BrandHealth() {
                 { label: 'Resolved', value: lcResolved, color: 'text-sentiment-positive' },
               ]}
               onExplore={() => goToPosts('negative')}
-              onReview={() => navigate(`/review?sentiment=negative&range=${range}`)}
+              onReview={() => navigate(`/review?sentiment=negative&range=${range}${macroQs}`)}
               hint="Priority negative posts"
             />
             <KPICardRich
@@ -266,7 +267,7 @@ export default function BrandHealth() {
                 { label: 'Trusted', value: data.trusted_posts, color: 'text-walmart-navy' },
               ]}
               onExplore={() => goToPosts('positive')}
-              onReview={() => navigate(`/review?sentiment=positive&range=${range}`)}
+              onReview={() => navigate(`/review?sentiment=positive&range=${range}${macroQs}`)}
               hint="Positive sentiment posts"
             />
             <KPICardRich
@@ -543,22 +544,25 @@ function KPICardRich({
   onReview?: () => void;
   hint?: string;
 }) {
-  const [open, setOpen] = useState(false);
   const hasDual = !!onExplore && !!onReview;
   const toneColor =
     tone === 'positive' ? 'text-sentiment-positive'
     : tone === 'negative' ? 'text-sentiment-negative'
     : 'text-walmart-navy';
+  const handlePrimary = () => {
+    if (onExplore) onExplore();
+    else if (onClick) onClick();
+  };
   return (
     <div className="relative">
       <button
-        onClick={() => hasDual ? setOpen(!open) : onClick?.()}
+        onClick={handlePrimary}
         title={hint}
         className="bg-surface rounded-2xl p-4 border border-walmart-navy/10 shadow-card text-left w-full hover:border-walmart-blue hover:shadow-card-hover cursor-pointer transition-all"
       >
         <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold flex items-center justify-between">
           <span>{label}</span>
-          <span className="text-walmart-blue/60">{hasDual ? '⋮' : '→'}</span>
+          <span className="text-walmart-blue/60">→</span>
         </div>
         <div className={`text-2xl font-bold mt-1 ${toneColor}`}>{value}</div>
         {valueSub && <div className="text-xs text-gray-500 mt-0.5">{valueSub}</div>}
@@ -573,24 +577,14 @@ function KPICardRich({
           </div>
         )}
       </button>
-      {hasDual && open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-walmart-navy/15 rounded-xl shadow-lg overflow-hidden min-w-[160px]">
-            <button
-              onClick={() => { setOpen(false); onExplore!(); }}
-              className="w-full text-left px-4 py-2.5 text-sm text-walmart-navy hover:bg-walmart-blue/5 flex items-center gap-2"
-            >
-              <span className="text-xs">📊</span> Post Explorer
-            </button>
-            <button
-              onClick={() => { setOpen(false); onReview!(); }}
-              className="w-full text-left px-4 py-2.5 text-sm text-walmart-navy hover:bg-walmart-blue/5 border-t border-walmart-navy/5 flex items-center gap-2"
-            >
-              <span className="text-xs">💬</span> Review & Reply
-            </button>
-          </div>
-        </>
+      {hasDual && onReview && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onReview(); }}
+          className="absolute right-3 bottom-3 text-[11px] px-2 py-0.5 rounded-pill border border-walmart-navy/15 text-walmart-navy/70 bg-white hover:bg-walmart-blue/5 hover:text-walmart-navy"
+          title="Review & Reply"
+        >
+          💬 Review
+        </button>
       )}
     </div>
   );

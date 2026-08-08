@@ -36,7 +36,7 @@ following phased manner and check in with me at each phase gate.
 
 ---
 
-### Phase 0 — Understand and clarify
+## Phase 0 — Understand and clarify
 
 - Read the abstract + slides carefully.
 - Extract: problem statement, objective, scope, RQs, assumptions, inputs,
@@ -44,7 +44,7 @@ following phased manner and check in with me at each phase gate.
 - Ask focused clarifying questions before writing anything (target 5–8
   questions max).
 
-### Phase 1 — Blueprint
+## Phase 1 — Blueprint
 
 - Produce a phase-wise execution plan (data → modelling → evaluation →
   deployment → viva).
@@ -53,7 +53,7 @@ following phased manner and check in with me at each phase gate.
 - Recommend **latest** AI/ML methods (2025–26) even if the slides use older
   ones; flag deltas explicitly.
 
-### Phase 2 — LaTeX skeleton (BITS-compliant)
+## Phase 2 — LaTeX skeleton (BITS-compliant)
 
 Set up `docs/dissertation/latex/` with the following BITS-mandated front matter
 and structure:
@@ -83,7 +83,7 @@ main chapters and **Appendix X.** for appendices
 **Build** with `latexmk -pdf` + `biber`; make sure the PDF has **zero undefined
 references, zero undefined citations, zero multiply-defined labels**.
 
-### Phase 3 — Content writing (chapter by chapter)
+## Phase 3 — Content writing (chapter by chapter)
 
 For each chapter, write in academic register, cite peer-reviewed sources with
 BibLaTeX, and include:
@@ -96,7 +96,7 @@ BibLaTeX, and include:
 Diagrams to design in TikZ: system architecture, data pipeline
 (Bronze / Silver / Gold), model / training flow, evaluation harness.
 
-### Phase 4 — Evaluation and measured results
+## Phase 4 — Evaluation and measured results
 
 Populate an Evaluation chapter with:
 
@@ -108,7 +108,7 @@ Populate an Evaluation chapter with:
   matplotlib scripts committed to the repo)
 - Research-Question-by-Research-Question resolution table
 
-### Phase 5 — Language pass (CRITICAL for final semester)
+## Phase 5 — Language pass (CRITICAL for final semester)
 
 **This is a final-semester report.** Remove every hedging phrase:
 
@@ -120,14 +120,14 @@ Present **every planned deliverable as a completed measured result** with
 concrete numbers. Only **genuine post-project extensions** belong in Future
 Work.
 
-### Phase 6 — Reproducibility appendix
+## Phase 6 — Reproducibility appendix
 
 - **Appendix A** — environment (Python / CUDA versions), pinned model hashes
   table, dataset cards, `make` targets, seed values.
 - **Appendix B** — annotation guidelines for the gold set, inter-rater
   protocol.
 
-### Phase 7 — Build, verify, deliver
+## Phase 7 — Build, verify, deliver
 
 - Rebuild PDF, render key pages via `pdftoppm`, visually verify every diagram
   fits within margins and no arrow / label overlaps another element.

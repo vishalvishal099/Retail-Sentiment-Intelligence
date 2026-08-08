@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Retail Sentiment Intelligence — System Flow</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+h1{text-align:center;padding:22px 0 4px;color:#38bdf8;font-size:1.55rem;letter-spacing:-.3px}
+.sub{text-align:center;color:#64748b;font-size:.8rem;padding-bottom:14px}
+.tabs{display:flex;gap:8px;justify-content:center;padding:0 16px 18px;flex-wrap:wrap}
+.tab{padding:6px 16px;border-radius:20px;cursor:pointer;border:1.5px solid #334155;background:#1e293b;color:#94a3b8;font-size:.78rem;transition:all .18s}
+.tab.on{background:#0ea5e9;border-color:#0ea5e9;color:#fff;font-weight:700}
+.pane{display:none;padding:0 16px 40px}
+.pane.on{display:block}
+
+/* ── shared card ── */
+.card{border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid transparent}
+.lbl{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.7;margin-bottom:4px}
+.name{font-size:.82rem;font-weight:600;line-height:1.35}
+.detail{font-size:.72rem;color:#94a3b8;margin-top:3px;line-height:1.4}
+.badge{display:inline-block;font-size:.6rem;padding:1px 6px;border-radius:10px;font-weight:700;margin-right:3px;vertical-align:middle}
+.get{background:#064e3b;color:#6ee7b7}
+.post{background:#1e3a5f;color:#93c5fd}
+.patch{background:#451a03;color:#fdba74}
+.ws{background:#4a044e;color:#e879f9}
+
+/* ── DIAGRAM 0: full arch ── */
+.arch{display:flex;flex-direction:column;gap:0}
+.layer{display:grid;gap:10px;padding:16px;border-radius:12px;margin-bottom:2px;position:relative}
+.layer-ui{background:#0f2744;border:1.5px solid #1d4ed8;grid-template-columns:repeat(5,1fr)}
+.layer-api{background:#042f2e;border:1.5px solid #0d9488;grid-template-columns:repeat(5,1fr)}
+.layer-logic{background:#1e1b4b;border:1.5px solid #4f46e5;grid-template-columns:repeat(4,1fr)}
+.layer-db{background:#1c0a00;border:1.5px solid #b45309;grid-template-columns:repeat(4,1fr)}
+.layer-ext{background:#111827;border:1.5px solid #374151;grid-template-columns:repeat(4,1fr)}
+
+.layer-title{grid-column:1/-1;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px}
+.ui-title{color:#60a5fa}
+.api-title{color:#2dd4bf}
+.logic-title{color:#a78bfa}
+.db-title{color:#fb923c}
+.ext-title{color:#9ca3af}
+
+.node{border-radius:8px;padding:8px 10px;font-size:.72rem;line-height:1.4}
+.n-ui{background:#1e3a8a22;border:1px solid #3b82f655;color:#bfdbfe}
+.n-api{background:#13433222;border:1px solid #10b98155;color:#a7f3d0}
+.n-logic{background:#2e1065;border:1px solid #7c3aed55;color:#ddd6fe}
+.n-db{background:#431407;border:1px solid #ea580c55;color:#fed7aa}
+.n-ext{background:#1f2937;border:1px solid #4b556355;color:#d1d5db}
+.n-pipe{background:#1a1042;border:1px solid #6d28d955;color:#c4b5fd}
+
+.node strong{display:block;font-size:.78rem;margin-bottom:2px;font-weight:700}
+.node span{font-size:.67rem;color:#94a3b8}
+.node code{font-family:'SF Mono',Menlo,monospace;font-size:.65rem;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px}
+
+.arrow-row{display:flex;justify-content:center;align-items:center;height:28px;gap:4px;color:#475569;font-size:.75rem}
+.arrow-down{color:#475569;font-size:1.2rem}
+
+/* ── DIAGRAM 1: UI→API sequence ── */
+.seq{display:grid;grid-template-columns:140px 1fr;gap:0;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
+.seq-head{background:#1e293b;padding:8px 12px;font-size:.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+.seq-row{display:contents}
+.seq-page{background:#0f1f3d;padding:8px 12px;border-top:1px solid #1e293b;font-size:.73rem;font-weight:600;color:#93c5fd;display:flex;align-items:center;gap:6px}
+.seq-calls{background:#0a0a1a;padding:8px 12px;border-top:1px solid #1e293b;display:flex;flex-direction:column;gap:4px}
+.call-row{display:flex;align-items:baseline;gap:6px;font-size:.7rem}
+.call-fn{color:#e2e8f0;font-family:monospace;font-size:.68rem}
+.call-arrow{color:#334155;flex-shrink:0}
+.call-ep{color:#6ee7b7;font-family:monospace;font-size:.65rem}
+.call-method{color:#c4b5fd;font-family:monospace;font-size:.65rem}
+.call-db{color:#fb923c;font-family:monospace;font-size:.65rem}
+
+/* ── DIAGRAM 2: pipeline steps ── */
+.pipe-flow{display:flex;flex-direction:column;gap:0;max-width:900px;margin:0 auto}
+.pipe-step{display:grid;grid-template-columns:160px 1fr;border-radius:0;border-left:3px solid #6d28d9;background:#0f0a1f;border-bottom:1px solid #1e1b4b;padding:0}
+.pipe-step:first-child{border-radius:10px 10px 0 0}
+.pipe-step:last-child{border-radius:0 0 10px 10px;border-bottom:none}
+.pipe-num{background:#1a1042;padding:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;border-right:1px solid #2e1065}
+.pipe-badge{font-size:1.3rem;font-weight:900;color:#a78bfa}
+.pipe-file{font-size:.6rem;color:#64748b;text-align:center;font-family:monospace}
+.pipe-body{padding:12px 14px}
+.pipe-fn{font-size:.82rem;font-weight:700;color:#c4b5fd;margin-bottom:4px;font-family:monospace}
+.pipe-desc{font-size:.7rem;color:#94a3b8;line-height:1.6}
+.pipe-desc em{color:#e2e8f0;font-style:normal;font-weight:600}
+.pipe-desc .calls{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.pipe-desc .calls code{background:#1e1b4b;color:#a78bfa;padding:2px 6px;border-radius:4px;font-size:.62rem;font-family:monospace}
+.pipe-writes{font-size:.63rem;margin-top:6px;color:#fb923c}
+.pipe-writes span{background:#431407;color:#fdba74;padding:1px 6px;border-radius:4px;margin-right:3px;font-family:monospace;font-size:.62rem}
+.pipe-connector{display:flex;justify-content:center;align-items:center;height:20px;color:#4c1d95;font-size:1rem}
+
+/* ── DIAGRAM 3: DB schema ── */
+.db-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.db-table{background:#1c0a00;border:1px solid #92400e;border-radius:10px;overflow:hidden}
+.db-thead{background:#451a03;padding:8px 12px;font-size:.75rem;font-weight:700;color:#fb923c;display:flex;justify-content:space-between;align-items:center}
+.db-tag{font-size:.58rem;background:#92400e55;color:#fb923c;padding:1px 5px;border-radius:4px}
+.db-tbody{padding:8px 12px}
+.db-col{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #2c1500;font-size:.68rem}
+.db-col:last-child{border-bottom:none}
+.db-cname{color:#fed7aa;font-family:monospace}
+.db-ctype{color:#64748b;font-size:.6rem}
+.db-pk{color:#fbbf24;font-size:.58rem;background:#451a03;padding:1px 5px;border-radius:3px}
+.db-fk{color:#60a5fa;font-size:.58rem;background:#1e3a5f;padding:1px 5px;border-radius:3px}
+.rel-section{margin-top:16px;background:#1a1a2e;border:1px solid #312e81;border-radius:10px;padding:12px 14px}
+.rel-title{font-size:.7rem;font-weight:700;color:#818cf8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
+.rel-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.7rem;border-bottom:1px solid #1e1b4b}
+.rel-row:last-child{border-bottom:none}
+.rel-from{color:#c4b5fd;font-family:monospace;font-size:.68rem;min-width:100px}
+.rel-arrow{color:#475569}
+.rel-to{color:#818cf8;font-family:monospace;font-size:.68rem;min-width:100px}
+.rel-via{color:#64748b;font-size:.63rem}
+</style>
+</head>
+<body>
+
+<h1>🛒 Retail Sentiment Intelligence — System Flow</h1>
+<p class="sub">Complete code-level flow: UI → API → Business Logic → Database</p>
+
+<div class="tabs">
+  <div class="tab on" onclick="show(0)">🗺️ Full Architecture</div>
+  <div class="tab" onclick="show(1)">🖥️ UI → API Calls</div>
+  <div class="tab" onclick="show(2)">⚙️ Pipeline Internals</div>
+  <div class="tab" onclick="show(3)">💾 DB Schema</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PANE 0 — Full Architecture
+═══════════════════════════════════════════════════════ -->
+<div class="pane on" id="p0">
+<div class="arch">
+
+  <!-- USER -->
+  <div style="text-align:center;padding:8px 0 0;font-size:.8rem;color:#64748b">👤 User / Analyst (Browser)</div>
+  <div class="arrow-row">▼ HTTP request</div>
+
+  <!-- UI LAYER -->
+  <div class="layer layer-ui">
+    <div class="layer-title ui-title">🖥️ FRONTEND — frontend/src/pages/</div>
+    <div class="node n-ui"><strong>BrandHealth.tsx</strong><code>api.getBrandHealth(range, seg)</code><br/><code>api.getPriorityNegatives(range)</code></div>
+    <div class="node n-ui"><strong>AspectDrilldown.tsx</strong><code>api.getAspectDrilldown(aspect)</code><br/><code>api.getAspectHeatmap()</code></div>
+    <div class="node n-ui"><strong>ReviewQueue.tsx</strong><code>api.getReviewQueue()</code><br/><code>api.draftReply(id)</code><br/><code>api.submitReview(id, correction)</code></div>
+    <div class="node n-ui"><strong>AlertFeed.tsx</strong><code>api.getAlerts({range, severity})</code><br/><code>useAlertSocket() ← WS</code></div>
+    <div class="node n-ui"><strong>PostExplorer.tsx</strong><code>api.searchPosts(q, filters)</code></div>
+    <div class="node n-ui"><strong>TrustAnalytics.tsx</strong><code>api.getTrustStats(limit)</code></div>
+    <div class="node n-ui"><strong>CompetitorInsights.tsx</strong><code>api.getInsightsLatest()</code><br/><code>api.getCompetitorTrend(days)</code></div>
+    <div class="node n-ui"><strong>Pipeline.tsx</strong><code>api.getPipelineStatus()</code><br/><code>api.runPipeline()</code></div>
+    <div class="node n-ui"><strong>PostLifecycle.tsx</strong><code>api.getLifecycle(state)</code></div>
+    <div class="node n-ui"><strong>Notifications.tsx</strong><code>api.getNotificationGroups()</code></div>
+  </div>
+
+  <div class="arrow-row"><span style="color:#1d4ed8;font-size:.72rem">api.ts fetchJSON() → fetch('/api/...')</span> &nbsp;▼</div>
+
+  <!-- API LAYER -->
+  <div class="layer layer-api">
+    <div class="layer-title api-title">⚡ FASTAPI BACKEND — src/dashboard/api.py</div>
+    <div class="node n-api"><strong>Brand Health</strong><span class="badge get">GET</span><code>/api/brand-health</code><br/>→ <em>get_brand_health()</em><br/>→ _compute_window_aggregate()<br/>→ _fetch_window_rows()</div>
+    <div class="node n-api"><strong>Aspect Drilldown</strong><span class="badge get">GET</span><code>/api/aspect-drilldown</code><br/>→ <em>get_aspect_drilldown()</em><br/>→ _fetch_window_rows()</div>
+    <div class="node n-api"><strong>Review Queue</strong><span class="badge get">GET</span><code>/api/review-queue</code><br/>→ <em>get_review_queue()</em><br/><span class="badge post">POST</span><code>/api/review/{id}/reply</code><br/>→ <em>draft_reply()</em> → LLM</div>
+    <div class="node n-api"><strong>Alerts</strong><span class="badge get">GET</span><code>/api/alerts</code><br/>→ <em>get_alerts()</em><br/><span class="badge ws">WS</span><code>/ws/alerts</code><br/>→ <em>websocket_alerts()</em></div>
+    <div class="node n-api"><strong>Search / Trust</strong><span class="badge get">GET</span><code>/api/search-posts</code><br/>→ <em>search_posts()</em><br/><span class="badge get">GET</span><code>/api/trust-stats</code><br/>→ <em>get_trust_stats()</em></div>
+    <div class="node n-api"><strong>Pipeline Control</strong><span class="badge get">GET</span><code>/api/pipeline/status</code><br/><span class="badge post">POST</span><code>/api/pipeline/run</code><br/>→ <em>_run_pipeline_subprocess()</em></div>
+    <div class="node n-api"><strong>Competitor Insights</strong><span class="badge get">GET</span><code>/api/insights/latest</code><br/><span class="badge get">GET</span><code>/api/competitor/trend</code></div>
+    <div class="node n-api"><strong>Lifecycle</strong><span class="badge get">GET</span><code>/api/lifecycle</code><br/>→ <em>lifecycle_list()</em><br/><span class="badge patch">PATCH</span><code>/api/lifecycle/{id}</code></div>
+    <div class="node n-api"><strong>Notifications</strong><span class="badge get">GET</span><code>/api/notifications/groups</code><br/><span class="badge post">POST</span><code>/api/notifications/test/{id}</code></div>
+  </div>
+
+  <div class="arrow-row"><span style="color:#7c3aed;font-size:.72rem">POST /api/pipeline/run → asyncio.create_subprocess_exec(python -m src.pipeline)</span> &nbsp;▼</div>
+
+  <!-- LOGIC LAYER -->
+  <div class="layer layer-logic">
+    <div class="layer-title logic-title">⚙️ PIPELINE + BUSINESS LOGIC — src/pipeline.py &amp; modules</div>
+    <div class="node n-pipe">
+      <strong>① Ingestion</strong>
+      <span>src/ingestion/fetcher.py<br/>src/ingestion/arctic_shift.py</span><br/>
+      <code>fetch_posts(reddit, subs, cursor)</code><br/>
+      <code>fetch_posts_arctic(sub, since, until)</code><br/>
+      <code>fetch_comments_arctic(sub, ids)</code>
+    </div>
+    <div class="node n-pipe">
+      <strong>② Preprocess</strong>
+      <span>src/ingestion/preprocess.py</span><br/>
+      <code>preprocess_units(raw_units)</code><br/>
+      • Language detection (English only)<br/>
+      • HTML strip &amp; normalize<br/>
+      • Dedup cache check
+    </div>
+    <div class="node n-pipe">
+      <strong>③ Vision Enrich</strong>
+      <span>src/analysis/vision.py</span><br/>
+      <code>get_vision_client()</code><br/>
+      <code>image_preprocess.download(url)</code><br/>
+      • LLM → image caption<br/>
+      • unit['image_caption'] set
+    </div>
+    <div class="node n-pipe">
+      <strong>④ Trust Score</strong>
+      <span>src/trust/scorer.py</span><br/>
+      <code>trust_scorer.score_batch()</code><br/>
+      0.4 × score_metadata() ← heuristics.py<br/>
+      0.3 × score_originality() ← dedup.py<br/>
+      0.3 × llm.check_credibility()
+    </div>
+    <div class="node n-pipe">
+      <strong>⑤ LLM Analysis</strong>
+      <span>src/analysis/analyzer.py</span><br/>
+      <code>analyzer.analyze_batch(units)</code><br/>
+      <code>llm.analyze_batch(texts)</code><br/>
+      <code>_build_analysis_record()</code><br/>
+      → sentiment + aspects + scores
+    </div>
+    <div class="node n-pipe">
+      <strong>⑥ Aggregate</strong>
+      <span>src/aggregation/aggregator.py</span><br/>
+      <code>aggregator.aggregate_window('daily')</code><br/>
+      <code>_fetch_analyses_in_window()</code><br/>
+      <code>_compute_aggregate()</code><br/>
+      → net_sentiment, top_aspects
+    </div>
+    <div class="node n-pipe">
+      <strong>⑦ Alert Engine</strong>
+      <span>src/alerts/engine.py</span><br/>
+      <code>alert_engine.detect_all()</code><br/>
+      <code>detect_volume_spike(σ)</code><br/>
+      <code>detect_sentiment_crash(Δ)</code><br/>
+      <code>detect_emerging_topics()</code>
+    </div>
+    <div class="node n-pipe">
+      <strong>Lifecycle + Notify</strong>
+      <span>src/notifications/dispatcher.py</span><br/>
+      <code>_maybe_create_lifecycle()</code><br/>
+      <code>dispatch_negative_post()</code><br/>
+      → email.send() / slack.send()
+    </div>
+  </div>
+
+  <div class="arrow-row"><span style="color:#b45309;font-size:.72rem">storage.upsert() / upsert_batch() → SQLite INSERT OR REPLACE</span> &nbsp;▼</div>
+
+  <!-- DB LAYER -->
+  <div class="layer layer-db">
+    <div class="layer-title db-title">💾 DATABASE — src/storage/store.py (SQLiteBackend)</div>
+    <div class="node n-db"><strong>raw_posts</strong><br/>id, subreddit, data JSON<br/>created_timestamp, processing_status<br/><span style="color:#fb923c;font-size:.63rem">← written by: ingestion, trust scorer</span></div>
+    <div class="node n-db"><strong>analyses</strong><br/>id, post_id, subreddit, data JSON<br/>(sentiment, aspects, scores)<br/><span style="color:#fb923c;font-size:.63rem">← written by: analyzer</span></div>
+    <div class="node n-db"><strong>aggregates</strong><br/>id, time_window, window_type<br/>data JSON (rollup stats)<br/><span style="color:#fb923c;font-size:.63rem">← written by: aggregator</span></div>
+    <div class="node n-db"><strong>alerts</strong><br/>id, type, severity<br/>time_window, data JSON<br/><span style="color:#fb923c;font-size:.63rem">← written by: alert engine</span></div>
+    <div class="node n-db"><strong>feedback</strong><br/>id, analyst_id, post_id<br/>data JSON (corrections)<br/><span style="color:#fb923c;font-size:.63rem">← written by: submit_review()</span></div>
+    <div class="node n-db"><strong>post_lifecycle</strong><br/>post_id, state, history JSON<br/>(new→ack→reply_sent→resolved)<br/><span style="color:#fb923c;font-size:.63rem">← written by: _maybe_create_lifecycle()</span></div>
+    <div class="node n-db"><strong>cursors</strong><br/>subreddit, last_fetched_utc<br/>last_fetched_id, updated_at<br/><span style="color:#fb923c;font-size:.63rem">← written by: _commit_cursors()</span></div>
+    <div class="node n-db"><strong>pipeline_runs</strong><br/>id, started_at, status, trigger<br/>duration_ms, counters_json<br/><span style="color:#fb923c;font-size:.63rem">← written by: _record_pipeline_run()</span></div>
+  </div>
+
+  <div class="arrow-row" style="margin-top:4px">▼ Notifications</div>
+
+  <!-- EXT LAYER -->
+  <div class="layer layer-ext">
+    <div class="layer-title ext-title">🌐 EXTERNAL SERVICES</div>
+    <div class="node n-ext"><strong>🌐 Reddit API (PRAW)</strong><span>Used by: fetcher.py<br/>fetch_posts(), fetch_comments()</span></div>
+    <div class="node n-ext"><strong>🌐 Arctic Shift API</strong><span>Used by: arctic_shift.py<br/>fetch_posts_arctic()</span></div>
+    <div class="node n-ext"><strong>🤖 LLM API</strong><span>OpenAI / Anthropic / Local<br/>analyze_batch(), check_credibility()<br/>caption images, draft replies</span></div>
+    <div class="node n-ext"><strong>📣 Slack + Email</strong><span>slack.send() — Slack webhook<br/>email.send() — SMTP<br/>Triggered on negative posts</span></div>
+  </div>
+
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PANE 1 — UI → API Calls
+═══════════════════════════════════════════════════════ -->
+<div class="pane" id="p1">
+<div style="max-width:960px;margin:0 auto">
+  <div class="seq">
+    <div class="seq-head">UI Page</div>
+    <div class="seq-head">Call Chain: api.ts → FastAPI endpoint → Internal method → DB query</div>
+
+    <!-- Brand Health -->
+    <div class="seq-page">📊 BrandHealth.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getBrandHealth(range, seg)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/brand-health</span><span class="call-arrow">→</span><span class="call-method">get_brand_health() → _resolve_window() → _compute_window_aggregate() → _fetch_window_rows()</span><span class="call-arrow">→</span><span class="call-db">SELECT raw_posts ⋈ analyses</span></div>
+      <div class="call-row"><span class="call-fn">api.getPriorityNegatives(range, 20)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/priority-negatives</span><span class="call-arrow">→</span><span class="call-method">get_priority_negatives() → _fetch_window_rows()</span><span class="call-arrow">→</span><span class="call-db">SELECT raw_posts WHERE sentiment=negative</span></div>
+      <div class="call-row"><span class="call-fn">api.getSegments()</span><span class="call-arrow">→</span><span class="call-ep">GET /api/segments</span><span class="call-arrow">→</span><span class="call-method">list_segments() → all_segments()</span><span class="call-arrow">→</span><span class="call-db">segments config</span></div>
+    </div>
+
+    <!-- Aspect Drilldown -->
+    <div class="seq-page">🔍 AspectDrilldown.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getAspectDrilldown(aspect, range)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/aspect-drilldown</span><span class="call-arrow">→</span><span class="call-method">get_aspect_drilldown() → _fetch_window_rows()</span><span class="call-arrow">→</span><span class="call-db">SELECT analyses WHERE aspect=X</span></div>
+      <div class="call-row"><span class="call-fn">api.getAspectHeatmap(range)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/aspect-heatmap</span><span class="call-arrow">→</span><span class="call-method">get_aspect_heatmap()</span><span class="call-arrow">→</span><span class="call-db">SELECT analyses GROUP BY aspect, hour</span></div>
+    </div>
+
+    <!-- Review Queue -->
+    <div class="seq-page">📋 ReviewQueue.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getReviewQueue(limit, offset)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/review-queue</span><span class="call-arrow">→</span><span class="call-method">get_review_queue() → _priority_tier()</span><span class="call-arrow">→</span><span class="call-db">SELECT raw_posts ⋈ analyses WHERE is_trusted</span></div>
+      <div class="call-row"><span class="call-fn">api.draftReply(postId)</span><span class="call-arrow">→</span><span class="call-ep">POST /api/review/{id}/reply</span><span class="call-arrow">→</span><span class="call-method">draft_reply() → _get_reply_llm() → create_llm_client() → llm.generate(reply_prompt)</span><span class="call-arrow">→</span><span class="call-db">LLM API</span></div>
+      <div class="call-row"><span class="call-fn">api.submitReview(postId, correction)</span><span class="call-arrow">→</span><span class="call-ep">POST /api/review/{id}/submit</span><span class="call-arrow">→</span><span class="call-method">submit_review()</span><span class="call-arrow">→</span><span class="call-db">INSERT feedback; UPDATE raw_posts</span></div>
+      <div class="call-row"><span class="call-fn">api.saveReply(postId, reply)</span><span class="call-arrow">→</span><span class="call-ep">POST /api/review/{id}/save-reply</span><span class="call-arrow">→</span><span class="call-method">save_reply() → reddit_post_reply()</span><span class="call-arrow">→</span><span class="call-db">Reddit API + UPDATE post_lifecycle</span></div>
+    </div>
+
+    <!-- Alert Feed -->
+    <div class="seq-page">🚨 AlertFeed.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getAlerts({range, severity, type})</span><span class="call-arrow">→</span><span class="call-ep">GET /api/alerts</span><span class="call-arrow">→</span><span class="call-method">get_alerts()</span><span class="call-arrow">→</span><span class="call-db">SELECT alerts ORDER BY time_window DESC</span></div>
+      <div class="call-row"><span class="call-fn">api.getAlertTimeline(days)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/alerts/timeline</span><span class="call-arrow">→</span><span class="call-method">alerts_timeline()</span><span class="call-arrow">→</span><span class="call-db">SELECT alerts GROUP BY day</span></div>
+      <div class="call-row"><span class="call-fn">useAlertSocket()</span><span class="call-arrow">→</span><span class="call-ep">WS /ws/alerts</span><span class="call-arrow">→</span><span class="call-method">websocket_alerts() ← broadcast_alert() called by alert engine after pipeline run</span><span class="call-arrow">→</span><span class="call-db">real-time push</span></div>
+      <div class="call-row"><span class="call-fn">api.updateAlertState(id, state)</span><span class="call-arrow">→</span><span class="call-ep">PATCH /api/alerts/{id}</span><span class="call-arrow">→</span><span class="call-method">update_alert_state()</span><span class="call-arrow">→</span><span class="call-db">UPDATE alerts SET data=...</span></div>
+    </div>
+
+    <!-- Post Explorer -->
+    <div class="seq-page">🔎 PostExplorer.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.searchPosts(q, filters)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/search-posts</span><span class="call-arrow">→</span><span class="call-method">search_posts()</span><span class="call-arrow">→</span><span class="call-db">SELECT raw_posts ⋈ analyses WHERE text LIKE %q%</span></div>
+    </div>
+
+    <!-- Trust Analytics -->
+    <div class="seq-page">🛡️ TrustAnalytics.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getTrustStats(limit)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/trust-stats</span><span class="call-arrow">→</span><span class="call-method">get_trust_stats() → _has_score() → _trust_score()</span><span class="call-arrow">→</span><span class="call-db">SELECT raw_posts LIMIT N</span></div>
+    </div>
+
+    <!-- Competitor Insights -->
+    <div class="seq-page">📈 CompetitorInsights.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getInsightsLatest()</span><span class="call-arrow">→</span><span class="call-ep">GET /api/insights/latest</span><span class="call-arrow">→</span><span class="call-method">insights_latest()</span><span class="call-arrow">→</span><span class="call-db">SELECT analyses ORDER BY created DESC</span></div>
+      <div class="call-row"><span class="call-fn">api.getCompetitorTrend(days)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/competitor/trend</span><span class="call-arrow">→</span><span class="call-method">competitor_trend() → _series_for(subs)</span><span class="call-arrow">→</span><span class="call-db">SELECT analyses GROUP BY day, subreddit</span></div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="seq-page">⚙️ Pipeline.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getPipelineStatus()</span><span class="call-arrow">→</span><span class="call-ep">GET /api/pipeline/status</span><span class="call-arrow">→</span><span class="call-method">pipeline_status() → reads _pipeline_state dict (in-memory)</span></div>
+      <div class="call-row"><span class="call-fn">api.runPipeline(lookbackHours)</span><span class="call-arrow">→</span><span class="call-ep">POST /api/pipeline/run</span><span class="call-arrow">→</span><span class="call-method">pipeline_run() → _run_pipeline_subprocess('manual') → asyncio.create_subprocess_exec('python -m src.pipeline --once')</span></div>
+      <div class="call-row"><span class="call-fn">api.stopPipeline()</span><span class="call-arrow">→</span><span class="call-ep">POST /api/pipeline/stop</span><span class="call-arrow">→</span><span class="call-method">pipeline_stop() → _pipeline_proc.terminate()</span></div>
+      <div class="call-row"><span class="call-fn">api.getPipelineJobs(25)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/pipeline/jobs</span><span class="call-arrow">→</span><span class="call-method">jobs_recent()</span><span class="call-arrow">→</span><span class="call-db">SELECT pipeline_runs ORDER BY started_at DESC</span></div>
+    </div>
+
+    <!-- Lifecycle -->
+    <div class="seq-page">♻️ PostLifecycle.tsx</div>
+    <div class="seq-calls">
+      <div class="call-row"><span class="call-fn">api.getLifecycle(state)</span><span class="call-arrow">→</span><span class="call-ep">GET /api/lifecycle</span><span class="call-arrow">→</span><span class="call-method">lifecycle_list()</span><span class="call-arrow">→</span><span class="call-db">SELECT post_lifecycle WHERE state=X</span></div>
+      <div class="call-row"><span class="call-fn">api.transitionLifecycle(id, state)</span><span class="call-arrow">→</span><span class="call-ep">PATCH /api/lifecycle/{id}</span><span class="call-arrow">→</span><span class="call-method">lifecycle_transition()</span><span class="call-arrow">→</span><span class="call-db">UPDATE post_lifecycle; append history</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PANE 2 — Pipeline Internals
+═══════════════════════════════════════════════════════ -->
+<div class="pane" id="p2">
+<div class="pipe-flow">
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">🚀</span><span class="pipe-file">api.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">_run_pipeline_subprocess(trigger)</div>
+      <div class="pipe-desc">
+        <em>asyncio.create_subprocess_exec(python -u -m src.pipeline --once)</em><br/>
+        Streams stdout line-by-line. Parses <code>stage_complete[stage=X]</code> to update live UI state.<br/>
+        Calls <code>_record_pipeline_run()</code> on start and finish.
+        <div class="pipe-writes">Writes: <span>pipeline_runs</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">①</span><span class="pipe-file">pipeline.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">RetailSentimentPipeline._ingest()</div>
+      <div class="pipe-desc">
+        Checks <code>config.ingestion.fetcher_provider</code>:<br/>
+        <strong>praw</strong> → <em>_ingest_praw()</em> → <code>fetcher.fetch_posts(reddit, subs, cursor)</code> + <code>comments.fetch_comments()</code><br/>
+        <strong>arctic_shift</strong> → <em>_ingest_arctic_shift()</em> → <code>arctic_shift.fetch_posts_arctic(sub, since, until)</code><br/>
+        Uses <code>CursorTracker</code> to track last fetch position per subreddit.
+        <div class="pipe-writes">External: <span>Reddit API</span> <span>Arctic Shift API</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">②</span><span class="pipe-file">preprocess.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">preprocess_units(raw_units, english_only=True)</div>
+      <div class="pipe-desc">
+        For each unit: detect language → skip non-English → strip HTML → normalize whitespace → check dedup cache (seen IDs set).<br/>
+        Returns <em>clean_units[]</em> — reduced set, all English, no duplicates.
+        <div class="pipe-writes">Writes: <span>raw_posts</span> (upsert_batch)</div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">③</span><span class="pipe-file">vision.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">_enrich_with_vision(units)</div>
+      <div class="pipe-desc">
+        For each unit with <code>image_url</code>:<br/>
+        <code>image_preprocess.download(url)</code> → <code>image_preprocess.resize(img)</code> → <code>vision_client.caption(img_bytes)</code><br/>
+        Sets <code>unit['image_caption']</code>. Mutates in-place. Makes image-only posts analyzable by text LLM.
+        <div class="pipe-writes">External: <span>LLM Vision API</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">④</span><span class="pipe-file">scorer.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">TrustScorer.score_batch(units) → score(unit)</div>
+      <div class="pipe-desc">
+        Three-signal formula per post:<br/>
+        <code>0.4 × score_metadata(unit)</code> ← <em>heuristics.py</em>: account age, karma, post frequency, mod flags<br/>
+        <code>0.3 × score_originality(unit)</code> ← <em>dedup.py</em>: cosine hash similarity vs seen posts<br/>
+        <code>0.3 × llm.check_credibility(text)</code> ← only when <em>0.3 &lt; meta &lt; 0.8</em> (borderline posts only)<br/>
+        <code>is_trusted = combined_score ≥ config.threshold</code> (default 0.5). Low-trust posts are <em>flagged not dropped</em>.
+        <div class="pipe-writes">Writes: <span>raw_posts</span> (trust_score, is_trusted, trust_flags) &nbsp; External: <span>LLM API (conditional)</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">⑤</span><span class="pipe-file">analyzer.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">SentimentAnalyzer.analyze_batch(scored_units)</div>
+      <div class="pipe-desc">
+        <code>_get_text(unit)</code> — builds prompt string: title + body + [image: caption]<br/>
+        <code>llm.analyze_batch(texts)</code> — sends all to LLM with <em>prompts.py SENTIMENT_PROMPT</em><br/>
+        <code>_build_analysis_record(unit, result)</code> — constructs record:<br/>
+        &nbsp;&nbsp;<code>sentiment</code>: positive / negative / neutral<br/>
+        &nbsp;&nbsp;<code>sentiment_score</code>: 0.0 – 1.0 &nbsp; <code>confidence</code>: 0.0 – 1.0<br/>
+        &nbsp;&nbsp;<code>aspects</code>: [pricing, quality, delivery, app_experience, …]<br/>
+        &nbsp;&nbsp;<code>aspect_scores</code>: {aspect → score}
+        <div class="pipe-writes">Writes: <span>analyses</span> &nbsp; External: <span>LLM API</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">↪</span><span class="pipe-file">dispatcher.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">_maybe_create_lifecycle(analyses, scored_units)</div>
+      <div class="pipe-desc">
+        For each high-impact negative analysis:<br/>
+        INSERT into <code>post_lifecycle</code> with state=<em>'new'</em><br/>
+        <code>dispatch_negative_post(post, analysis)</code> → <em>dispatcher.py</em><br/>
+        &nbsp;&nbsp;→ <code>email.send()</code> via SMTP &nbsp; OR &nbsp; <code>slack.send()</code> via webhook
+        <div class="pipe-writes">Writes: <span>post_lifecycle</span> &nbsp; External: <span>Slack Webhook</span> <span>SMTP Email</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">⑥</span><span class="pipe-file">aggregator.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">Aggregator.aggregate_window('daily')</div>
+      <div class="pipe-desc">
+        <code>_fetch_analyses_in_window(start, end)</code> → SELECT * FROM analyses WHERE date range<br/>
+        <code>_compute_aggregate(analyses, window_key)</code> → computes:<br/>
+        &nbsp;&nbsp;total_posts, positive_rate, negative_rate, neutral_rate<br/>
+        &nbsp;&nbsp;top_aspects (by frequency), net_sentiment_score<br/>
+        <code>storage.upsert('aggregates', aggregate)</code>
+        <div class="pipe-writes">Reads: <span>analyses</span> &nbsp; Writes: <span>aggregates</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="pipe-connector">▼</div>
+
+  <div class="pipe-step">
+    <div class="pipe-num"><span class="pipe-badge">⑦</span><span class="pipe-file">engine.py</span></div>
+    <div class="pipe-body">
+      <div class="pipe-fn">AlertEngine.detect_all()</div>
+      <div class="pipe-desc">
+        Loads rules from <code>data/alert_rules.json</code> (user-editable thresholds)<br/>
+        <code>detect_volume_spike(σ=2.0)</code> — fetch last 30 days counts → compute μ+σ → spike if today &gt; μ+σ×std<br/>
+        <code>detect_sentiment_crash(Δ=0.3)</code> — compare today vs 7-day avg negative rate<br/>
+        <code>detect_emerging_topics()</code> — compare aspect frequencies vs baseline period<br/>
+        <code>storage.upsert('alerts', alert)</code> → <code>broadcast_alert()</code> via WebSocket to AlertFeed.tsx
+        <div class="pipe-writes">Reads: <span>analyses</span> <span>aggregates</span> &nbsp; Writes: <span>alerts</span> &nbsp; → <span>WebSocket push</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PANE 3 — DB Schema
+═══════════════════════════════════════════════════════ -->
+<div class="pane" id="p3">
+<div style="max-width:1100px;margin:0 auto">
+<div class="db-grid">
+
+  <div class="db-table">
+    <div class="db-thead">raw_posts <span class="db-tag">ingestion target</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">subreddit</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">data</span><span class="db-ctype">JSON</span></div>
+      <div class="db-col"><span class="db-cname">created_timestamp</span><span class="db-ctype">REAL (unix)</span></div>
+      <div class="db-col"><span class="db-cname">processing_status</span><span class="db-ctype">TEXT</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      processing_status: pending → analyzed | flagged_low_trust<br/>
+      Written by: ingest stage, trust scorer<br/>
+      Read by: brand-health, review-queue, search
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">analyses <span class="db-tag">LLM output</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">post_id</span><span class="db-fk">FK → raw_posts</span></div>
+      <div class="db-col"><span class="db-cname">subreddit</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">data</span><span class="db-ctype">JSON</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      data JSON contains: sentiment, sentiment_score,<br/>
+      confidence, aspects[], aspect_scores{}<br/>
+      Written by: analyzer stage<br/>
+      Read by: brand-health, aspect-drilldown, aggregator
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">aggregates <span class="db-tag">rollups</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">time_window</span><span class="db-ctype">TEXT (2025-01-15)</span></div>
+      <div class="db-col"><span class="db-cname">window_type</span><span class="db-ctype">TEXT (daily/hourly)</span></div>
+      <div class="db-col"><span class="db-cname">data</span><span class="db-ctype">JSON</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      data: total_posts, positive_rate, negative_rate,<br/>
+      top_aspects, net_sentiment_score<br/>
+      Written by: aggregator stage<br/>
+      Read by: brand-health, aspect-heatmap
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">alerts <span class="db-tag">anomalies</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">type</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">severity</span><span class="db-ctype">TEXT (high/med/low)</span></div>
+      <div class="db-col"><span class="db-cname">time_window</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">data</span><span class="db-ctype">JSON</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      type: volume_spike | sentiment_crash | emerging_topic<br/>
+      Written by: alert engine + broadcast via WebSocket<br/>
+      Read by: alert-feed
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">feedback <span class="db-tag">analyst corrections</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">analyst_id</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">post_id</span><span class="db-fk">FK → raw_posts</span></div>
+      <div class="db-col"><span class="db-cname">data</span><span class="db-ctype">JSON</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      data: corrected_sentiment, corrected_aspects,<br/>
+      notes, timestamp<br/>
+      Written by: submit_review()<br/>
+      Read by: review-stats, feedback-history
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">post_lifecycle <span class="db-tag">state machine</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">post_id</span><span class="db-pk">PK + FK → raw_posts</span></div>
+      <div class="db-col"><span class="db-cname">state</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">history</span><span class="db-ctype">JSON array</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      States: new → acknowledged → reply_sent<br/>
+      → issue_fixed → resolved<br/>
+      Written by: _maybe_create_lifecycle(), lifecycle_transition()<br/>
+      Read by: PostLifecycle.tsx, BrandHealth lifecycle counts
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">cursors <span class="db-tag">fetch position</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">subreddit</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">last_fetched_utc</span><span class="db-ctype">REAL</span></div>
+      <div class="db-col"><span class="db-cname">last_fetched_id</span><span class="db-ctype">TEXT</span></div>
+      <div class="db-col"><span class="db-cname">updated_at</span><span class="db-ctype">TEXT ISO</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      Tracks where each subreddit was last fetched.<br/>
+      Written by: _commit_cursors() after ingest<br/>
+      Read by: pipeline gap detection, backfill
+    </div>
+  </div>
+
+  <div class="db-table">
+    <div class="db-thead">pipeline_runs <span class="db-tag">run history</span></div>
+    <div class="db-tbody">
+      <div class="db-col"><span class="db-cname">id</span><span class="db-pk">PK</span></div>
+      <div class="db-col"><span class="db-cname">started_at</span><span class="db-ctype">TEXT ISO</span></div>
+      <div class="db-col"><span class="db-cname">finished_at</span><span class="db-ctype">TEXT ISO</span></div>
+      <div class="db-col"><span class="db-cname">status</span><span class="db-ctype">running|success|failed</span></div>
+      <div class="db-col"><span class="db-cname">trigger</span><span class="db-ctype">manual|scheduled</span></div>
+      <div class="db-col"><span class="db-cname">duration_ms</span><span class="db-ctype">INTEGER</span></div>
+      <div class="db-col"><span class="db-cname">counters_json</span><span class="db-ctype">JSON</span></div>
+      <div class="db-col"><span class="db-cname">log_tail</span><span class="db-ctype">TEXT</span></div>
+    </div>
+    <div style="padding:4px 12px 8px;font-size:.6rem;color:#64748b">
+      counters: ingested, processed, trusted, flagged, analyzed<br/>
+      Written by: _record_pipeline_run() (start + end)<br/>
+      Read by: Pipeline.tsx job history
+    </div>
+  </div>
+
+</div>
+
+<div class="rel-section" style="margin-top:20px">
+  <div class="rel-title">Table Relationships</div>
+  <div class="rel-row"><span class="rel-from">raw_posts</span><span class="rel-arrow">──1:N──▶</span><span class="rel-to">analyses</span><span class="rel-via">via analyses.post_id</span></div>
+  <div class="rel-row"><span class="rel-from">raw_posts</span><span class="rel-arrow">──1:N──▶</span><span class="rel-to">feedback</span><span class="rel-via">via feedback.post_id</span></div>
+  <div class="rel-row"><span class="rel-from">raw_posts</span><span class="rel-arrow">──1:1──▶</span><span class="rel-to">post_lifecycle</span><span class="rel-via">via post_lifecycle.post_id</span></div>
+  <div class="rel-row"><span class="rel-from">analyses</span><span class="rel-arrow">──grouped into──▶</span><span class="rel-to">aggregates</span><span class="rel-via">by time_window (daily/hourly)</span></div>
+  <div class="rel-row"><span class="rel-from">aggregates</span><span class="rel-arrow">──drives──▶</span><span class="rel-to">alerts</span><span class="rel-via">volume spike / sentiment crash detection</span></div>
+  <div class="rel-row"><span class="rel-from">cursors</span><span class="rel-arrow">──controls──▶</span><span class="rel-to">raw_posts</span><span class="rel-via">last_fetched_utc determines ingest window</span></div>
+</div>
+</div>
+</div>
+
+<script>
+function show(n){
+  document.querySelectorAll('.pane').forEach((p,i)=>p.classList.toggle('on',i===n));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));
+}
+</script>
+</body>
+</html>

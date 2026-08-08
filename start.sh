@@ -15,6 +15,10 @@ API_PORT="${API_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
 PID_DIR="$PROJECT_DIR/.pids"
 
+# Ensure common package-manager bin dirs are discoverable even in non-login
+# shells (nohup/background runs), so tools like npx are found.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

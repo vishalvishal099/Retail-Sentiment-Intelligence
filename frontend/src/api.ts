@@ -215,6 +215,8 @@ export interface AlertRule {
   drop_threshold?: number;
   min_posts?: number;
   window_hours?: number;
+  delta_threshold?: number;
+  min_posts_per_window?: number;
 }
 export type AlertRules = Record<string, AlertRule>;
 
@@ -243,6 +245,8 @@ export interface ReviewItem {
   reply_posted_at: string | null;
   reply_text: string;
   follow_up_needed?: boolean;
+  priority_tier?: 'P1' | 'P2' | 'other';
+  priority_score?: number;
 }
 
 export interface ReviewStats {
@@ -688,16 +692,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rules }),
     }).then(r => r.json()) as Promise<{ status: string; rules: AlertRules }>,
-  getReviewQueue: (limit = 50, sentiment?: string, range?: string, offset = 0) => {
+  getReviewQueue: (limit = 50, sentiment?: string, range?: string, offset = 0, macroSegment?: string) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (sentiment) params.set('sentiment', sentiment);
     if (range) params.set('range', range);
+    if (macroSegment) params.set('macro_segment', macroSegment);
     return fetchJSON<{ queue: ReviewItem[]; total: number; offset: number; has_more: boolean }>(`/review?${params}`);
   },
-  getReviewed: (limit = 50, sentiment?: string, range?: string) => {
+  getReviewed: (limit = 50, sentiment?: string, range?: string, macroSegment?: string) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (sentiment) params.set('sentiment', sentiment);
     if (range) params.set('range', range);
+    if (macroSegment) params.set('macro_segment', macroSegment);
     return fetchJSON<{ queue: ReviewItem[]; total: number }>(`/review/reviewed?${params}`);
   },
   closeReview: (postId: string, subreddit?: string, closeType?: 'no_reply' | 'issue_fixed' | 'reply_sent', actionNote?: string) =>
@@ -788,6 +794,7 @@ export const api = {
       reply?: string;
       action_draft?: string;
       action_model?: string;
+      action_drafts?: Array<{ model: string; source: string; note: string }>;
       examples_used?: number;
       reason?: string;
       gateway_available?: boolean | null;
@@ -947,11 +954,11 @@ export const api = {
   },
   getLifecycleDetail: (postId: string) =>
     fetchJSON<{ lifecycle: LifecycleRow; analysis: any; raw: any }>(`/lifecycle/${postId}`),
-  transitionLifecycle: (postId: string, toState: string, note?: string, by?: string) =>
+  transitionLifecycle: (postId: string, toState: string, note?: string, by?: string, assignTeam?: string) =>
     fetch(`${API_BASE}/lifecycle/${postId}/transition`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to_state: toState, note, by }),
+      body: JSON.stringify({ to_state: toState, note, by, assign_team: assignTeam }),
     }).then(r => r.json()) as Promise<{ ok: boolean; lifecycle?: LifecycleRow; error?: string; allowed?: string[] }>,
   resolveLifecycle: (postId: string, note?: string, by?: string) =>
     fetch(`${API_BASE}/lifecycle/${postId}/resolve`, {

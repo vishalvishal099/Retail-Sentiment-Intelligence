@@ -187,6 +187,31 @@ export default function AlertFeed() {
             const st = alert.state || 'new';
             const stateStyle = STATE_LABELS[st] || STATE_LABELS.new;
             const saving = savingState === alert.id;
+            const affectedMacro = alert.type === 'sentiment_crash'
+              ? String((alert.details as Record<string, unknown> | undefined)?.affected_macro_group || '')
+              : '';
+            const topSubs = alert.type === 'sentiment_crash'
+              ? String((alert.details as Record<string, unknown> | undefined)?.top_subreddits_today || '')
+              : '';
+            const topSub = topSubs
+              ? topSubs.includes(' | ')
+                ? topSubs.split(' | ')[0].trim()
+                : topSubs.includes('), ')
+                  ? `${topSubs.split('), ')[0].trim()})`
+                  : topSubs.split(',')[0].trim()
+              : '';
+            const macroLabel = affectedMacro === 'competitor'
+              ? 'Competitors'
+              : affectedMacro === 'walmart'
+                ? 'Walmart'
+                : '';
+            const rawTitle = alert.title || alert.message;
+            const withMacro = macroLabel && !rawTitle.includes('Sentiment crash (')
+              ? rawTitle.replace('Sentiment crash', `Sentiment crash (${macroLabel})`)
+              : rawTitle;
+            const displayTitle = topSub && !withMacro.includes('r/')
+              ? `${withMacro} [${topSub}]`
+              : withMacro;
             return (
               <div key={alert.id} className={`bg-surface shadow-card border border-walmart-navy/10 border-l-4 ${style.border} rounded-r-2xl p-4`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -199,7 +224,7 @@ export default function AlertFeed() {
                         <span className="text-[10px] text-gray-400">by {alert.state_updated_by} · {alert.state_updated_at ? new Date(alert.state_updated_at).toLocaleString() : ''}</span>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-walmart-navy">{alert.title || alert.message}</p>
+                    <p className="text-sm font-medium text-walmart-navy">{displayTitle}</p>
                     {Object.keys(alert.details || {}).length > 0 && (
                       <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-gray-500">
                         {Object.entries(alert.details).slice(0, 4).map(([k, v]) => (
@@ -308,6 +333,12 @@ function AlertRulesPanel({
               )}
               {typeof rule.window_hours === 'number' && (
                 <NumberField label="Window (h)" value={rule.window_hours} step={1} min={1} max={24} onChange={v => onChange(key, { window_hours: v })} />
+              )}
+              {typeof rule.delta_threshold === 'number' && (
+                <NumberField label="WoW delta" value={rule.delta_threshold} step={0.01} min={0.01} max={1} onChange={v => onChange(key, { delta_threshold: v })} />
+              )}
+              {typeof rule.min_posts_per_window === 'number' && (
+                <NumberField label="Min posts / 7d" value={rule.min_posts_per_window} step={1} min={1} max={500} onChange={v => onChange(key, { min_posts_per_window: v })} />
               )}
             </div>
           </div>
