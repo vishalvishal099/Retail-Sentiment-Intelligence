@@ -222,7 +222,7 @@ def build():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    TOTAL = 23
+    TOTAL = 24
     page = [0]
 
     def new():
@@ -279,12 +279,13 @@ def build():
         ("7", "Post Explorer",                       "Multi-facet search across analysed posts"),
         ("8", "Post Lifecycle  (Kanban)",            "Triage → Acknowledged → In-Progress → Resolved"),
         ("9", "Insights & Competitor Analysis",      "Strategic weekly summaries + cross-brand"),
-        ("10", "Notification Centre",                "In-app + email + Slack, group-routed"),
-        ("11", "ModernBERT — Final Results",         "Macro-F1  0.6272 → 0.7642  (+13.7 pts)"),
-        ("12", "Vision — Multi-Pass Payoff",         "Hallucination  50% → 0%,  extraction 25% → 75%"),
-        ("13", "Trust-Score Evaluation",             "15% flagged; 12 of 15 confirmed by annotator"),
-        ("14", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
-        ("15", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + realistic roadmap"),
+        ("10", "Alert Feed",                          "Live risk detection + editable rule thresholds"),
+        ("11", "Notification Centre",                "In-app + email + Slack, group-routed"),
+        ("12", "ModernBERT — Final Results",         "Macro-F1  0.6272 → 0.7642  (+13.7 pts)"),
+        ("13", "Vision — Multi-Pass Payoff",         "Hallucination  50% → 0%,  extraction 25% → 75%"),
+        ("14", "Trust-Score Evaluation",             "15% flagged; 12 of 15 confirmed by annotator"),
+        ("15", "Live Demo",                          "Dashboard walkthrough (screenshots)"),
+        ("16", "Conclusions & Future Work",          "RQ1–RQ4 outcomes + realistic roadmap"),
     ]
     x0, y0 = Inches(0.5), Inches(1.05)
     col_w, row_h = Inches(6.15), Inches(0.62)
@@ -807,7 +808,42 @@ def build():
 
     _footer(s, page[0], TOTAL)
 
-    # 10 · Notification Centre ──────────────────────────────────────────────
+    # 10 · Alert Feed ──────────────────────────────────────────────────────
+    s = new()
+    _header_bar(s, "Alert Feed",
+                "Live risk detection at /alerts  —  stored history + WebSocket push, merged and deduped")
+    _tx(s, Inches(0.5), Inches(1.0), Inches(6.0), Inches(0.35),
+        "WHAT IT DOES", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _bullets(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(2.7), [
+        "4 alert types  ·  volume_spike · sentiment_crash · emerging_topic · competitor_negative",
+        "3 severities  ·  high / medium / low  with 30-day stacked timeline",
+        "State machine  ·  new  →  acknowledged  →  investigating  →  resolved",
+        "Filters  ·  range · severity · type · state",
+        "Inline rule editor updates thresholds live (no redeploy)",
+        "sentiment_crash enriched with macro group + WoW deltas + top subs",
+    ], size=Pt(12))
+    _image(s, UI_DIR / "alert_feed.png",
+           Inches(6.75), Inches(1.0), width=Inches(6.2))
+    _rect(s, Inches(0.5), Inches(4.2), Inches(6.0), Inches(1.5),
+          LIGHT_BLUE, line=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(4.3), Inches(5.6), Inches(0.35),
+        "EDITABLE RULE THRESHOLDS", size=Pt(11), bold=True, color=WALMART_BLUE)
+    _tx(s, Inches(0.7), Inches(4.65), Inches(5.6), Inches(1.0),
+        "sigma_threshold  ·  drop_threshold  ·  min_posts  ·  window_hours\n"
+        "delta_threshold  ·  min_posts_per_window\n"
+        "Saved via  POST /api/alerts/rules  and read by the alert engine.",
+        size=Pt(11), color=DARK_GRAY)
+    _rect(s, Inches(0.5), Inches(5.85), Inches(6.0), Inches(1.35),
+          GREEN_TINT, line=GREEN)
+    _tx(s, Inches(0.7), Inches(5.97), Inches(5.6), Inches(0.35),
+        "COMPETITOR-NEGATIVE RULE  ·  worked example", size=Pt(11), bold=True, color=GREEN)
+    _tx(s, Inches(0.7), Inches(6.3), Inches(5.6), Inches(0.85),
+        "r/target  ·  prev 7 d: 9 / 30 = 0.30   →   last 7 d: 20 / 40 = 0.50   →   Δ = +0.20\n"
+        "Δ ≥ 0.15  and  both windows ≥ 25 posts  →  fires  (severity high if Δ ≥ 0.25).",
+        size=Pt(10.5), color=DARK_GRAY)
+    _footer(s, page[0], TOTAL)
+
+    # 11 · Notification Centre ──────────────────────────────────────────────
     s = new()
     _header_bar(s, "Notification Centre",
                 "In-app mirror of the group-routed email / Slack digest")

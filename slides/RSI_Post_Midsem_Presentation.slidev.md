@@ -940,7 +940,24 @@ AI-generated strategic intelligence.
 
 <div class="border-t-4 border-[#ffc220] pt-1 px-1">
 
-**5 · Results — Key achievements**
+**5 · Alert Feed**
+
+Live risk detection board at `/alerts` — stored history + WebSocket push, merged and deduped by id.
+
+- **4 alert types** — `volume_spike` · `sentiment_crash` · `emerging_topic` · `competitor_negative`
+- **3 severities** — `high` · `medium` · `low` (color-graded cards + 30-day stacked timeline)
+- **State machine** — `new → acknowledged → investigating → resolved` (full history logged)
+- **Filters** — range (today/7d/30d/90d) · severity · type · state
+- **Rules editor** — inline drawer edits thresholds (`sigma`, `drop_threshold`, `min_posts`, `window_hours`, `delta_threshold`, `min_posts_per_window`) → `POST /api/alerts/rules`
+- **Enriched context** — `sentiment_crash` includes `affected_macro_group` (walmart / competitor), WoW deltas, and `top_subreddits_today`
+- **Competitor rule** — WoW negative-ratio delta ≥ 0.15 with ≥ 25 posts / window; `high` if delta ≥ 0.25
+- **Routing** — P1 / P2 mapped to group-based Slack + Email distribution lists
+
+</div>
+
+<div class="border-t-4 border-[#ffc220] pt-1 px-1">
+
+**6 · Results — Key achievements**
 
 | Area | Achievement |
 |---|---|
